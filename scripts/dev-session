@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+readonly HYPRLAND_SOURCE_DIR="${HYPRLAND_SOURCE_DIR:-$REPO_ROOT/Hyprland}"
+readonly HYPRLAND_BUILD_DIR="${HYPRLAND_BUILD_DIR:-$HYPRLAND_SOURCE_DIR/build}"
+readonly PLUGIN_BUILD_DIR="${PLUGIN_BUILD_DIR:-$REPO_ROOT/build}"
+readonly HYPRLAND_BIN="${HYPRLAND_BIN:-$HYPRLAND_BUILD_DIR/Hyprland}"
+readonly HYPRCTL_BIN="${HYPRCTL_BIN:-$HYPRLAND_BUILD_DIR/hyprctl/hyprctl}"
+readonly PLUGIN_PATH="${PLUGIN_PATH:-$PLUGIN_BUILD_DIR/libhyprcast.so}"
+readonly HYPRLAND_CONFIG="${HYPRLAND_CONFIG:-$REPO_ROOT/dev/hyprland.lua}"
+readonly SESSION_LOG="${SESSION_LOG:-$PLUGIN_BUILD_DIR/dev-session.log}"
+
+BUILD=false
+HYPRLAND_PID=""
+INSTANCE=""
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [--build]
+
+Launch a nested debug build of Hyprland and load hyprcast into it.
+
+Options:
+  --build    Incrementally build Hyprland and hyprcast before launching
+  -h, --help Show this help
+
+Environment overrides:
+  HYPRLAND_SOURCE_DIR  $HYPRLAND_SOURCE_DIR
+  HYPRLAND_BUILD_DIR   $HYPRLAND_BUILD_DIR
+  PLUGIN_BUILD_DIR     $PLUGIN_BUILD_DIR
+  HYPRLAND_BIN         $HYPRLAND_BIN
+  HYPRCTL_BIN          $HYPRCTL_BIN
+  PLUGIN_PATH          $PLUGIN_PATH
+  HYPRLAND_CONFIG      $HYPRLAND_CONFIG
+  SESSION_LOG          $SESSION_LOG
+EOF
+}
+
+fail() {
+    printf 'error: %s\n' "$*" >&2
+    exit 1
+}
+
+require_command() {
+    command -v "$1" >/dev/null 2>&1 || fail "required command not found: $1"
+}
+
+cleanup() {
+    local status=$?
+    trap - EXIT INT TERM
+
+    if [[ -n "$HYPRLAND_PID" ]] && kill -0 "$HYPRLAND_PID" 2>/dev/null; then
+        printf '\nStopping nested Hyprland...\n'
+        kill -TERM "$HYPRLAND_PID" 2>/dev/null || true
+        wait "$HYPRLAND_PID" 2>/dev/null || true
+    fi
+
+    exit "$status"
+}
+
+build_all() {
+    require_command cmake
+
+    [[ -d "$HYPRLAND_SOURCE_DIR" ]] ||
+        fail "Hyprland source directory not found: $HYPRLAND_SOURCE_DIR"
+
+    printf 'Configuring Hyprland debug build...\n'
+    cmake \
+        -S "$HYPRLAND_SOURCE_DIR" \
+        -B "$HYPRLAND_BUILD_DIR" \
+        -DCMAKE_BUILD_TYPE=Debug
+
+    printf 'Building Hyprland and hyprctl...\n'
+    # Debug configuration enables Hyprland's test targets unconditionally. Build
+    # only the binaries needed by this development session.
+    cmake --build "$HYPRLAND_BUILD_DIR" --parallel --target Hyprland hyprctl
+
+    printf 'Configuring hyprcast debug build...\n'
+    cmake \
+        -S "$REPO_ROOT" \
+        -B "$PLUGIN_BUILD_DIR" \
+        -DCMAKE_BUILD_TYPE=Debug \
+        -DHYPRLAND_SOURCE_DIR="$HYPRLAND_SOURCE_DIR"
+
+    printf 'Building hyprcast...\n'
+    cmake --build "$PLUGIN_BUILD_DIR" --parallel --target hyprcast
+}
+
+wait_for_instance() {
+    local attempts=100
+    local candidate=""
+
+    for ((i = 0; i < attempts; i++)); do
+        if ! kill -0 "$HYPRLAND_PID" 2>/dev/null; then
+            wait "$HYPRLAND_PID" || true
+            fail "nested Hyprland exited before its IPC socket became ready; see $SESSION_LOG"
+        fi
+
+        candidate="$($HYPRCTL_BIN instances -j 2>/dev/null |
+            jq -r --argjson pid "$HYPRLAND_PID" '.[] | select(.pid == $pid) | .instance' |
+            head -n 1 || true)"
+
+        if [[ -n "$candidate" ]] &&
+            "$HYPRCTL_BIN" --instance "$candidate" monitors -j >/dev/null 2>&1; then
+            INSTANCE="$candidate"
+            return 0
+        fi
+
+        sleep 0.1
+    done
+
+    fail "timed out waiting for nested Hyprland; see $SESSION_LOG"
+}
+
+while (($#)); do
+    case "$1" in
+        --build)
+            BUILD=true
+            ;;
+        -h | --help)
+            usage
+            exit 0
+            ;;
+        *)
+            usage >&2
+            fail "unknown argument: $1"
+            ;;
+    esac
+    shift
+done
+
+require_command jq
+
+if [[ "$BUILD" == true ]]; then
+    build_all
+fi
+
+[[ -x "$HYPRLAND_BIN" ]] ||
+    fail "Hyprland debug binary not found: $HYPRLAND_BIN (run with --build)"
+[[ -x "$HYPRCTL_BIN" ]] ||
+    fail "matching hyprctl binary not found: $HYPRCTL_BIN (run with --build)"
+[[ -f "$PLUGIN_PATH" ]] ||
+    fail "plugin not found: $PLUGIN_PATH (run with --build)"
+[[ -f "$HYPRLAND_CONFIG" ]] ||
+    fail "Hyprland debug config not found: $HYPRLAND_CONFIG"
+[[ -n "${WAYLAND_DISPLAY:-}" ]] ||
+    fail "WAYLAND_DISPLAY is not set; a nested session requires a Wayland host"
+
+mkdir -p -- "$(dirname -- "$SESSION_LOG")"
+
+printf 'Hyprland: %s\n' "$HYPRLAND_BIN"
+printf 'Plugin:   %s\n' "$PLUGIN_PATH"
+printf 'Built:    %s\n' "$(stat -c '%y' -- "$PLUGIN_PATH")"
+printf 'Config:   %s\n' "$HYPRLAND_CONFIG"
+printf 'Log:      %s\n\n' "$SESSION_LOG"
+
+trap cleanup EXIT INT TERM
+
+"$HYPRLAND_BIN" --config "$HYPRLAND_CONFIG" > >(tee "$SESSION_LOG") 2>&1 &
+HYPRLAND_PID=$!
+
+wait_for_instance
+printf '\nNested instance: %s\n' "$INSTANCE"
+
+plugin_response="$($HYPRCTL_BIN --instance "$INSTANCE" plugin load "$PLUGIN_PATH" 2>&1)" ||
+    fail "could not load plugin: $plugin_response"
+
+[[ "$plugin_response" == "ok" ]] ||
+    fail "Hyprland rejected the plugin: $plugin_response"
+
+printf 'Loaded plugin:   %s\n' "$PLUGIN_PATH"
+printf 'Bindings: Alt+Return opens Ghostty, Alt+Q closes a window, Alt+M exits.\n\n'
+
+set +e
+wait "$HYPRLAND_PID"
+status=$?
+set -e
+HYPRLAND_PID=""
+
+exit "$status"

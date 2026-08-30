@@ -1,10 +1,15 @@
-#include <hyprland/src/plugins/PluginAPI.hpp>
+#pragma once
 
-#include <string_view>
+#include <hyprland/src/devices/IKeyboard.hpp>
+#include <hyprland/src/event/EventBus.hpp>
+#include <hyprutils/signal/Listener.hpp>
 
-inline HANDLE                     PHANDLE = nullptr;
+class CHyprcast {
+  public:
+    void registerKeyEventListener();
 
-inline constexpr std::string_view PLUGIN_NAME        = "Hyprcast";
-inline constexpr std::string_view DESCRIPTION = "Keycaster for Hyprland";
-inline constexpr std::string_view AUTHOR = "kaiole";
-inline constexpr std::string_view VERSION = "1.0";
+  private:
+    void                onKeyEvent(const IKeyboard::SKeyEvent& event);
+
+    CHyprSignalListener m_keyEventListener;
+};

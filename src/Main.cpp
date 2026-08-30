@@ -1,4 +1,10 @@
+#include "Plugin.h"
+
 #include "Hyprcast.h"
+
+#include <memory>
+
+static std::unique_ptr<CHyprcast> g_hyprcast;
 
 // Do NOT change this function.
 APICALL EXPORT std::string PLUGIN_API_VERSION() {
@@ -16,11 +22,12 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         throw std::runtime_error("[Hyprcast] Version mismatch");
     }
 
-    // ...
+    g_hyprcast = std::make_unique<CHyprcast>();
+    g_hyprcast->registerKeyEventListener();
 
     return {.name{PLUGIN_NAME}, .description{DESCRIPTION}, .author{AUTHOR}, .version{VERSION}};
 }
 
 APICALL EXPORT void PLUGIN_EXIT() {
-    // ...
+    g_hyprcast.reset();
 }

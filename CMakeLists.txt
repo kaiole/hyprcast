@@ -33,8 +33,24 @@ pkg_check_modules(
   xkbcommon)
 
 add_library(hyprcast SHARED ${HYPRCAST_SOURCES})
-target_include_directories(hyprcast
-                           PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+set(HYPRLAND_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Hyprland" CACHE PATH
+    "Path to the Hyprland source tree used for development")
+
+if(EXISTS "${HYPRLAND_SOURCE_DIR}/src/version.h")
+  # Plugin headers use paths such as <hyprland/src/...>. Mirror the installed
+  # include layout so those paths resolve to this checkout before /usr/include.
+  set(HYPRLAND_SOURCE_INCLUDE_ROOT
+      "${CMAKE_CURRENT_BINARY_DIR}/hyprland-source-include")
+  file(MAKE_DIRECTORY "${HYPRLAND_SOURCE_INCLUDE_ROOT}")
+  file(REMOVE "${HYPRLAND_SOURCE_INCLUDE_ROOT}/hyprland")
+  file(CREATE_LINK "${HYPRLAND_SOURCE_DIR}"
+       "${HYPRLAND_SOURCE_INCLUDE_ROOT}/hyprland" SYMBOLIC)
+  target_include_directories(hyprcast BEFORE PRIVATE
+                             "${HYPRLAND_SOURCE_INCLUDE_ROOT}")
+endif()
+
+target_include_directories(hyprcast PRIVATE
+                           "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(hyprcast PRIVATE rt PkgConfig::HYPRLAND_DEPS)
 
 install(TARGETS hyprcast LIBRARY DESTINATION lib)

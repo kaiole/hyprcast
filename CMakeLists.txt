@@ -11,13 +11,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-file(GLOB_RECURSE HYPRCAST_SOURCES CONFIGURE_DEPENDS
-     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
-
-if(NOT HYPRCAST_SOURCES)
-  message(STATUS "hyprcast has no source files yet; skipping the plugin target")
-  return()
-endif()
+set(HYPRCAST_SOURCES src/Hyprcast.cpp src/InputCapture.cpp src/Main.cpp)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(
@@ -33,8 +27,9 @@ pkg_check_modules(
   xkbcommon)
 
 add_library(hyprcast SHARED ${HYPRCAST_SOURCES})
-set(HYPRLAND_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Hyprland" CACHE PATH
-    "Path to the Hyprland source tree used for development")
+set(HYPRLAND_SOURCE_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/Hyprland"
+    CACHE PATH "Path to the Hyprland source tree used for development")
 
 if(EXISTS "${HYPRLAND_SOURCE_DIR}/src/version.h")
   # Plugin headers use paths such as <hyprland/src/...>. Mirror the installed
@@ -45,12 +40,12 @@ if(EXISTS "${HYPRLAND_SOURCE_DIR}/src/version.h")
   file(REMOVE "${HYPRLAND_SOURCE_INCLUDE_ROOT}/hyprland")
   file(CREATE_LINK "${HYPRLAND_SOURCE_DIR}"
        "${HYPRLAND_SOURCE_INCLUDE_ROOT}/hyprland" SYMBOLIC)
-  target_include_directories(hyprcast BEFORE PRIVATE
-                             "${HYPRLAND_SOURCE_INCLUDE_ROOT}")
+  target_include_directories(hyprcast BEFORE
+                             PRIVATE "${HYPRLAND_SOURCE_INCLUDE_ROOT}")
 endif()
 
-target_include_directories(hyprcast PRIVATE
-                           "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_include_directories(hyprcast
+                           PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(hyprcast PRIVATE rt PkgConfig::HYPRLAND_DEPS)
 
 install(TARGETS hyprcast LIBRARY DESTINATION lib)

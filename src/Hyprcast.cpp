@@ -1,11 +1,17 @@
 #include "Hyprcast.h"
 
+#include <memory>
 #include <print>
 
-void CHyprcast::registerKeyEventListener() {
-    m_keyEventListener = Event::bus()->m_events.input.keyboard.key.listen([this](const IKeyboard::SKeyEvent& event, Event::SCallbackInfo) { onKeyEvent(event); });
+void CHyprcast::startInputCapture() {
+    if (m_inputCapture) {
+        return;
+    }
+
+    m_inputCapture.reset();
+    m_inputCapture = std::make_unique<CInputCapture>(observer);
 }
 
-void CHyprcast::onKeyEvent(const IKeyboard::SKeyEvent& event) {
-    std::println(stderr, "[hyprcast]: keycode {}, state {}", event.keycode, event.state ? "pressed" : "released");
+void CHyprcast::observer(const IKeyboard::SKeyEvent& keyEvent, const Event::SCallbackInfo&) {
+    std::println(stderr, "[hyprcast] keycode: {} {}", keyEvent.keycode, keyEvent.state ? "pressed" : "released");
 }

@@ -1,15 +1,20 @@
 #pragma once
 
-#include <hyprland/src/devices/IKeyboard.hpp>
-#include <hyprland/src/event/EventBus.hpp>
-#include <hyprutils/signal/Listener.hpp>
+#include "InputCapture.h"
+
+#include <memory>
 
 class CHyprcast {
   public:
-    void registerKeyEventListener();
+    CHyprcast() = default;
+
+    CHyprcast(const CHyprcast&)            = delete;
+    CHyprcast& operator=(const CHyprcast&) = delete;
+
+    void       startInputCapture();
 
   private:
-    void                onKeyEvent(const IKeyboard::SKeyEvent& event);
+    static void                    observer(const IKeyboard::SKeyEvent& keyEvent, const Event::SCallbackInfo&);
 
-    CHyprSignalListener m_keyEventListener;
+    std::unique_ptr<CInputCapture> m_inputCapture;
 };

@@ -1,5 +1,4 @@
 #include "Plugin.h"
-
 #include "Hyprcast.h"
 
 #include <memory>
@@ -23,7 +22,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     }
 
     g_hyprcast = std::make_unique<CHyprcast>();
-    g_hyprcast->registerKeyEventListener();
+    g_hyprcast->startInputCapture();
 
     return {.name{PLUGIN_NAME}, .description{DESCRIPTION}, .author{AUTHOR}, .version{VERSION}};
 }

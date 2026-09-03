@@ -11,7 +11,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(HYPRCAST_SOURCES src/Hyprcast.cpp src/InputCapture.cpp src/Main.cpp)
+set(HYPRCAST_PLUGIN_SOURCES src/plugin/Hyprcast.cpp src/plugin/InputCapture.cpp
+                            src/plugin/Plugin.cpp)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(
@@ -26,7 +27,7 @@ pkg_check_modules(
   wayland-server
   xkbcommon)
 
-add_library(hyprcast SHARED ${HYPRCAST_SOURCES})
+add_library(hyprcast SHARED ${HYPRCAST_PLUGIN_SOURCES})
 set(HYPRLAND_SOURCE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/Hyprland"
     CACHE PATH "Path to the Hyprland source tree used for development")

@@ -12,10 +12,10 @@ class CInputCapture {
 
     CInputCapture(Observer observer);
 
-    CInputCapture(const CInputCapture&)             = delete;
-    CInputCapture& operator=(const CInputCapture&)  = delete;
-    CInputCapture(CInputCapture&&)                  = delete;
-    CInputCapture& operator=(const CInputCapture&&) = delete;
+    CInputCapture(const CInputCapture&)       = delete;
+    CInputCapture& operator=(CInputCapture&)  = delete;
+    CInputCapture(CInputCapture&&)            = delete;
+    CInputCapture& operator=(CInputCapture&&) = delete;
 
   private:
     Observer            m_observer;

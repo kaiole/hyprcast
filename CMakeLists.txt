@@ -11,8 +11,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(HYPRCAST_PLUGIN_SOURCES src/plugin/Hyprcast.cpp src/plugin/InputCapture.cpp
-                            src/plugin/Plugin.cpp)
+set(HYPRCAST_PLUGIN_SOURCES
+    src/hyprland/Hyprcast.cpp src/hyprland/InputCapture.cpp
+    src/hyprland/Plugin.cpp)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(

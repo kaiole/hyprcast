@@ -1,5 +1,5 @@
-#include "Plugin.h"
-#include "Hyprcast.h"
+#include "Plugin.hpp"
+#include "Hyprcast.hpp"
 
 #include <memory>
 

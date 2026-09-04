@@ -9,13 +9,12 @@ class CHyprcast {
   public:
     CHyprcast() = default;
 
-    CHyprcast(const CHyprcast&)             = delete;
-    CHyprcast& operator=(const CHyprcast&)  = delete;
-    CHyprcast(const CHyprcast&&)            = delete;
-    CHyprcast& operator=(const CHyprcast&&) = delete;
+    CHyprcast(const CHyprcast&)       = delete;
+    CHyprcast& operator=(CHyprcast&)  = delete;
+    CHyprcast(const CHyprcast&&)      = delete;
+    CHyprcast& operator=(CHyprcast&&) = delete;
 
-    void       startInputCapture();
-    void       stopInputCapture();
+    void       toggleCapture();
 
   private:
     static void                    inputCaptureObserver(const Hyprcast::SKeyEvent& keyEvent);

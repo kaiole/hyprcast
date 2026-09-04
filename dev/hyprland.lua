@@ -13,6 +13,7 @@ local terminal = "ghostty --gtk-single-instance=false"
 hl.bind(mainMod .. " + Return", hl.dsp.exec_cmd(terminal))
 hl.bind(mainMod .. " + Q", hl.dsp.window.close())
 hl.bind(mainMod .. " + M", hl.dsp.exit())
+hl.bind(mainMod .. " + C", hl.plugin.hyprcast.toggle_capture)
 
 hl.bind(mainMod .. " + H", hl.dsp.focus({ direction = "left" }))
 hl.bind(mainMod .. " + J", hl.dsp.focus({ direction = "down" }))

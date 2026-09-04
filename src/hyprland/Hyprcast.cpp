@@ -5,19 +5,15 @@
 #include <memory>
 #include <print>
 
-void CHyprcast::startInputCapture() {
+void CHyprcast::toggleCapture() {
     if (m_inputCapture) {
+        m_inputCapture.reset();
         return;
     }
 
-    m_inputCapture.reset();
     m_inputCapture = std::make_unique<CInputCapture>(inputCaptureObserver);
 }
 
-void CHyprcast::stopInputCapture() {
-    m_inputCapture.reset();
-}
-
 void CHyprcast::inputCaptureObserver(const Hyprcast::SKeyEvent& keyEvent) {
-    std::println(stderr, "[hyprcast] keycode: {} {}", keyEvent.keycode, keyEvent.keyState == Hyprcast::eKeyState::PRESSED ? "pressed" : "released");
+    std::println(stderr, "[hyprcast] keycode: {} {} at {}", keyEvent.keycode, keyEvent.keyState == Hyprcast::eKeyState::PRESSED ? "pressed" : "released", keyEvent.timeMs);
 }

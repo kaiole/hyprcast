@@ -5,14 +5,6 @@
 
 static std::unique_ptr<CHyprcast> g_hyprcast;
 
-static int                        toggleCapture(lua_State*) {
-    if (g_hyprcast) {
-        g_hyprcast->toggleCapture();
-    }
-
-    return 0;
-}
-
 // Do NOT change this function.
 APICALL EXPORT std::string PLUGIN_API_VERSION() {
     return HYPRLAND_API_VERSION;
@@ -30,8 +22,6 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     }
 
     g_hyprcast = std::make_unique<CHyprcast>();
-
-    HyprlandAPI::addLuaFunction(PHANDLE, "hyprcast", "toggle_capture", toggleCapture);
 
     return {.name{PLUGIN_NAME}, .description{DESCRIPTION}, .author{AUTHOR}, .version{VERSION}};
 }

@@ -1,11 +1,13 @@
 #pragma once
 
 #include "KeyState.hpp"
+#include "KeyboardId.hpp"
 
 namespace Hyprcast {
     struct SKeyEvent {
-        uint32_t  timeMs;
-        uint32_t  keycode;
-        eKeyState keyState;
+        KeyboardId keyboardId;
+        uint32_t   timeMs;
+        uint32_t   keycode;
+        eKeyState  state;
     };
 }

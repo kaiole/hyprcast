@@ -1,10 +1,14 @@
-#include <string_view>
+#pragma once
 
 #include <hyprland/src/plugins/PluginAPI.hpp>
 
-inline HANDLE                     PHANDLE = nullptr;
+#include <string_view>
 
-inline constexpr std::string_view PLUGIN_NAME = "Hyprcast";
-inline constexpr std::string_view DESCRIPTION = "Keycaster for Hyprland";
-inline constexpr std::string_view AUTHOR      = "kaiole";
-inline constexpr std::string_view VERSION     = "1.0";
+namespace Hyprcast {
+    inline HANDLE                     PHANDLE = nullptr;
+
+    inline constexpr std::string_view PLUGIN_NAME = "Hyprcast";
+    inline constexpr std::string_view DESCRIPTION = "Keycaster for Hyprland";
+    inline constexpr std::string_view AUTHOR      = "kaiole";
+    inline constexpr std::string_view VERSION     = "1.0";
+}

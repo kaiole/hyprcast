@@ -12,4 +12,4 @@ namespace Hyprcast {
         uint32_t   locked;
         uint32_t   group;
     };
-};
+}

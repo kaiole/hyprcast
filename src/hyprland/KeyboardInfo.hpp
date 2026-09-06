@@ -1,8 +1,9 @@
 #pragma once
 
 #include "hyprcast/core/KeyboardId.hpp"
-#include <hyprland/src/helpers/memory/Memory.hpp>
+
 #include <hyprland/src/devices/IKeyboard.hpp>
+#include <hyprland/src/helpers/memory/Memory.hpp>
 #include <hyprutils/signal/Listener.hpp>
 
 namespace Hyprcast {
@@ -10,10 +11,6 @@ namespace Hyprcast {
         KeyboardId          keyboardId;
         WP<IKeyboard>       keyboard;
 
-        CHyprSignalListener keyEventListener;
-        CHyprSignalListener modifiersEventListener;
-        CHyprSignalListener keymapEventListener;
-        CHyprSignalListener repeatInfoEventListener;
-        CHyprSignalListener destroyEventListener;
+        CHyprSignalListener keyEvent, modifiersEvent, keymapEvent, repeatInfoEvent, destroyEvent;
     };
-};
+}

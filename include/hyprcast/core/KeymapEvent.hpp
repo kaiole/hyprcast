@@ -9,4 +9,4 @@ namespace Hyprcast {
         KeyboardId  keyboardId;
         std::string keymap;
     };
-};
+}

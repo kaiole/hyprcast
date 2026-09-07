@@ -6,12 +6,14 @@ readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 readonly HYPRLAND_SOURCE_DIR="${HYPRLAND_SOURCE_DIR:-$REPO_ROOT/Hyprland}"
 readonly HYPRLAND_BUILD_DIR="${HYPRLAND_BUILD_DIR:-$HYPRLAND_SOURCE_DIR/build}"
-readonly PLUGIN_BUILD_DIR="${PLUGIN_BUILD_DIR:-$REPO_ROOT/build}"
+readonly HYPRCAST_PRESET="${HYPRCAST_PRESET:-debug}"
+readonly PLUGIN_BUILD_DIR="${PLUGIN_BUILD_DIR:-$REPO_ROOT/build/$HYPRCAST_PRESET}"
 readonly HYPRLAND_BIN="${HYPRLAND_BIN:-$HYPRLAND_BUILD_DIR/Hyprland}"
 readonly HYPRCTL_BIN="${HYPRCTL_BIN:-$HYPRLAND_BUILD_DIR/hyprctl/hyprctl}"
 readonly PLUGIN_PATH="${PLUGIN_PATH:-$PLUGIN_BUILD_DIR/libhyprcast.so}"
 readonly HYPRLAND_CONFIG="${HYPRLAND_CONFIG:-$REPO_ROOT/dev/hyprland.lua}"
 readonly SESSION_LOG="${SESSION_LOG:-$PLUGIN_BUILD_DIR/dev-session.log}"
+readonly BUILD_JOBS="${BUILD_JOBS:-1}"
 
 BUILD=false
 HYPRLAND_PID=""
@@ -30,12 +32,14 @@ Options:
 Environment overrides:
   HYPRLAND_SOURCE_DIR  $HYPRLAND_SOURCE_DIR
   HYPRLAND_BUILD_DIR   $HYPRLAND_BUILD_DIR
+  HYPRCAST_PRESET      $HYPRCAST_PRESET
   PLUGIN_BUILD_DIR     $PLUGIN_BUILD_DIR
   HYPRLAND_BIN         $HYPRLAND_BIN
   HYPRCTL_BIN          $HYPRCTL_BIN
   PLUGIN_PATH          $PLUGIN_PATH
   HYPRLAND_CONFIG      $HYPRLAND_CONFIG
   SESSION_LOG          $SESSION_LOG
+  BUILD_JOBS           $BUILD_JOBS (defaults to 1 to limit memory use)
 EOF
 }
 
@@ -46,6 +50,13 @@ fail() {
 
 require_command() {
     command -v "$1" >/dev/null 2>&1 || fail "required command not found: $1"
+}
+
+require_shared_libraries() {
+    local binary="$1"
+    local missing
+    missing="$(ldd "$binary" 2>/dev/null | awk '$2 == "=>" && $3 == "not" && $4 == "found" { print $1 }')"
+    [[ -z "$missing" ]] || fail "$binary has missing shared libraries: ${missing//$'\n'/, } (rebuild with --build)"
 }
 
 cleanup() {
@@ -73,20 +84,17 @@ build_all() {
         -B "$HYPRLAND_BUILD_DIR" \
         -DCMAKE_BUILD_TYPE=Debug
 
-    printf 'Building Hyprland and hyprctl...\n'
+    printf 'Building Hyprland and hyprctl with %s job(s)...\n' "$BUILD_JOBS"
     # Debug configuration enables Hyprland's test targets unconditionally. Build
-    # only the binaries needed by this development session.
-    cmake --build "$HYPRLAND_BUILD_DIR" --parallel --target Hyprland hyprctl
+    # only the binaries needed by this development session. Keep concurrency
+    # bounded because parallel C++ compilation can exhaust laptop memory.
+    cmake --build "$HYPRLAND_BUILD_DIR" --parallel "$BUILD_JOBS" --target Hyprland hyprctl
 
-    printf 'Configuring hyprcast debug build...\n'
-    cmake \
-        -S "$REPO_ROOT" \
-        -B "$PLUGIN_BUILD_DIR" \
-        -DCMAKE_BUILD_TYPE=Debug \
-        -DHYPRLAND_SOURCE_DIR="$HYPRLAND_SOURCE_DIR"
+    printf 'Configuring hyprcast with preset %s...\n' "$HYPRCAST_PRESET"
+    cmake --preset "$HYPRCAST_PRESET" -S "$REPO_ROOT"
 
-    printf 'Building hyprcast...\n'
-    cmake --build "$PLUGIN_BUILD_DIR" --parallel --target hyprcast
+    printf 'Building hyprcast with preset %s and %s job(s)...\n' "$HYPRCAST_PRESET" "$BUILD_JOBS"
+    cmake --build --preset "$HYPRCAST_PRESET" --parallel "$BUILD_JOBS" --target hyprcast
 }
 
 wait_for_instance() {
@@ -133,6 +141,7 @@ while (($#)); do
 done
 
 require_command jq
+require_command ldd
 
 if [[ "$BUILD" == true ]]; then
     build_all
@@ -142,6 +151,8 @@ fi
     fail "Hyprland debug binary not found: $HYPRLAND_BIN (run with --build)"
 [[ -x "$HYPRCTL_BIN" ]] ||
     fail "matching hyprctl binary not found: $HYPRCTL_BIN (run with --build)"
+require_shared_libraries "$HYPRLAND_BIN"
+require_shared_libraries "$HYPRCTL_BIN"
 [[ -f "$PLUGIN_PATH" ]] ||
     fail "plugin not found: $PLUGIN_PATH (run with --build)"
 [[ -f "$HYPRLAND_CONFIG" ]] ||

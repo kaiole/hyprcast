@@ -9,10 +9,16 @@ hl.monitor({
 
 local mainMod = "ALT"
 local terminal = "ghostty --gtk-single-instance=false"
+local hyprctl =
+    '/home/red/personal/hyprcast/Hyprland/build/hyprctl/hyprctl --instance "$HYPRLAND_INSTANCE_SIGNATURE"'
+local loadHyprcast =
+    hyprctl .. " plugin load /home/red/personal/hyprcast/build/debug/libhyprcast.so"
 
 hl.bind(mainMod .. " + Return", hl.dsp.exec_cmd(terminal))
+hl.bind(mainMod .. " + P", hl.dsp.exec_cmd(loadHyprcast))
 hl.bind(mainMod .. " + Q", hl.dsp.window.close())
 hl.bind(mainMod .. " + M", hl.dsp.exit())
+hl.bind(mainMod .. " + R", hl.dsp.exec_cmd(hyprctl .. " reload"))
 
 hl.bind(mainMod .. " + H", hl.dsp.focus({ direction = "left" }))
 hl.bind(mainMod .. " + J", hl.dsp.focus({ direction = "down" }))
@@ -50,6 +56,8 @@ hl.config({
 
     input = {
         kb_layout = "us",
+        kb_variant = "colemak_dh_ortho",
+        kb_options = "ctrl:swapcaps",
         follow_mouse = 1,
     },
 
@@ -60,6 +68,6 @@ hl.config({
 
     debug = {
         disable_logs = false,
-        enable_stdout_logs = true,
+        enable_stdout_logs = false,
     },
 })

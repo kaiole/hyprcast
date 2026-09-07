@@ -2,3 +2,4 @@
 /Hyprland/
 /compile_commands.json
 *.so
+.gdbinit

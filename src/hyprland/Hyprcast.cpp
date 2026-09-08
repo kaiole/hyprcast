@@ -28,7 +28,7 @@ namespace Hyprcast {
         }
     }
 
-    void CHyprcast::subscribeToEventListeners(const SConfig& acceptedConfig) {
+    void CHyprcast::subscribeEventListeners(const SConfig& acceptedConfig) {
         for (const auto& keyboardPtr : m_keyboardRegistry) {
             if (keyboardPtr->pendingRemoval) {
                 continue;
@@ -79,7 +79,7 @@ namespace Hyprcast {
 
         keyboardInfo->keyboard       = keyboard;
         keyboardInfo->id             = m_nextId++;
-        keyboardInfo->name           = keyboard->m_deviceName;
+        keyboardInfo->name           = keyboard->m_hlName;
         keyboardInfo->pendingRemoval = false;
         keyboardInfo->subscribed     = false;
 

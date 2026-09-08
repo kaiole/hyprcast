@@ -6,7 +6,6 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
-#include <utility>
 
 namespace {
     std::unique_ptr<Hyprcast::CHyprcast>     g_hyprcast;
@@ -29,14 +28,15 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         throw std::runtime_error("[Hyprcast] Version mismatch");
     }
 
-    auto config = std::make_unique<Hyprcast::CPluginConfig>();
-    g_hyprcast  = std::make_unique<Hyprcast::CHyprcast>();
-    g_config    = std::move(config);
+    g_config   = std::make_unique<Hyprcast::CPluginConfig>();
+    g_hyprcast = std::make_unique<Hyprcast::CHyprcast>();
+
+    g_config->listen([&] { g_hyprcast->subscribeToEventListeners(g_config->getAcceptedConfig()); });
 
     return {.name{Hyprcast::PLUGIN_NAME}, .description{Hyprcast::DESCRIPTION}, .author{Hyprcast::AUTHOR}, .version{Hyprcast::VERSION}};
 }
 
 APICALL EXPORT void PLUGIN_EXIT() {
-    g_hyprcast.reset();
     g_config.reset();
+    g_hyprcast.reset();
 }

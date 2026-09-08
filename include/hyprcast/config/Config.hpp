@@ -14,7 +14,7 @@ namespace Hyprcast {
 
     struct SConfig {
         eKeyboardFilter          filter = eKeyboardFilter::EXCLUDE;
-        std::vector<std::string> keyboards;
+        std::vector<std::string> filteredKeyboards;
         bool                     operator==(const SConfig&) const = default;
     };
 

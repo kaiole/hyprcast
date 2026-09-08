@@ -5,12 +5,17 @@
 #include <hyprland/src/devices/IKeyboard.hpp>
 #include <hyprland/src/helpers/memory/Memory.hpp>
 #include <hyprutils/signal/Listener.hpp>
+#include <string>
 
 namespace Hyprcast {
     struct SKeyboardInfo {
-        KeyboardId          keyboardId;
         WP<IKeyboard>       keyboard;
 
-        CHyprSignalListener keyEvent, modifiersEvent, keymapEvent, repeatInfoEvent, destroyEvent;
+        KeyboardId          id;
+        std::string         name;
+        bool                pendingRemoval = false;
+        bool                subscribed     = false;
+
+        CHyprSignalListener keyEventListener, modifiersListener, keymapListener, repeatInfoListener, destroyListener;
     };
 }

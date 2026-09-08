@@ -1,52 +1,130 @@
 #include "Hyprcast.hpp"
 
 #include "KeyboardInfo.hpp"
+#include "hyprcast/config/Config.hpp"
 #include "hyprcast/core/KeyState.hpp"
+#include "hyprcast/core/KeyboardId.hpp"
 
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <wayland-server-protocol.h>
 #include <xkbcommon/xkbcommon.h>
+#include <hyprland/src/Compositor.hpp>
 
+#include <algorithm>
 #include <cstdlib>
 #include <memory>
-#include <print>
 #include <utility>
 
 namespace Hyprcast {
     CHyprcast::CHyprcast() {
         for (auto& keyboard : g_pInputManager->m_keyboards) {
-            registerKeyboard(keyboard);
+            addKeyboard(keyboard);
         }
     }
 
-    void CHyprcast::registerKeyboard(SP<IKeyboard> keyboard) {
+    CHyprcast::~CHyprcast() {
+        if (m_removalSource) {
+            wl_event_source_remove(m_removalSource);
+        }
+    }
+
+    void CHyprcast::subscribeToEventListeners(const SConfig& acceptedConfig) {
+        for (const auto& keyboardPtr : m_keyboardRegistry) {
+            if (keyboardPtr->pendingRemoval) {
+                continue;
+            }
+
+            auto it = std::ranges::find(acceptedConfig.filteredKeyboards, keyboardPtr->name);
+            if ((acceptedConfig.filter == eKeyboardFilter::INCLUDE && it == acceptedConfig.filteredKeyboards.end()) ||
+                (acceptedConfig.filter == eKeyboardFilter::EXCLUDE && it != acceptedConfig.filteredKeyboards.end())) {
+                unsubscribeListeners(keyboardPtr->id);
+                continue;
+            }
+
+            const auto& keyboardInfo = keyboardPtr.get();
+            const auto& keyboard     = keyboardInfo->keyboard;
+            KeyboardId  keyboardId   = keyboardInfo->id;
+
+            keyboardInfo->keyEventListener = keyboard->m_keyboardEvents.key.listen([this, keyboardId = keyboardId](const IKeyboard::SKeyEvent& event) {
+                auto keyEvent = toHyprcastType(keyboardId, event);
+                std::println(stderr, "[hyprcast] keycode: {} {} at {} by keyboard {}", keyEvent.keycode, keyEvent.state == eKeyState::PRESSED ? "pressed" : "released",
+                             keyEvent.timeMs, keyboardId);
+
+                // TODO: queue IPC message
+            });
+
+            keyboardInfo->modifiersListener = keyboard->m_keyboardEvents.modifiers.listen([this, keyboardId = keyboardId](const IKeyboard::SModifiersEvent& event) {
+                auto modifiersListener = toHyprcastType(keyboardId, event);
+
+                // TODO: queue IPC message
+            });
+
+            keyboardInfo->keymapListener = keyboard->m_keyboardEvents.keymap.listen([this, keyboardId = keyboardId](const IKeyboard::SKeymapEvent& event) {
+                auto keymapListener = toHyprcastType(keyboardId, event);
+
+                // TODO: queue IPC message
+            });
+
+            keyboardInfo->repeatInfoListener = keyboard->m_keyboardEvents.repeatInfo.listen([this, keyboardId = keyboardId]() {
+                // TODO: how to even use
+                // TODO: queue IPC message
+            });
+
+            keyboardInfo->subscribed = true;
+        }
+    }
+
+    void CHyprcast::addKeyboard(SP<IKeyboard> keyboard) {
         auto keyboardInfo = std::make_unique<SKeyboardInfo>();
 
-        keyboardInfo->keyboardId = nextId++;
-        keyboardInfo->keyboard   = keyboard;
+        keyboardInfo->keyboard       = keyboard;
+        keyboardInfo->id             = m_nextId++;
+        keyboardInfo->name           = keyboard->m_deviceName;
+        keyboardInfo->pendingRemoval = false;
+        keyboardInfo->subscribed     = false;
 
-        keyboardInfo->keyEvent = keyboard->m_keyboardEvents.key.listen([this, keyboardId = keyboardInfo->keyboardId](const IKeyboard::SKeyEvent& event) {
-            auto keyEvent = toHyprcastType(keyboardId, event);
-            std::println(stderr, "[hyprcast] keycode: {} {} at {}", keyEvent.keycode, keyEvent.state == eKeyState::PRESSED ? "pressed" : "released", keyEvent.timeMs);
+        keyboardInfo->destroyListener = keyboard->m_events.destroy.listen([this, record = keyboardInfo.get()] { scheduleRemoval(*record); });
 
-            // TODO: queue IPC message
-        });
+        m_keyboardRegistry.push_back(std::move(keyboardInfo));
+    }
 
-        keyboardInfo->modifiersEvent = keyboard->m_keyboardEvents.modifiers.listen([this, keyboardId = keyboardInfo->keyboardId](const IKeyboard::SModifiersEvent& event) {
-            auto modifiersEvent = toHyprcastType(keyboardId, event);
+    void CHyprcast::unsubscribeListeners(KeyboardId id) {
+        auto it = std::ranges::find(m_keyboardRegistry, id, &SKeyboardInfo::id);
+        if (it == m_keyboardRegistry.end()) {
+            return;
+        }
 
-            // TODO: queue IPC message
-        });
+        auto keyboardInfo = it->get();
 
-        keyboardInfo->keymapEvent = keyboard->m_keyboardEvents.keymap.listen([this, keyboardId = keyboardInfo->keyboardId](const IKeyboard::SKeymapEvent& event) {
-            auto keymapEvent = toHyprcastType(keyboardId, event);
+        keyboardInfo->keyEventListener.reset();
+        keyboardInfo->modifiersListener.reset();
+        keyboardInfo->keymapListener.reset();
+        keyboardInfo->repeatInfoListener.reset();
 
-            // TODO: queue IPC message
-        });
+        keyboardInfo->subscribed = false;
+    }
 
-        // TODO: repeatInfo and destroy
+    void CHyprcast::scheduleRemoval(SKeyboardInfo& keyboardInfo) {
+        keyboardInfo.pendingRemoval = true;
+        keyboardInfo.keyEventListener.reset();
+        keyboardInfo.modifiersListener.reset();
+        keyboardInfo.keymapListener.reset();
+        keyboardInfo.repeatInfoListener.reset();
+        keyboardInfo.subscribed = false;
 
-        keyboards.push_back(std::move(keyboardInfo));
+        if (m_removalSource) {
+            return;
+        }
+
+        // On failure, returns nullptr and no cleanup is scheduled; marked records remain for the next attempt.
+        m_removalSource = wl_event_loop_add_idle(
+            g_pCompositor->m_wlEventLoop,
+            [](void* data) {
+                auto* self            = static_cast<CHyprcast*>(data);
+                self->m_removalSource = nullptr;
+                std::erase_if(self->m_keyboardRegistry, [](const auto& record) { return record->pendingRemoval; });
+            },
+            this);
     }
 
     SKeyEvent CHyprcast::toHyprcastType(KeyboardId keyboardId, const IKeyboard::SKeyEvent& event) noexcept {
@@ -54,11 +132,9 @@ namespace Hyprcast {
 
         return {.keyboardId = keyboardId, .timeMs = event.timeMs, .keycode = event.keycode, .state = state};
     }
-
     SModifiersEvent CHyprcast::toHyprcastType(KeyboardId keyboardId, const IKeyboard::SModifiersEvent& event) noexcept {
         return {.keyboardId = keyboardId, .depressed = event.depressed, .latched = event.latched, .locked = event.locked, .group = event.group};
     }
-
     SKeymapEvent CHyprcast::toHyprcastType(KeyboardId keyboardId, const IKeyboard::SKeymapEvent& event) {
         std::unique_ptr<char, decltype(&std::free)> keymapString{xkb_keymap_get_as_string(event.keymap, XKB_KEYMAP_FORMAT_TEXT_V1), &std::free};
 

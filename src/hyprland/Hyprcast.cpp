@@ -28,6 +28,23 @@ namespace Hyprcast {
         }
     }
 
+    void CHyprcast::addKeyboard(SP<IKeyboard> keyboard) {
+        auto keyboardInfo = std::make_unique<SKeyboardInfo>();
+
+        keyboardInfo->keyboard = keyboard;
+        keyboardInfo->id       = m_nextId++;
+        keyboardInfo->name     = keyboard->m_hlName;
+        keyboardInfo->pendingRemoval = false;
+        keyboardInfo->subscribed     = false;
+
+        keyboardInfo->destroyListener = keyboard->m_events.destroy.listen([this, record = keyboardInfo.get()] {
+            scheduleRemoval(*record);
+            --m_nextId;
+        });
+
+        m_keyboardRegistry.push_back(std::move(keyboardInfo));
+    }
+
     void CHyprcast::subscribeEventListeners(const SConfig& acceptedConfig) {
         for (const auto& keyboardPtr : m_keyboardRegistry) {
             if (keyboardPtr->pendingRemoval) {
@@ -72,20 +89,6 @@ namespace Hyprcast {
 
             keyboardInfo->subscribed = true;
         }
-    }
-
-    void CHyprcast::addKeyboard(SP<IKeyboard> keyboard) {
-        auto keyboardInfo = std::make_unique<SKeyboardInfo>();
-
-        keyboardInfo->keyboard       = keyboard;
-        keyboardInfo->id             = m_nextId++;
-        keyboardInfo->name           = keyboard->m_hlName;
-        keyboardInfo->pendingRemoval = false;
-        keyboardInfo->subscribed     = false;
-
-        keyboardInfo->destroyListener = keyboard->m_events.destroy.listen([this, record = keyboardInfo.get()] { scheduleRemoval(*record); });
-
-        m_keyboardRegistry.push_back(std::move(keyboardInfo));
     }
 
     void CHyprcast::unsubscribeListeners(KeyboardId id) {

@@ -25,6 +25,7 @@ namespace Hyprcast {
         CHyprcast(CHyprcast&&)                 = delete;
         CHyprcast& operator=(CHyprcast&&)      = delete;
 
+        void       addKeyboard(SP<IKeyboard> keyboard);
         void       subscribeEventListeners(const SConfig& acceptedConfig);
 
       private:
@@ -33,7 +34,6 @@ namespace Hyprcast {
         SModifiersEvent                             toHyprcastType(KeyboardId keyboardId, const IKeyboard::SModifiersEvent& event) noexcept;
         SKeymapEvent                                toHyprcastType(KeyboardId keyboardId, const IKeyboard::SKeymapEvent& event);
 
-        void                                        addKeyboard(SP<IKeyboard> keyboard);
         void                                        unsubscribeListeners(KeyboardId id);
 
         void                                        scheduleRemoval(SKeyboardInfo& keyboardInfo);

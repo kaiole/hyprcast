@@ -31,7 +31,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     g_config   = std::make_unique<Hyprcast::CPluginConfig>();
     g_hyprcast = std::make_unique<Hyprcast::CHyprcast>();
 
-    g_config->listen([&] { g_hyprcast->subscribeToEventListeners(g_config->getAcceptedConfig()); });
+    g_config->listen([&] { g_hyprcast->subscribeEventListeners(g_config->getAcceptedConfig()); });
 
     return {.name{Hyprcast::PLUGIN_NAME}, .description{Hyprcast::DESCRIPTION}, .author{Hyprcast::AUTHOR}, .version{Hyprcast::VERSION}};
 }

@@ -25,7 +25,7 @@ namespace Hyprcast {
         CHyprcast(CHyprcast&&)                 = delete;
         CHyprcast& operator=(CHyprcast&&)      = delete;
 
-        void       subscribeToEventListeners(const SConfig& acceptedConfig);
+        void       subscribeEventListeners(const SConfig& acceptedConfig);
 
       private:
         // TODO: might not need in class

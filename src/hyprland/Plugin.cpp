@@ -8,8 +8,17 @@
 #include <string>
 
 namespace {
-    std::unique_ptr<Hyprcast::CHyprcast>     g_hyprcast;
-    std::unique_ptr<Hyprcast::CPluginConfig> g_config;
+    std::unique_ptr<Hyprcast::CHyprcast>     g_pHyprcast;
+    std::unique_ptr<Hyprcast::CPluginConfig> g_pConfig;
+
+    CFunctionHook*                           g_pSetupKeyboardHook = nullptr;
+    using ogSetupKeyboard                                         = void (*)(void*, SP<IKeyboard>);
+
+    void setupKeyboardHook(void* thisPtr, SP<IKeyboard> keyboard) {
+        (*(ogSetupKeyboard)g_pSetupKeyboardHook->m_original)(thisPtr, keyboard);
+        g_pHyprcast->addKeyboard(keyboard);
+        g_pHyprcast->subscribeEventListeners(g_pConfig->getAcceptedConfig());
+    }
 }
 
 // Do NOT change this function.
@@ -28,15 +37,19 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         throw std::runtime_error("[Hyprcast] Version mismatch");
     }
 
-    g_config   = std::make_unique<Hyprcast::CPluginConfig>();
-    g_hyprcast = std::make_unique<Hyprcast::CHyprcast>();
+    g_pConfig   = std::make_unique<Hyprcast::CPluginConfig>();
+    g_pHyprcast = std::make_unique<Hyprcast::CHyprcast>();
 
-    g_config->listen([&] { g_hyprcast->subscribeEventListeners(g_config->getAcceptedConfig()); });
+    static const auto METHODS = HyprlandAPI::findFunctionsByName(Hyprcast::PHANDLE, "setupKeyboard");
+    g_pSetupKeyboardHook      = HyprlandAPI::createFunctionHook(handle, METHODS[0].address, (void*)&setupKeyboardHook);
+    g_pSetupKeyboardHook->hook();
+
+    g_pConfig->listen([&] { g_pHyprcast->subscribeEventListeners(g_pConfig->getAcceptedConfig()); });
 
     return {.name{Hyprcast::PLUGIN_NAME}, .description{Hyprcast::DESCRIPTION}, .author{Hyprcast::AUTHOR}, .version{Hyprcast::VERSION}};
 }
 
 APICALL EXPORT void PLUGIN_EXIT() {
-    g_config.reset();
-    g_hyprcast.reset();
+    g_pConfig.reset();
+    g_pHyprcast.reset();
 }

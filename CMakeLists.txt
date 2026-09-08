@@ -39,7 +39,7 @@ target_link_libraries(hyprcast_config PUBLIC PkgConfig::HYPRCAST_LUA)
 
 include(CTest)
 if(BUILD_TESTING)
-  add_executable(configuration_tests tests/Configuration.cpp)
+  add_executable(configuration_tests tests/Config.cpp)
   target_link_libraries(configuration_tests PRIVATE hyprcast_config)
   add_test(NAME configuration COMMAND configuration_tests)
 endif()

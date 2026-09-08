@@ -11,8 +11,9 @@
 namespace Hyprcast {
     namespace {
         void require(bool condition, const char* message) {
-            if (!condition)
+            if (!condition) {
                 throw std::invalid_argument(message);
+            }
         }
 
         std::string_view stringAt(lua_State* L, int index) {
@@ -47,8 +48,9 @@ namespace Hyprcast {
             for (size_t i = 1; i <= length; ++i) {
                 lua_rawgeti(L, table, static_cast<lua_Integer>(i));
                 const auto name = stringAt(L, -1);
-                if (std::ranges::find(out, name) == out.end())
+                if (std::ranges::find(out, name) == out.end()) {
                     out.emplace_back(name);
+                }
                 lua_pop(L, 1);
             }
         }
@@ -67,7 +69,7 @@ namespace Hyprcast {
                     require(filter == "include" || filter == "exclude", "filter must be 'include' or 'exclude'");
                     candidate.filter = filter == "include" ? eKeyboardFilter::INCLUDE : eKeyboardFilter::EXCLUDE;
                 } else if (key == "keyboards") {
-                    readList(L, candidate.keyboards);
+                    readList(L, candidate.filteredKeyboards);
                 } else {
                     throw std::invalid_argument("unknown configuration field; expected filter or keyboards");
                 }
@@ -85,10 +87,12 @@ namespace Hyprcast {
     }
 
     void CConfig::finishReload(bool successful) noexcept {
-        if (!m_evaluating)
+        if (!m_evaluating) {
             return;
-        if (successful && !m_failed)
+        }
+        if (successful && !m_failed) {
             m_accepted = std::move(m_pending);
+        }
         m_evaluating = false;
     }
 
@@ -115,8 +119,9 @@ namespace Hyprcast {
         }
         lua_settop(L, top);
         // No owning C++ locals or active catch scopes survive this Lua longjmp.
-        if (error[0])
+        if (error[0]) {
             return luaL_error(L, "%s", error);
+        }
         return 0;
     }
 }

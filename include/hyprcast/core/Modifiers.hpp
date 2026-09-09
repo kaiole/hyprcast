@@ -5,7 +5,7 @@
 #include <cstdint>
 
 namespace Hyprcast {
-    struct SModifiersEvent {
+    struct SModifiers {
         KeyboardId keyboardId;
         uint32_t   depressed;
         uint32_t   latched;

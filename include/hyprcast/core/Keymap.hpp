@@ -5,7 +5,7 @@
 #include <string>
 
 namespace Hyprcast {
-    struct SKeymapEvent {
+    struct SKeymap {
         KeyboardId  keyboardId;
         std::string keymap;
     };

@@ -1,4 +1,4 @@
-#include "Hyprcast.hpp"
+#include "KeyboardRegistry.hpp"
 
 #include "KeyboardInfo.hpp"
 #include "hyprcast/config/Config.hpp"
@@ -16,24 +16,24 @@
 #include <utility>
 
 namespace Hyprcast {
-    CHyprcast::CHyprcast() {
+    CKeyboardRegistry::CKeyboardRegistry() {
         for (auto& keyboard : g_pInputManager->m_keyboards) {
             addKeyboard(keyboard);
         }
     }
 
-    CHyprcast::~CHyprcast() {
+    CKeyboardRegistry::~CKeyboardRegistry() {
         if (m_removalSource) {
             wl_event_source_remove(m_removalSource);
         }
     }
 
-    void CHyprcast::addKeyboard(SP<IKeyboard> keyboard) {
+    void CKeyboardRegistry::addKeyboard(SP<IKeyboard> keyboard) {
         auto keyboardInfo = std::make_unique<SKeyboardInfo>();
 
-        keyboardInfo->keyboard = keyboard;
-        keyboardInfo->id       = m_nextId++;
-        keyboardInfo->name     = keyboard->m_hlName;
+        keyboardInfo->keyboard       = keyboard;
+        keyboardInfo->id             = m_nextId++;
+        keyboardInfo->name           = keyboard->m_hlName;
         keyboardInfo->pendingRemoval = false;
         keyboardInfo->subscribed     = false;
 
@@ -45,7 +45,7 @@ namespace Hyprcast {
         m_keyboardRegistry.push_back(std::move(keyboardInfo));
     }
 
-    void CHyprcast::subscribeEventListeners(const SConfig& acceptedConfig) {
+    void CKeyboardRegistry::subscribeEventListeners(const SConfig& acceptedConfig) {
         for (const auto& keyboardPtr : m_keyboardRegistry) {
             if (keyboardPtr->pendingRemoval) {
                 continue;
@@ -91,7 +91,7 @@ namespace Hyprcast {
         }
     }
 
-    void CHyprcast::unsubscribeListeners(KeyboardId id) {
+    void CKeyboardRegistry::unsubscribeListeners(KeyboardId id) {
         auto it = std::ranges::find(m_keyboardRegistry, id, &SKeyboardInfo::id);
         if (it == m_keyboardRegistry.end()) {
             return;
@@ -107,7 +107,7 @@ namespace Hyprcast {
         keyboardInfo->subscribed = false;
     }
 
-    void CHyprcast::scheduleRemoval(SKeyboardInfo& keyboardInfo) {
+    void CKeyboardRegistry::scheduleRemoval(SKeyboardInfo& keyboardInfo) {
         keyboardInfo.pendingRemoval = true;
         keyboardInfo.keyEventListener.reset();
         keyboardInfo.modifiersListener.reset();
@@ -123,22 +123,22 @@ namespace Hyprcast {
         m_removalSource = wl_event_loop_add_idle(
             g_pCompositor->m_wlEventLoop,
             [](void* data) {
-                auto* self            = static_cast<CHyprcast*>(data);
+                auto* self            = static_cast<CKeyboardRegistry*>(data);
                 self->m_removalSource = nullptr;
                 std::erase_if(self->m_keyboardRegistry, [](const auto& record) { return record->pendingRemoval; });
             },
             this);
     }
 
-    SKeyEvent CHyprcast::toHyprcastType(KeyboardId keyboardId, const IKeyboard::SKeyEvent& event) noexcept {
+    SKeyEvent CKeyboardRegistry::toHyprcastType(KeyboardId keyboardId, const IKeyboard::SKeyEvent& event) noexcept {
         auto state = event.state == WL_KEYBOARD_KEY_STATE_PRESSED ? eKeyState::PRESSED : eKeyState::RELEASED;
 
         return {.keyboardId = keyboardId, .timeMs = event.timeMs, .keycode = event.keycode, .state = state};
     }
-    SModifiersEvent CHyprcast::toHyprcastType(KeyboardId keyboardId, const IKeyboard::SModifiersEvent& event) noexcept {
+    SModifiersEvent CKeyboardRegistry::toHyprcastType(KeyboardId keyboardId, const IKeyboard::SModifiersEvent& event) noexcept {
         return {.keyboardId = keyboardId, .depressed = event.depressed, .latched = event.latched, .locked = event.locked, .group = event.group};
     }
-    SKeymapEvent CHyprcast::toHyprcastType(KeyboardId keyboardId, const IKeyboard::SKeymapEvent& event) {
+    SKeymapEvent CKeyboardRegistry::toHyprcastType(KeyboardId keyboardId, const IKeyboard::SKeymapEvent& event) {
         std::unique_ptr<char, decltype(&std::free)> keymapString{xkb_keymap_get_as_string(event.keymap, XKB_KEYMAP_FORMAT_TEXT_V1), &std::free};
 
         return {.keyboardId = keyboardId, .keymap = keymapString.get()};

@@ -1,18 +1,18 @@
 #include "Plugin.hpp"
 
 #include "PluginConfig.hpp"
-#include "Hyprcast.hpp"
+#include "KeyboardRegistry.hpp"
 
 #include <memory>
 #include <stdexcept>
 #include <string>
 
 namespace {
-    std::unique_ptr<Hyprcast::CHyprcast>     g_pHyprcast;
-    std::unique_ptr<Hyprcast::CPluginConfig> g_pConfig;
+    std::unique_ptr<Hyprcast::CKeyboardRegistry> g_pHyprcast;
+    std::unique_ptr<Hyprcast::CPluginConfig>     g_pConfig;
 
-    CFunctionHook*                           g_pSetupKeyboardHook = nullptr;
-    using ogSetupKeyboard                                         = void (*)(void*, SP<IKeyboard>);
+    CFunctionHook*                               g_pSetupKeyboardHook = nullptr;
+    using ogSetupKeyboard                                             = void (*)(void*, SP<IKeyboard>);
 
     void setupKeyboardHook(void* thisPtr, SP<IKeyboard> keyboard) {
         (*(ogSetupKeyboard)g_pSetupKeyboardHook->m_original)(thisPtr, keyboard);
@@ -38,7 +38,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     }
 
     g_pConfig   = std::make_unique<Hyprcast::CPluginConfig>();
-    g_pHyprcast = std::make_unique<Hyprcast::CHyprcast>();
+    g_pHyprcast = std::make_unique<Hyprcast::CKeyboardRegistry>();
 
     static const auto METHODS = HyprlandAPI::findFunctionsByName(Hyprcast::PHANDLE, "setupKeyboard");
     g_pSetupKeyboardHook      = HyprlandAPI::createFunctionHook(handle, METHODS[0].address, (void*)&setupKeyboardHook);

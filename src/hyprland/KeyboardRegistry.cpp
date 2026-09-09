@@ -2,8 +2,11 @@
 
 #include "KeyboardInfo.hpp"
 #include "hyprcast/config/Config.hpp"
+#include "hyprcast/core/KeyEvent.hpp"
 #include "hyprcast/core/KeyState.hpp"
 #include "hyprcast/core/KeyboardId.hpp"
+#include "hyprcast/core/KeymapEvent.hpp"
+#include "hyprcast/core/ModifiersEvent.hpp"
 
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <wayland-server-protocol.h>
@@ -16,6 +19,24 @@
 #include <utility>
 
 namespace Hyprcast {
+    namespace {
+        SKeyEvent toHyprcastType(KeyboardId keyboardId, const IKeyboard::SKeyEvent& event) noexcept {
+            auto state = event.state == WL_KEYBOARD_KEY_STATE_PRESSED ? eKeyState::PRESSED : eKeyState::RELEASED;
+
+            return {.keyboardId = keyboardId, .timeMs = event.timeMs, .keycode = event.keycode, .state = state};
+        }
+
+        SModifiersEvent toHyprcastType(KeyboardId keyboardId, const IKeyboard::SModifiersEvent& event) noexcept {
+            return {.keyboardId = keyboardId, .depressed = event.depressed, .latched = event.latched, .locked = event.locked, .group = event.group};
+        }
+
+        SKeymapEvent toHyprcastType(KeyboardId keyboardId, const IKeyboard::SKeymapEvent& event) {
+            std::unique_ptr<char, decltype(&std::free)> keymapString{xkb_keymap_get_as_string(event.keymap, XKB_KEYMAP_FORMAT_TEXT_V1), &std::free};
+
+            return {.keyboardId = keyboardId, .keymap = keymapString.get()};
+        }
+    }
+
     CKeyboardRegistry::CKeyboardRegistry() {
         for (auto& keyboard : g_pInputManager->m_keyboards) {
             addKeyboard(keyboard);
@@ -128,19 +149,5 @@ namespace Hyprcast {
                 std::erase_if(self->m_keyboardRegistry, [](const auto& record) { return record->pendingRemoval; });
             },
             this);
-    }
-
-    SKeyEvent CKeyboardRegistry::toHyprcastType(KeyboardId keyboardId, const IKeyboard::SKeyEvent& event) noexcept {
-        auto state = event.state == WL_KEYBOARD_KEY_STATE_PRESSED ? eKeyState::PRESSED : eKeyState::RELEASED;
-
-        return {.keyboardId = keyboardId, .timeMs = event.timeMs, .keycode = event.keycode, .state = state};
-    }
-    SModifiersEvent CKeyboardRegistry::toHyprcastType(KeyboardId keyboardId, const IKeyboard::SModifiersEvent& event) noexcept {
-        return {.keyboardId = keyboardId, .depressed = event.depressed, .latched = event.latched, .locked = event.locked, .group = event.group};
-    }
-    SKeymapEvent CKeyboardRegistry::toHyprcastType(KeyboardId keyboardId, const IKeyboard::SKeymapEvent& event) {
-        std::unique_ptr<char, decltype(&std::free)> keymapString{xkb_keymap_get_as_string(event.keymap, XKB_KEYMAP_FORMAT_TEXT_V1), &std::free};
-
-        return {.keyboardId = keyboardId, .keymap = keymapString.get()};
     }
 }

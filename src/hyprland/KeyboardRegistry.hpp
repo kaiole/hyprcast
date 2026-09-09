@@ -2,10 +2,7 @@
 
 #include "KeyboardInfo.hpp"
 #include "hyprcast/config/Config.hpp"
-#include "hyprcast/core/KeyEvent.hpp"
 #include "hyprcast/core/KeyboardId.hpp"
-#include "hyprcast/core/KeymapEvent.hpp"
-#include "hyprcast/core/ModifiersEvent.hpp"
 
 #include <hyprland/src/helpers/memory/Memory.hpp>
 
@@ -29,11 +26,6 @@ namespace Hyprcast {
         void               subscribeEventListeners(const SConfig& acceptedConfig);
 
       private:
-        // TODO: might not need in class
-        SKeyEvent                                   toHyprcastType(KeyboardId keyboardId, const IKeyboard::SKeyEvent& event) noexcept;
-        SModifiersEvent                             toHyprcastType(KeyboardId keyboardId, const IKeyboard::SModifiersEvent& event) noexcept;
-        SKeymapEvent                                toHyprcastType(KeyboardId keyboardId, const IKeyboard::SKeymapEvent& event);
-
         void                                        unsubscribeListeners(KeyboardId id);
 
         void                                        scheduleRemoval(SKeyboardInfo& keyboardInfo);

@@ -5,8 +5,9 @@
 #include "hyprcast/core/KeyEvent.hpp"
 #include "hyprcast/core/KeyState.hpp"
 #include "hyprcast/core/KeyboardId.hpp"
-#include "hyprcast/core/KeymapEvent.hpp"
-#include "hyprcast/core/ModifiersEvent.hpp"
+#include "hyprcast/core/Keymap.hpp"
+#include "hyprcast/core/Modifiers.hpp"
+#include "hyprcast/core/RepeatInfo.hpp"
 
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <wayland-server-protocol.h>
@@ -26,14 +27,18 @@ namespace Hyprcast {
             return {.keyboardId = keyboardId, .timeMs = event.timeMs, .keycode = event.keycode, .state = state};
         }
 
-        SModifiersEvent toHyprcastType(KeyboardId keyboardId, const IKeyboard::SModifiersEvent& event) noexcept {
+        SModifiers toHyprcastType(KeyboardId keyboardId, const IKeyboard::SModifiersEvent& event) noexcept {
             return {.keyboardId = keyboardId, .depressed = event.depressed, .latched = event.latched, .locked = event.locked, .group = event.group};
         }
 
-        SKeymapEvent toHyprcastType(KeyboardId keyboardId, const IKeyboard::SKeymapEvent& event) {
+        SKeymap toHyprcastType(KeyboardId keyboardId, const IKeyboard::SKeymapEvent& event) {
             std::unique_ptr<char, decltype(&std::free)> keymapString{xkb_keymap_get_as_string(event.keymap, XKB_KEYMAP_FORMAT_TEXT_V1), &std::free};
 
             return {.keyboardId = keyboardId, .keymap = keymapString.get()};
+        }
+
+        SRepeatInfo toHyprcastType(KeyboardId keyboardId, int repeatRate, int repeatDelay) {
+            return {.rate = repeatRate, .delay = repeatDelay};
         }
     }
 
@@ -84,29 +89,30 @@ namespace Hyprcast {
             KeyboardId  keyboardId   = keyboardInfo->id;
 
             keyboardInfo->keyEventListener = keyboard->m_keyboardEvents.key.listen([this, keyboardId = keyboardId](const IKeyboard::SKeyEvent& event) {
-                auto keyEvent = toHyprcastType(keyboardId, event);
-                std::println(stderr, "[hyprcast] keycode: {} {} at {} by keyboard {}", keyEvent.keycode, keyEvent.state == eKeyState::PRESSED ? "pressed" : "released",
-                             keyEvent.timeMs, keyboardId);
+                auto keyEventInfo = toHyprcastType(keyboardId, event);
+                std::println(stderr, "[hyprcast] keycode: {} {} at {} by keyboard {}", keyEventInfo.keycode, keyEventInfo.state == eKeyState::PRESSED ? "pressed" : "released",
+                             keyEventInfo.timeMs, keyboardId);
 
                 // TODO: queue IPC message
             });
 
             keyboardInfo->modifiersListener = keyboard->m_keyboardEvents.modifiers.listen([this, keyboardId = keyboardId](const IKeyboard::SModifiersEvent& event) {
-                auto modifiersListener = toHyprcastType(keyboardId, event);
+                auto modifiersInfo = toHyprcastType(keyboardId, event);
 
                 // TODO: queue IPC message
             });
 
             keyboardInfo->keymapListener = keyboard->m_keyboardEvents.keymap.listen([this, keyboardId = keyboardId](const IKeyboard::SKeymapEvent& event) {
-                auto keymapListener = toHyprcastType(keyboardId, event);
+                auto keymapInfo = toHyprcastType(keyboardId, event);
 
                 // TODO: queue IPC message
             });
 
-            keyboardInfo->repeatInfoListener = keyboard->m_keyboardEvents.repeatInfo.listen([this, keyboardId = keyboardId]() {
-                // TODO: how to even use
-                // TODO: queue IPC message
-            });
+            keyboardInfo->repeatInfoListener =
+                keyboard->m_keyboardEvents.repeatInfo.listen([this, keyboardId = keyboardId, repeatRate = keyboard->m_repeatRate, repeatDelay = keyboard->m_repeatDelay]() {
+                    auto repeatInfo = toHyprcastType(keyboardId, repeatRate, repeatDelay);
+                    // TODO: queue IPC message
+                });
 
             keyboardInfo->subscribed = true;
         }

@@ -15,18 +15,18 @@
 struct wl_event_source;
 
 namespace Hyprcast {
-    class CHyprcast {
+    class CKeyboardRegistry {
       public:
-        CHyprcast();
-        ~CHyprcast();
+        CKeyboardRegistry();
+        ~CKeyboardRegistry();
 
-        CHyprcast(const CHyprcast&)            = delete;
-        CHyprcast& operator=(const CHyprcast&) = delete;
-        CHyprcast(CHyprcast&&)                 = delete;
-        CHyprcast& operator=(CHyprcast&&)      = delete;
+        CKeyboardRegistry(const CKeyboardRegistry&)            = delete;
+        CKeyboardRegistry& operator=(const CKeyboardRegistry&) = delete;
+        CKeyboardRegistry(CKeyboardRegistry&&)                 = delete;
+        CKeyboardRegistry& operator=(CKeyboardRegistry&&)      = delete;
 
-        void       addKeyboard(SP<IKeyboard> keyboard);
-        void       subscribeEventListeners(const SConfig& acceptedConfig);
+        void               addKeyboard(SP<IKeyboard> keyboard);
+        void               subscribeEventListeners(const SConfig& acceptedConfig);
 
       private:
         // TODO: might not need in class

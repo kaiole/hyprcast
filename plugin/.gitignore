@@ -1,6 +1,5 @@
 /build/
 /Hyprland/
-/compile_commands.json
 *.so
 .gdbinit
 /dev/hyprcast.lua

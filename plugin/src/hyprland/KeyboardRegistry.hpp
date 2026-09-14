@@ -3,6 +3,7 @@
 #include "KeyboardInfo.hpp"
 #include "hyprcast/config/Config.hpp"
 #include "hyprcast/core/KeyboardId.hpp"
+#include "hyprcast/core/WlEventSource.hpp"
 
 #include <hyprland/src/helpers/memory/Memory.hpp>
 
@@ -15,7 +16,7 @@ namespace Hyprcast {
     class CKeyboardRegistry {
       public:
         CKeyboardRegistry();
-        ~CKeyboardRegistry();
+        ~CKeyboardRegistry() = default;
 
         CKeyboardRegistry(const CKeyboardRegistry&)            = delete;
         CKeyboardRegistry& operator=(const CKeyboardRegistry&) = delete;
@@ -26,13 +27,16 @@ namespace Hyprcast {
         void               subscribeEventListeners(const SConfig& acceptedConfig);
 
       private:
-        void                                        unsubscribeListeners(KeyboardId id);
+        void unsubscribeListeners(KeyboardId id);
+        void scheduleRemoval(SKeyboardInfo& keyboardInfo);
 
-        void                                        scheduleRemoval(SKeyboardInfo& keyboardInfo);
+        struct SEventSourceRemover {
+            void operator()(wl_event_source* eventSource) const;
+        };
 
         KeyboardId                                  m_nextId = 1;
         std::vector<std::unique_ptr<SKeyboardInfo>> m_keyboardRegistry;
 
-        wl_event_source*                            m_removalSource = nullptr;
+        CWlEventSource                              m_eventSource;
     };
 }

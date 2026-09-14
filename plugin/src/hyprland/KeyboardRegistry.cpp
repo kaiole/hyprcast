@@ -10,6 +10,7 @@
 #include "hyprcast/core/RepeatInfo.hpp"
 
 #include <hyprland/src/managers/input/InputManager.hpp>
+#include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 #include <xkbcommon/xkbcommon.h>
 #include <hyprland/src/Compositor.hpp>
@@ -48,12 +49,6 @@ namespace Hyprcast {
         }
     }
 
-    CKeyboardRegistry::~CKeyboardRegistry() {
-        if (m_removalSource) {
-            wl_event_source_remove(m_removalSource);
-        }
-    }
-
     void CKeyboardRegistry::addKeyboard(SP<IKeyboard> keyboard) {
         auto keyboardInfo = std::make_unique<SKeyboardInfo>();
 
@@ -63,10 +58,7 @@ namespace Hyprcast {
         keyboardInfo->pendingRemoval = false;
         keyboardInfo->subscribed     = false;
 
-        keyboardInfo->destroyListener = keyboard->m_events.destroy.listen([this, record = keyboardInfo.get()] {
-            scheduleRemoval(*record);
-            --m_nextId;
-        });
+        keyboardInfo->destroyListener = keyboard->m_events.destroy.listen([this, record = keyboardInfo.get()] { scheduleRemoval(*record); });
 
         m_keyboardRegistry.push_back(std::move(keyboardInfo));
     }
@@ -142,18 +134,20 @@ namespace Hyprcast {
         keyboardInfo.repeatInfoListener.reset();
         keyboardInfo.subscribed = false;
 
-        if (m_removalSource) {
+        if (m_eventSource) {
             return;
         }
 
-        // On failure, returns nullptr and no cleanup is scheduled; marked records remain for the next attempt.
-        m_removalSource = wl_event_loop_add_idle(
+        m_eventSource.reset(wl_event_loop_add_idle(
             g_pCompositor->m_wlEventLoop,
             [](void* data) {
-                auto* self            = static_cast<CKeyboardRegistry*>(data);
-                self->m_removalSource = nullptr;
+                auto* self = static_cast<CKeyboardRegistry*>(data);
+
+                [[maybe_unused]]
+                auto* obj = self->m_eventSource.release();
+
                 std::erase_if(self->m_keyboardRegistry, [](const auto& record) { return record->pendingRemoval; });
             },
-            this);
+            this));
     }
 }

@@ -43,13 +43,13 @@ namespace Hyprcast {
         }
     }
 
-    CKeyboardRegistry::CKeyboardRegistry() {
+    CKeyboardRegistry::CKeyboardRegistry() noexcept {
         for (auto& keyboard : g_pInputManager->m_keyboards) {
             addKeyboard(keyboard);
         }
     }
 
-    void CKeyboardRegistry::addKeyboard(SP<IKeyboard> keyboard) {
+    void CKeyboardRegistry::addKeyboard(SP<IKeyboard> keyboard) noexcept {
         auto keyboardInfo = std::make_unique<SKeyboardInfo>();
 
         keyboardInfo->keyboard       = keyboard;
@@ -110,7 +110,7 @@ namespace Hyprcast {
         }
     }
 
-    void CKeyboardRegistry::unsubscribeListeners(KeyboardId id) {
+    void CKeyboardRegistry::unsubscribeListeners(KeyboardId id) noexcept {
         auto it = std::ranges::find(m_keyboardRegistry, id, &SKeyboardInfo::id);
         if (it == m_keyboardRegistry.end()) {
             return;
@@ -126,7 +126,7 @@ namespace Hyprcast {
         keyboardInfo->subscribed = false;
     }
 
-    void CKeyboardRegistry::scheduleRemoval(SKeyboardInfo& keyboardInfo) {
+    void CKeyboardRegistry::scheduleRemoval(SKeyboardInfo& keyboardInfo) noexcept {
         keyboardInfo.pendingRemoval = true;
         keyboardInfo.keyEventListener.reset();
         keyboardInfo.modifiersListener.reset();

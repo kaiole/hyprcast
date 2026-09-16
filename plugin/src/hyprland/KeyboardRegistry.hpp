@@ -3,7 +3,7 @@
 #include "KeyboardInfo.hpp"
 #include "hyprcast/config/Config.hpp"
 #include "hyprcast/core/KeyboardId.hpp"
-#include "hyprcast/core/WlEventSource.hpp"
+#include "wayland/WlEventSource.hpp"
 
 #include <hyprland/src/helpers/memory/Memory.hpp>
 

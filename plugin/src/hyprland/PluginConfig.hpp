@@ -7,7 +7,7 @@
 namespace Hyprcast {
     class CPluginConfig {
       public:
-        CPluginConfig();
+        explicit CPluginConfig();
         ~CPluginConfig();
 
         CPluginConfig(const CPluginConfig&)            = delete;

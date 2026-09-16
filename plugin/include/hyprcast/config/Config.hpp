@@ -18,7 +18,6 @@ namespace Hyprcast {
         bool                     operator==(const SConfig&) const = default;
     };
 
-    // Compositor-thread only. References remain valid until the next successful commit.
     class CConfig {
       public:
         const SConfig& accepted() const noexcept {

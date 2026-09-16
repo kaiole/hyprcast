@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <memory>
+#include <print>
 #include <utility>
 
 namespace Hyprcast {
@@ -33,13 +34,13 @@ namespace Hyprcast {
         }
 
         SKeymap toHyprcastType(KeyboardId keyboardId, const IKeyboard::SKeymapEvent& event) {
-            std::unique_ptr<char, decltype(&std::free)> keymapString{xkb_keymap_get_as_string(event.keymap, XKB_KEYMAP_FORMAT_TEXT_V1), &std::free};
+            std::unique_ptr<char, decltype(&std::free)> keymapString{::xkb_keymap_get_as_string(event.keymap, XKB_KEYMAP_FORMAT_TEXT_V1), &std::free};
 
             return {.keyboardId = keyboardId, .keymap = keymapString.get()};
         }
 
         SRepeatInfo toHyprcastType(KeyboardId keyboardId, int repeatRate, int repeatDelay) {
-            return {.rate = repeatRate, .delay = repeatDelay};
+            return {.keyboardId = keyboardId, .rate = repeatRate, .delay = repeatDelay};
         }
     }
 
@@ -136,7 +137,7 @@ namespace Hyprcast {
             return;
         }
 
-        m_eventSource.reset(wl_event_loop_add_idle(
+        m_eventSource.reset(::wl_event_loop_add_idle(
             g_pCompositor->m_wlEventLoop,
             [](void* data) {
                 auto* self = static_cast<CKeyboardRegistry*>(data);

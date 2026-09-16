@@ -15,6 +15,9 @@ set(HYPRCAST_PLUGIN_SOURCES
     src/hyprland/Plugin.cpp
     src/hyprland/KeyboardRegistry.cpp
     src/hyprland/PluginConfig.cpp
+    src/ipc/SocketServer.cpp
+    src/os/FileLock.cpp
+    src/os/UniqueFd.cpp
     src/wayland/WlEventSource.cpp)
 
 find_package(PkgConfig REQUIRED)

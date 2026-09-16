@@ -2,6 +2,7 @@
 
 #include "PluginConfig.hpp"
 #include "KeyboardRegistry.hpp"
+#include "ipc/SocketServer.hpp"
 
 #include <helpers/memory/Memory.hpp>
 #include <memory>
@@ -28,6 +29,7 @@ namespace {
         }
 
       private:
+        Hyprcast::CSocketServer     m_socket;
         Hyprcast::CKeyboardRegistry m_keyboardRegistry;
         Hyprcast::CPluginConfig     m_config;
     };

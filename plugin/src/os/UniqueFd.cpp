@@ -1,4 +1,4 @@
-#include "hyprcast/core/UniqueFd.hpp"
+#include "UniqueFd.hpp"
 
 #include <unistd.h>
 
@@ -7,13 +7,13 @@ namespace Hyprcast {
         reset();
     }
 
-    void CUniqueFd::reset(int fd) {
+    void CUniqueFd::reset(int fd) noexcept {
         if (m_fd == fd) {
             return;
         }
 
         if (m_fd != -1) {
-            close(m_fd);
+            ::close(m_fd);
         }
 
         m_fd = fd;

@@ -3,21 +3,43 @@
 #include "PluginConfig.hpp"
 #include "KeyboardRegistry.hpp"
 
+#include <helpers/memory/Memory.hpp>
 #include <memory>
 #include <stdexcept>
 #include <string>
 
 namespace {
-    std::unique_ptr<Hyprcast::CKeyboardRegistry> g_pHyprcast;
-    std::unique_ptr<Hyprcast::CPluginConfig>     g_pConfig;
+    class CPluginState {
+      public:
+        CPluginState() {
+            m_config.listen([this] { m_keyboardRegistry.updateSubscriptions(m_config.getAcceptedConfig()); });
+            m_keyboardRegistry.updateSubscriptions(m_config.getAcceptedConfig());
+        };
+        ~CPluginState() = default;
 
-    CFunctionHook*                               g_pSetupKeyboardHook = nullptr;
-    using ogSetupKeyboard                                             = void (*)(void*, SP<IKeyboard>);
+        CPluginState(const CPluginState& other)            = delete;
+        CPluginState& operator=(const CPluginState& other) = delete;
+        CPluginState(CPluginState&& other)                 = delete;
+        CPluginState& operator=(CPluginState&& other)      = delete;
+
+        void          addKeyboard(SP<IKeyboard> keyboard) {
+            m_keyboardRegistry.addKeyboard(keyboard);
+            m_keyboardRegistry.updateSubscriptions(m_config.getAcceptedConfig());
+        }
+
+      private:
+        Hyprcast::CKeyboardRegistry m_keyboardRegistry;
+        Hyprcast::CPluginConfig     m_config;
+    };
+
+    std::unique_ptr<CPluginState> g_pPluginState;
+
+    CFunctionHook*                g_pSetupKeyboardHook = nullptr;
+    using ogSetupKeyboard                              = void (*)(void*, SP<IKeyboard>);
 
     void setupKeyboardHook(void* thisPtr, SP<IKeyboard> keyboard) {
         (*(ogSetupKeyboard)g_pSetupKeyboardHook->m_original)(thisPtr, keyboard);
-        g_pHyprcast->addKeyboard(keyboard);
-        g_pHyprcast->subscribeEventListeners(g_pConfig->getAcceptedConfig());
+        g_pPluginState->addKeyboard(keyboard);
     }
 }
 
@@ -37,19 +59,15 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         throw std::runtime_error("[Hyprcast] Version mismatch");
     }
 
-    g_pConfig   = std::make_unique<Hyprcast::CPluginConfig>();
-    g_pHyprcast = std::make_unique<Hyprcast::CKeyboardRegistry>();
+    g_pPluginState = std::make_unique<CPluginState>();
 
     static const auto METHODS = HyprlandAPI::findFunctionsByName(Hyprcast::PHANDLE, "setupKeyboard");
     g_pSetupKeyboardHook      = HyprlandAPI::createFunctionHook(handle, METHODS[0].address, (void*)&setupKeyboardHook);
     g_pSetupKeyboardHook->hook();
 
-    g_pConfig->listen([&] { g_pHyprcast->subscribeEventListeners(g_pConfig->getAcceptedConfig()); });
-
     return {.name{Hyprcast::PLUGIN_NAME}, .description{Hyprcast::DESCRIPTION}, .author{Hyprcast::AUTHOR}, .version{Hyprcast::VERSION}};
 }
 
 APICALL EXPORT void PLUGIN_EXIT() {
-    g_pConfig.reset();
-    g_pHyprcast.reset();
+    g_pPluginState.reset();
 }

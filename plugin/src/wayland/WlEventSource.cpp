@@ -1,4 +1,4 @@
-#include "hyprcast/core/WlEventSource.hpp"
+#include "WlEventSource.hpp"
 
 #include <wayland-server-core.h>
 

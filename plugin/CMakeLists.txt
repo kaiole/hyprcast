@@ -12,8 +12,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(HYPRCAST_PLUGIN_SOURCES
-    src/hyprland/Plugin.cpp src/hyprland/KeyboardRegistry.cpp
-    src/hyprland/PluginConfig.cpp)
+    src/hyprland/Plugin.cpp
+    src/hyprland/KeyboardRegistry.cpp
+    src/hyprland/PluginConfig.cpp
+    src/wayland/WlEventSource.cpp)
 
 find_package(PkgConfig REQUIRED)
 # Match Hyprland's supported pkg-config names, then check both version bounds.
@@ -74,8 +76,9 @@ if(EXISTS "${HYPRLAND_SOURCE_DIR}/src/version.h")
                              PRIVATE "${HYPRLAND_SOURCE_INCLUDE_ROOT}")
 endif()
 
-target_include_directories(hyprcast
-                           PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_include_directories(
+  hyprcast PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include"
+                   "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(hyprcast PRIVATE rt PkgConfig::HYPRLAND_DEPS
                                        hyprcast_config)
 

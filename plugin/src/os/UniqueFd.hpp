@@ -15,7 +15,7 @@ namespace Hyprcast {
             return m_fd;
         }
 
-        void reset(int fd = -1);
+        void reset(int fd = -1) noexcept;
 
       private:
         int m_fd;

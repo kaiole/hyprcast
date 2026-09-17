@@ -3,5 +3,5 @@
 #include <cstdint>
 
 namespace Hyprcast {
-    using KeyboardId = std::uint32_t;
+using KeyboardId = std::uint32_t;
 }

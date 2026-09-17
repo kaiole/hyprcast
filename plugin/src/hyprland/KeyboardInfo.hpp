@@ -1,6 +1,6 @@
 #pragma once
 
-#include "hyprcast/core/KeyboardId.hpp"
+#include "hyprcast/protocol/KeyboardId.hpp"
 
 #include <hyprland/src/devices/IKeyboard.hpp>
 #include <hyprland/src/helpers/memory/Memory.hpp>

@@ -10,9 +10,9 @@ hl.monitor({
 local mainMod = "ALT"
 local terminal = "ghostty --gtk-single-instance=false"
 local hyprctl =
-    '/home/red/personal/hyprcast/Hyprland/build/hyprctl/hyprctl --instance "$HYPRLAND_INSTANCE_SIGNATURE"'
+    '/home/red/personal/hyprcast/plugin/Hyprland/build/hyprctl/hyprctl --instance "$HYPRLAND_INSTANCE_SIGNATURE"'
 local loadHyprcast =
-    hyprctl .. " plugin load /home/red/personal/hyprcast/build/debug/libhyprcast.so"
+    hyprctl .. " plugin load /home/red/personal/hyprcast/build/debug/plugin/libhyprcast.so"
 
 hl.bind(mainMod .. " + Return", hl.dsp.exec_cmd(terminal))
 hl.bind(mainMod .. " + P", hl.dsp.exec_cmd(loadHyprcast))

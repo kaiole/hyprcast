@@ -2,12 +2,12 @@
 
 #include "KeyboardInfo.hpp"
 #include "hyprcast/config/Config.hpp"
-#include "hyprcast/core/KeyEvent.hpp"
-#include "hyprcast/core/KeyState.hpp"
-#include "hyprcast/core/KeyboardId.hpp"
-#include "hyprcast/core/Keymap.hpp"
-#include "hyprcast/core/Modifiers.hpp"
-#include "hyprcast/core/RepeatInfo.hpp"
+#include "hyprcast/protocol/KeyEvent.hpp"
+#include "hyprcast/protocol/KeyState.hpp"
+#include "hyprcast/protocol/KeyboardId.hpp"
+#include "hyprcast/protocol/Keymap.hpp"
+#include "hyprcast/protocol/Modifiers.hpp"
+#include "hyprcast/protocol/RepeatInfo.hpp"
 
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <wayland-server-core.h>

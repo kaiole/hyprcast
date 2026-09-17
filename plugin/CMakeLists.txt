@@ -1,16 +1,3 @@
-cmake_minimum_required(VERSION 3.27)
-
-project(
-  hyprcast
-  VERSION 0.1.0
-  DESCRIPTION "A keycaster plugin for Hyprland"
-  LANGUAGES CXX)
-
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
 set(HYPRCAST_PLUGIN_SOURCES
     src/hyprland/Plugin.cpp
     src/hyprland/KeyboardRegistry.cpp
@@ -43,7 +30,6 @@ target_include_directories(hyprcast_config
                            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(hyprcast_config PUBLIC PkgConfig::HYPRCAST_LUA)
 
-include(CTest)
 if(BUILD_TESTING)
   add_executable(configuration_tests tests/Config.cpp)
   target_link_libraries(configuration_tests PRIVATE hyprcast_config)
@@ -83,6 +69,6 @@ target_include_directories(
   hyprcast PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include"
                    "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(hyprcast PRIVATE rt PkgConfig::HYPRLAND_DEPS
-                                       hyprcast_config)
+                                       hyprcast_config hyprcast::protocol)
 
 install(TARGETS hyprcast LIBRARY DESTINATION lib)

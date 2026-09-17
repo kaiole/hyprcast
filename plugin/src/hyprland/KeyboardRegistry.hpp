@@ -2,7 +2,7 @@
 
 #include "KeyboardInfo.hpp"
 #include "hyprcast/config/Config.hpp"
-#include "hyprcast/core/KeyboardId.hpp"
+#include "hyprcast/protocol/KeyboardId.hpp"
 #include "wayland/WlEventSource.hpp"
 
 #include <hyprland/src/helpers/memory/Memory.hpp>
@@ -15,7 +15,7 @@ struct wl_event_source;
 namespace Hyprcast {
     class CKeyboardRegistry {
       public:
-        explicit CKeyboardRegistry();
+        CKeyboardRegistry();
         ~CKeyboardRegistry() = default;
 
         CKeyboardRegistry(const CKeyboardRegistry&)            = delete;

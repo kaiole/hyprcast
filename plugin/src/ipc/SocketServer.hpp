@@ -12,7 +12,7 @@
 namespace Hyprcast {
     class CSocketServer {
       public:
-        explicit CSocketServer();
+        CSocketServer();
         ~CSocketServer() = default;
 
         CSocketServer(const CSocketServer&)            = delete;

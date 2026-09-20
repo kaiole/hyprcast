@@ -5,11 +5,11 @@
 #include <cstdint>
 
 namespace Hyprcast {
-struct SModifiers {
-  KeyboardId keyboardId;
-  uint32_t depressed;
-  uint32_t latched;
-  uint32_t locked;
-  uint32_t group;
-};
+    struct SModifiers {
+        KeyboardId keyboardId;
+        uint32_t   depressed;
+        uint32_t   latched;
+        uint32_t   locked;
+        uint32_t   group;
+    };
 } // namespace Hyprcast

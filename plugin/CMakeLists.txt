@@ -1,4 +1,5 @@
 set(HYPRCAST_PLUGIN_SOURCES
+    src/Hyprcast.cpp
     src/hyprland/Plugin.cpp
     src/hyprland/KeyboardRegistry.cpp
     src/hyprland/PluginConfig.cpp

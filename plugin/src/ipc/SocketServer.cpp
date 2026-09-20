@@ -84,6 +84,7 @@ namespace Hyprcast {
 
         m_boundSockFile.markBound();
 
+        // TODO: if multiple clients is needed we need to increase BACKLOG_SIZE
         int listenStatus = ::listen(m_sockFd.getFd(), BACKLOG_SIZE);
         if (listenStatus == -1) {
             throw std::system_error(errno, std::generic_category(), "listen");
@@ -95,27 +96,49 @@ namespace Hyprcast {
         }
     }
 
+    // wl_event_loop_add_fd requires a function ptr that returns an int
     int CSocketServer::onSocketReadable(int sockFd, uint32_t mask, void* data) {
-        // TODO: Is there use in multiple client connections? If not close client id if 1 client already connected.
-        int clientFd = ::accept4(sockFd, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
+        auto* self = static_cast<CSocketServer*>(data);
+
+        int   clientFd = ::accept4(sockFd, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
+
+        // Client connection failure is not fatal to Hyprcast ∴
+        // simply log the error and return Wayland event loop
         if (clientFd == -1) {
             const int error = errno;
 
+            // These are expected, recoverable accept4() failures:
+            //
+            // EAGAIN / EWOULDBLOCK:
+            //   There is currently no pending connection for accept4() to return.
+            //   Since the listening socket is non-blocking, accept4() returns -1
+            //   instead of blocking the compositor thread. Return to the Wayland
+            //   event loop; it will call this function again when the listening
+            //   socket becomes readable.
+            //
+            // EINTR:
+            //   A signal interrupted accept4() before it completed. If the connection
+            //   is still pending, the event loop will call this function again.
+            //
+            // ECONNABORTED:
+            //   The client disconnected before its pending connection could be
+            //   accepted. There is nothing left to accept.
+            //
+            // These conditions can occur during normal operation, so do not log them
+            // as errors.
             if (error == EAGAIN || error == EWOULDBLOCK || error == EINTR || error == ECONNABORTED) {
                 return 0;
             }
 
             std::println(stderr, "[hyprcast] accept4 failed: {}; disabling new connections", std::strerror(error));
 
-            auto* self = static_cast<CSocketServer*>(data);
             self->m_eventSource.reset();
+
             return 0;
         }
 
-        auto* self = static_cast<CSocketServer*>(data);
         self->m_clientFd.reset(clientFd);
 
-        // TODO: stream data out
         return 0;
     }
 }

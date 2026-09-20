@@ -7,6 +7,13 @@ set(HYPRCAST_PLUGIN_SOURCES
     src/os/UniqueFd.cpp
     src/wayland/WlEventSource.cpp)
 
+include(FetchContent)
+FetchContent_Declare(
+  libjson
+  GIT_REPOSITORY https://github.com/kaiole/libjson.git
+  GIT_TAG 013397b90735d630d89eab79c2d097bf2ec9876d)
+FetchContent_MakeAvailable(libjson)
+
 find_package(PkgConfig REQUIRED)
 # Match Hyprland's supported pkg-config names, then check both version bounds.
 pkg_search_module(
@@ -68,7 +75,8 @@ endif()
 target_include_directories(
   hyprcast PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include"
                    "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(hyprcast PRIVATE rt PkgConfig::HYPRLAND_DEPS
-                                       hyprcast_config hyprcast::protocol)
+target_link_libraries(
+  hyprcast PRIVATE rt PkgConfig::HYPRLAND_DEPS hyprcast_config
+                   hyprcast::protocol libjson::libjson)
 
 install(TARGETS hyprcast LIBRARY DESTINATION lib)

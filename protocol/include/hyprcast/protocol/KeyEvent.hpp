@@ -4,10 +4,10 @@
 #include "KeyboardId.hpp"
 
 namespace Hyprcast {
-struct SKeyEvent {
-  KeyboardId keyboardId;
-  uint32_t timeMs;
-  uint32_t keycode;
-  eKeyState state;
-};
+    struct SKeyEvent {
+        KeyboardId keyboardId;
+        uint32_t   timeMs;
+        uint32_t   keycode;
+        eKeyState  state;
+    };
 } // namespace Hyprcast

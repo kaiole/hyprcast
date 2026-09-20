@@ -29,18 +29,18 @@ namespace Hyprcast {
             return {.keyboardId = keyboardId, .timeMs = event.timeMs, .keycode = event.keycode, .state = state};
         }
 
-        SModifiers toHyprcastType(KeyboardId keyboardId, const IKeyboard::SModifiersEvent& event) noexcept {
-            return {.keyboardId = keyboardId, .depressed = event.depressed, .latched = event.latched, .locked = event.locked, .group = event.group};
+        SModifiers toHyprcastType(const IKeyboard::SModifiersEvent& event) noexcept {
+            return {.depressed = event.depressed, .latched = event.latched, .locked = event.locked, .group = event.group};
         }
 
-        SKeymap toHyprcastType(KeyboardId keyboardId, const IKeyboard::SKeymapEvent& event) {
+        Keymap toHyprcastType(const IKeyboard::SKeymapEvent& event) {
             std::unique_ptr<char, decltype(&std::free)> keymapString{::xkb_keymap_get_as_string(event.keymap, XKB_KEYMAP_FORMAT_TEXT_V1), &std::free};
 
-            return {.keyboardId = keyboardId, .keymap = keymapString.get()};
+            return keymapString.get();
         }
 
-        SRepeatInfo toHyprcastType(KeyboardId keyboardId, int repeatRate, int repeatDelay) {
-            return {.keyboardId = keyboardId, .rate = repeatRate, .delay = repeatDelay};
+        SRepeatInfo toHyprcastType(int repeatRate, int repeatDelay) {
+            return {.rate = repeatRate, .delay = repeatDelay};
         }
     }
 
@@ -94,13 +94,13 @@ namespace Hyprcast {
             });
 
             keyboardInfo->modifiersListener = keyboard->m_keyboardEvents.modifiers.listen([this, keyboardId](const IKeyboard::SModifiersEvent& event) {
-                auto modifiersInfo = toHyprcastType(keyboardId, event);
+                auto modifiersInfo = toHyprcastType(event);
 
                 // TODO: queue IPC message
             });
 
             keyboardInfo->keymapListener = keyboard->m_keyboardEvents.keymap.listen([this, keyboardId](const IKeyboard::SKeymapEvent& event) {
-                auto keymapInfo = toHyprcastType(keyboardId, event);
+                auto keymap = toHyprcastType(event);
 
                 // TODO: queue IPC message
             });
@@ -111,7 +111,7 @@ namespace Hyprcast {
                     return;
                 }
 
-                auto repeatInfo = toHyprcastType(keyboardId, liveKeyboard->m_repeatRate, liveKeyboard->m_repeatDelay);
+                auto repeatInfo = toHyprcastType(liveKeyboard->m_repeatRate, liveKeyboard->m_repeatDelay);
 
                 // TODO: queue IPC message
             });

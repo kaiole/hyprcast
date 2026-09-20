@@ -3,8 +3,12 @@
 #include "KeyboardInfo.hpp"
 #include "hyprcast/config/Config.hpp"
 #include "hyprcast/protocol/KeyboardId.hpp"
+#include "hyprcast/protocol/Keymap.hpp"
+#include "hyprcast/protocol/Modifiers.hpp"
+#include "hyprcast/protocol/RepeatInfo.hpp"
 #include "wayland/WlEventSource.hpp"
 
+#include <functional>
 #include <hyprland/src/helpers/memory/Memory.hpp>
 
 #include <memory>
@@ -15,7 +19,17 @@ struct wl_event_source;
 namespace Hyprcast {
     class CKeyboardRegistry {
       public:
-        CKeyboardRegistry();
+        using ModifiersEventCB  = std::function<void(KeyboardId, const SModifiers&)>;
+        using KeymapEventCB     = std::function<void(KeyboardId, const Keymap&)>;
+        using RepeatInfoEventCB = std::function<void(KeyboardId, const SRepeatInfo&)>;
+
+        struct SCallbacks {
+            ModifiersEventCB  modifiersEvent;
+            KeymapEventCB     keymapEvent;
+            RepeatInfoEventCB repeatInfoEvent;
+        };
+
+        explicit CKeyboardRegistry(SCallbacks callbacks);
         ~CKeyboardRegistry() = default;
 
         CKeyboardRegistry(const CKeyboardRegistry&)            = delete;
@@ -30,6 +44,7 @@ namespace Hyprcast {
         void                                        unsubscribeListeners(SKeyboardInfo& keyboardInfo) noexcept;
         void                                        scheduleRemoval(SKeyboardInfo& keyboardInfo) noexcept;
 
+        SCallbacks                                  m_callbacks;
         KeyboardId                                  m_nextId = 1;
         std::vector<std::unique_ptr<SKeyboardInfo>> m_keyboardRegistry;
 

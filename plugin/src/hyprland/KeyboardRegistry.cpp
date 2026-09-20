@@ -44,7 +44,7 @@ namespace Hyprcast {
         }
     }
 
-    CKeyboardRegistry::CKeyboardRegistry() {
+    CKeyboardRegistry::CKeyboardRegistry(SCallbacks callbacks) : m_callbacks(std::move(callbacks)) {
         for (auto& keyboard : g_pInputManager->m_keyboards) {
             addKeyboard(keyboard);
         }
@@ -96,13 +96,13 @@ namespace Hyprcast {
             keyboardInfo->modifiersListener = keyboard->m_keyboardEvents.modifiers.listen([this, keyboardId](const IKeyboard::SModifiersEvent& event) {
                 auto modifiersInfo = toHyprcastType(event);
 
-                // TODO: queue IPC message
+                m_callbacks.modifiersEvent(keyboardId, modifiersInfo);
             });
 
             keyboardInfo->keymapListener = keyboard->m_keyboardEvents.keymap.listen([this, keyboardId](const IKeyboard::SKeymapEvent& event) {
                 auto keymap = toHyprcastType(event);
 
-                // TODO: queue IPC message
+                m_callbacks.keymapEvent(keyboardId, keymap);
             });
 
             keyboardInfo->repeatInfoListener = keyboard->m_keyboardEvents.repeatInfo.listen([this, keyboardId, weakKeyboard = keyboardInfo->keyboard]() {
@@ -113,7 +113,7 @@ namespace Hyprcast {
 
                 auto repeatInfo = toHyprcastType(liveKeyboard->m_repeatRate, liveKeyboard->m_repeatDelay);
 
-                // TODO: queue IPC message
+                m_callbacks.repeatInfoEvent(keyboardId, repeatInfo);
             });
 
             keyboardInfo->subscribed = true;

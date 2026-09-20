@@ -1,8 +1,6 @@
 #include "Plugin.hpp"
 
-#include "PluginConfig.hpp"
-#include "KeyboardRegistry.hpp"
-#include "ipc/SocketServer.hpp"
+#include "Hyprcast.hpp"
 
 #include <helpers/memory/Memory.hpp>
 #include <memory>
@@ -10,31 +8,7 @@
 #include <string>
 
 namespace {
-    class CPluginState {
-      public:
-        CPluginState() {
-            m_config.listen([this] { m_keyboardRegistry.updateSubscriptions(m_config.getAcceptedConfig()); });
-            m_keyboardRegistry.updateSubscriptions(m_config.getAcceptedConfig());
-        };
-        ~CPluginState() = default;
-
-        CPluginState(const CPluginState& other)            = delete;
-        CPluginState& operator=(const CPluginState& other) = delete;
-        CPluginState(CPluginState&& other)                 = delete;
-        CPluginState& operator=(CPluginState&& other)      = delete;
-
-        void          addKeyboard(SP<IKeyboard> keyboard) {
-            m_keyboardRegistry.addKeyboard(keyboard);
-            m_keyboardRegistry.updateSubscriptions(m_config.getAcceptedConfig());
-        }
-
-      private:
-        Hyprcast::CSocketServer     m_socket;
-        Hyprcast::CKeyboardRegistry m_keyboardRegistry;
-        Hyprcast::CPluginConfig     m_config;
-    };
-
-    std::unique_ptr<CPluginState> g_pPluginState;
+    std::unique_ptr<Hyprcast::CHyprcast> g_pPluginState;
 
     CFunctionHook*                g_pSetupKeyboardHook = nullptr;
     using ogSetupKeyboard                              = void (*)(void*, SP<IKeyboard>);
@@ -61,7 +35,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         throw std::runtime_error("[Hyprcast] Version mismatch");
     }
 
-    g_pPluginState = std::make_unique<CPluginState>();
+    g_pPluginState = std::make_unique<Hyprcast::CHyprcast>();
 
     static const auto METHODS = HyprlandAPI::findFunctionsByName(Hyprcast::PHANDLE, "setupKeyboard");
     g_pSetupKeyboardHook      = HyprlandAPI::createFunctionHook(handle, METHODS[0].address, (void*)&setupKeyboardHook);

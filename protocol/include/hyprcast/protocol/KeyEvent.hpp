@@ -10,4 +10,4 @@ namespace Hyprcast {
         uint32_t   keycode;
         eKeyState  state;
     };
-} // namespace Hyprcast
+}

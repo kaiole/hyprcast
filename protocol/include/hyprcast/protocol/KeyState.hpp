@@ -9,4 +9,4 @@ namespace Hyprcast {
         RELEASED = 0,
         PRESSED  = 1
     };
-} // namespace Hyprcast
+}

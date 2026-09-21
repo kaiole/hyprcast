@@ -18,15 +18,14 @@
 #include <algorithm>
 #include <cstdlib>
 #include <memory>
-#include <print>
 #include <utility>
 
 namespace Hyprcast {
     namespace {
-        SKeyEvent toHyprcastType(KeyboardId keyboardId, const IKeyboard::SKeyEvent& event) noexcept {
+        SKeyEvent toHyprcastType(const IKeyboard::SKeyEvent& event) noexcept {
             auto state = event.state == WL_KEYBOARD_KEY_STATE_PRESSED ? eKeyState::PRESSED : eKeyState::RELEASED;
 
-            return {.keyboardId = keyboardId, .timeMs = event.timeMs, .keycode = event.keycode, .state = state};
+            return {.timeMs = event.timeMs, .keycode = event.keycode, .state = state};
         }
 
         SModifiers toHyprcastType(const IKeyboard::SModifiersEvent& event) noexcept {
@@ -85,13 +84,8 @@ namespace Hyprcast {
             const auto& keyboard     = keyboardInfo->keyboard;
             KeyboardId  keyboardId   = keyboardInfo->id;
 
-            keyboardInfo->keyEventListener = keyboard->m_keyboardEvents.key.listen([this, keyboardId](const IKeyboard::SKeyEvent& event) {
-                auto keyEventInfo = toHyprcastType(keyboardId, event);
-                std::println(stderr, "[hyprcast] keycode: {} {} at {} by keyboard {}", keyEventInfo.keycode, keyEventInfo.state == eKeyState::PRESSED ? "pressed" : "released",
-                             keyEventInfo.timeMs, keyboardId);
-
-                // TODO: queue IPC message
-            });
+            keyboardInfo->keyEventListener =
+                keyboard->m_keyboardEvents.key.listen([this, keyboardId](const IKeyboard::SKeyEvent& event) { m_callbacks.handleKeyEvent(keyboardId, toHyprcastType(event)); });
 
             keyboardInfo->modifiersListener = keyboard->m_keyboardEvents.modifiers.listen(
                 [this, keyboardId](const IKeyboard::SModifiersEvent& event) { m_callbacks.handleModifiers(keyboardId, toHyprcastType(event)); });

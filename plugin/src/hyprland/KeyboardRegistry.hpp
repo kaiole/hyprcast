@@ -2,6 +2,7 @@
 
 #include "KeyboardInfo.hpp"
 #include "hyprcast/config/Config.hpp"
+#include "hyprcast/protocol/KeyEvent.hpp"
 #include "hyprcast/protocol/KeyboardId.hpp"
 #include "hyprcast/protocol/Keymap.hpp"
 #include "hyprcast/protocol/Modifiers.hpp"
@@ -19,11 +20,13 @@ struct wl_event_source;
 namespace Hyprcast {
     class CKeyboardRegistry {
       public:
-        using ModifiersEventCB  = std::function<void(KeyboardId, const SModifiers&)>;
-        using KeymapEventCB     = std::function<void(KeyboardId, const Keymap&)>;
-        using RepeatInfoEventCB = std::function<void(KeyboardId, const SRepeatInfo&)>;
+        using KeyEventCB        = std::function<void(KeyboardId, SKeyEvent)>;
+        using ModifiersEventCB  = std::function<void(KeyboardId, SModifiers)>;
+        using KeymapEventCB     = std::function<void(KeyboardId, Keymap)>;
+        using RepeatInfoEventCB = std::function<void(KeyboardId, SRepeatInfo)>;
 
         struct SCallbacks {
+            KeyEventCB        handleKeyEvent;
             ModifiersEventCB  handleModifiers;
             KeymapEventCB     handleKeymap;
             RepeatInfoEventCB handleRepeatInfo;

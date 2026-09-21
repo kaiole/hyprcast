@@ -93,27 +93,20 @@ namespace Hyprcast {
                 // TODO: queue IPC message
             });
 
-            keyboardInfo->modifiersListener = keyboard->m_keyboardEvents.modifiers.listen([this, keyboardId](const IKeyboard::SModifiersEvent& event) {
-                auto modifiersInfo = toHyprcastType(event);
+            keyboardInfo->modifiersListener = keyboard->m_keyboardEvents.modifiers.listen(
+                [this, keyboardId](const IKeyboard::SModifiersEvent& event) { m_callbacks.handleModifiers(keyboardId, toHyprcastType(event)); });
 
-                m_callbacks.modifiersEvent(keyboardId, modifiersInfo);
-            });
-
-            keyboardInfo->keymapListener = keyboard->m_keyboardEvents.keymap.listen([this, keyboardId](const IKeyboard::SKeymapEvent& event) {
-                auto keymap = toHyprcastType(event);
-
-                m_callbacks.keymapEvent(keyboardId, keymap);
-            });
+            keyboardInfo->keymapListener =
+                keyboard->m_keyboardEvents.keymap.listen([this, keyboardId](const IKeyboard::SKeymapEvent& event) { m_callbacks.handleKeymap(keyboardId, toHyprcastType(event)); });
 
             keyboardInfo->repeatInfoListener = keyboard->m_keyboardEvents.repeatInfo.listen([this, keyboardId, weakKeyboard = keyboardInfo->keyboard]() {
+                // TODO: syncing issues?
                 auto liveKeyboard = weakKeyboard.lock();
                 if (!liveKeyboard) {
                     return;
                 }
 
-                auto repeatInfo = toHyprcastType(liveKeyboard->m_repeatRate, liveKeyboard->m_repeatDelay);
-
-                m_callbacks.repeatInfoEvent(keyboardId, repeatInfo);
+                m_callbacks.handleRepeatInfo(keyboardId, toHyprcastType(liveKeyboard->m_repeatRate, liveKeyboard->m_repeatDelay));
             });
 
             keyboardInfo->subscribed = true;
@@ -133,17 +126,17 @@ namespace Hyprcast {
         keyboardInfo.pendingRemoval = true;
         unsubscribeListeners(keyboardInfo);
 
-        if (m_eventSource) {
+        if (m_wlIdleKeyboardRemoval) {
             return;
         }
 
-        m_eventSource.reset(::wl_event_loop_add_idle(
+        m_wlIdleKeyboardRemoval.reset(::wl_event_loop_add_idle(
             g_pCompositor->m_wlEventLoop,
             [](void* data) {
                 auto* self = static_cast<CKeyboardRegistry*>(data);
 
-                [[maybe_unused]]
-                auto* obj = self->m_eventSource.release();
+                // Wayland destroys an idle source after dispatch; relinquish our stale ownership.
+                [[maybe_unused]] auto* obj = self->m_wlIdleKeyboardRemoval.release();
 
                 std::erase_if(self->m_keyboardRegistry, [](const auto& record) { return record->pendingRemoval; });
             },

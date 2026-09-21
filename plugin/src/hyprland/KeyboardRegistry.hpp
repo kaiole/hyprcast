@@ -24,9 +24,9 @@ namespace Hyprcast {
         using RepeatInfoEventCB = std::function<void(KeyboardId, const SRepeatInfo&)>;
 
         struct SCallbacks {
-            ModifiersEventCB  modifiersEvent;
-            KeymapEventCB     keymapEvent;
-            RepeatInfoEventCB repeatInfoEvent;
+            ModifiersEventCB  handleModifiers;
+            KeymapEventCB     handleKeymap;
+            RepeatInfoEventCB handleRepeatInfo;
         };
 
         explicit CKeyboardRegistry(SCallbacks callbacks);
@@ -48,6 +48,6 @@ namespace Hyprcast {
         KeyboardId                                  m_nextId = 1;
         std::vector<std::unique_ptr<SKeyboardInfo>> m_keyboardRegistry;
 
-        CWlEventSource                              m_eventSource;
+        CWlEventSource                              m_wlIdleKeyboardRemoval;
     };
 }

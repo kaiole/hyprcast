@@ -2,7 +2,7 @@
 
 #include "hyprland/KeyboardRegistry.hpp"
 #include "hyprland/PluginConfig.hpp"
-#include "ipc/SocketServer.hpp"
+#include "ipc/EventServer.hpp"
 
 #include <helpers/memory/Memory.hpp>
 
@@ -21,9 +21,10 @@ namespace Hyprcast {
         void addKeyboard(SP<IKeyboard> keyboard);
 
       private:
+        // TODO: better name
         CKeyboardRegistry::SCallbacks makeRegistryCallbacks();
 
-        Hyprcast::CSocketServer       m_socket;
+        Hyprcast::CEventServer        m_socket;
         Hyprcast::CKeyboardRegistry   m_keyboardRegistry;
         Hyprcast::CPluginConfig       m_config;
     };

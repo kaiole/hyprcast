@@ -6,7 +6,7 @@
 #include <sys/file.h>
 
 namespace Hyprcast {
-    CFileLock::CFileLock(const std::filesystem::path& lockPath) : m_lockFd{} {
+    CFileLock::CFileLock(const std::filesystem::path& lockPath) {
         int lockFd = ::open(lockPath.c_str(), O_CREAT | O_CLOEXEC | O_RDWR, 0600);
         if (lockFd == -1) {
             throw std::system_error(errno, std::generic_category(), "open");

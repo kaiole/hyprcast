@@ -7,13 +7,13 @@
 struct lua_State;
 
 namespace Hyprcast {
-    enum class eKeyboardFilter : std::uint8_t {
+    enum class eKeyboardFilterSetting : std::uint8_t {
         INCLUDE,
         EXCLUDE
     };
 
     struct SConfig {
-        eKeyboardFilter          filter = eKeyboardFilter::EXCLUDE;
+        eKeyboardFilterSetting   filterSetting = eKeyboardFilterSetting::EXCLUDE;
         std::vector<std::string> filteredKeyboards;
         bool                     operator==(const SConfig&) const = default;
     };

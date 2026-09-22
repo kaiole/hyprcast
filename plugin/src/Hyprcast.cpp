@@ -79,7 +79,11 @@ namespace Hyprcast {
         }
 
         [[nodiscard]] std::string createMessage(SKeyboardSnapshot snapshot) {
-            return libjson::serialize(makeEvent("snapshot", snapshot.id, toJsonObject(std::move(snapshot))));
+            return libjson::serialize(makeEvent("subscribe_keyboard", snapshot.id, toJsonObject(std::move(snapshot))));
+        }
+
+        [[nodiscard]] std::string createMessage(KeyboardId id) {
+            return libjson::serialize(makeEvent("unsubscribe_keyboard", id, libjson::json_value::object{}));
         }
     }
 
@@ -102,9 +106,11 @@ namespace Hyprcast {
     }
 
     CKeyboardRegistry::SCallbacks CHyprcast::makeRegistryCallbacks() {
-        return {.handleKeyEvent   = [this](KeyboardId id, SKeyEvent keyEvent) { m_socket.queueMessage(createMessage(id, keyEvent)); },
-                .handleModifiers  = [this](KeyboardId id, SModifiers modifiers) { m_socket.queueMessage(createMessage(id, modifiers)); },
-                .handleKeymap     = [this](KeyboardId id, Keymap keymap) { m_socket.queueMessage(createMessage(id, std::move(keymap))); },
-                .handleRepeatInfo = [this](KeyboardId id, SRepeatInfo repeatInfo) { m_socket.queueMessage(createMessage(id, repeatInfo)); }};
+        return {.handleSubscription   = [this](SKeyboardSnapshot keyboardSnapshot) { m_socket.queueMessage(createMessage(std::move(keyboardSnapshot))); },
+                .handleUnsubscription = [this](KeyboardId id) { m_socket.queueMessage(createMessage(id)); },
+                .handleKeyEvent       = [this](KeyboardId id, SKeyEvent keyEvent) { m_socket.queueMessage(createMessage(id, keyEvent)); },
+                .handleModifiers      = [this](KeyboardId id, SModifiers modifiers) { m_socket.queueMessage(createMessage(id, modifiers)); },
+                .handleKeymap         = [this](KeyboardId id, Keymap keymap) { m_socket.queueMessage(createMessage(id, std::move(keymap))); },
+                .handleRepeatInfo     = [this](KeyboardId id, SRepeatInfo repeatInfo) { m_socket.queueMessage(createMessage(id, repeatInfo)); }};
     }
 }

@@ -5,16 +5,20 @@
 #include "os/UniqueFd.hpp"
 #include "wayland/WlEventSource.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <sys/un.h>
 
 namespace Hyprcast {
     class CEventServer {
       public:
-        CEventServer();
+        using RegistrySnapshotCB = std::function<void()>;
+
+        explicit CEventServer(RegistrySnapshotCB callback);
         ~CEventServer() = default;
 
         CEventServer(const CEventServer&)            = delete;
@@ -38,8 +42,10 @@ namespace Hyprcast {
         static int              onClientWritable(int clientFd, std::uint32_t mask, void* data);
 
         void                    flushMessages();
-        void                    updateWlDispathEvent(std::uint32_t mask);
+        void                    updateWlDispatchEvent(std::uint32_t mask);
         void                    disconnectClient();
+
+        RegistrySnapshotCB      m_registrySnapshotCb;
 
         SSockPaths              m_sockPaths;
         CFileLock               m_sockLock;
@@ -52,5 +58,6 @@ namespace Hyprcast {
         CWlEventSource          m_wlClientWritable = nullptr;
 
         std::deque<std::string> m_messageQueue;
+        std::size_t             m_messageOffset = 0;
     };
 }

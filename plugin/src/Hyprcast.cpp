@@ -3,6 +3,7 @@
 #include "hyprcast/protocol/KeyEvent.hpp"
 #include "hyprcast/protocol/KeyState.hpp"
 #include "hyprcast/protocol/KeyboardId.hpp"
+#include "hyprcast/protocol/KeyboardSnapshot.hpp"
 #include "hyprcast/protocol/Keymap.hpp"
 #include "hyprcast/protocol/Modifiers.hpp"
 #include "hyprcast/protocol/RepeatInfo.hpp"
@@ -12,17 +13,16 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace Hyprcast {
     namespace {
         [[nodiscard]] libjson::json_value::object toJsonObject(const SKeyEvent& keyEvent) {
-            auto state = keyEvent.state == eKeyState::PRESSED ? std::string{"pressed"} : std::string{"released"};
-
             return libjson::json_value::object{
                 {"time_ms", {.data = static_cast<std::uint64_t>(keyEvent.timeMs)}},
                 {"keycode", {.data = static_cast<std::uint64_t>(keyEvent.keycode)}},
-                {"state", {.data = state}},
+                {"state", {.data = std::string{keyEvent.state == eKeyState::PRESSED ? "pressed" : "released"}}},
             };
         }
 
@@ -35,12 +35,6 @@ namespace Hyprcast {
             };
         }
 
-        [[nodiscard]] libjson::json_value::object toJsonObject(Keymap keymap) {
-            return libjson::json_value::object{
-                {"keymap", {.data = std::move(keymap)}},
-            };
-        }
-
         [[nodiscard]] libjson::json_value::object toJsonObject(const SRepeatInfo& repeatInfo) {
             return libjson::json_value::object{
                 {"rate", {.data = static_cast<std::uint64_t>(repeatInfo.rate)}},
@@ -48,8 +42,18 @@ namespace Hyprcast {
             };
         }
 
-        [[nodiscard]] libjson::json_value makeEvent(std::string eventName, KeyboardId id, libjson::json_value::object jsonObject) {
-            jsonObject.emplace("event", libjson::json_value{.data = std::move(eventName)});
+        [[nodiscard]] libjson::json_value::object toJsonObject(SKeyboardSnapshot snapshot) {
+            auto jsonObject = toJsonObject(snapshot.modifiers);
+            jsonObject.merge(toJsonObject(snapshot.repeatInfo));
+
+            jsonObject.emplace("name", libjson::json_value{.data = std::move(snapshot.name)});
+            jsonObject.emplace("keymap", libjson::json_value{.data = std::move(snapshot.keymap)});
+
+            return jsonObject;
+        }
+
+        [[nodiscard]] libjson::json_value makeEvent(std::string_view eventName, KeyboardId id, libjson::json_value::object jsonObject) {
+            jsonObject.emplace("event", libjson::json_value{.data = std::string{eventName}});
             jsonObject.emplace("keyboard_id", libjson::json_value{.data = static_cast<std::uint64_t>(id)});
 
             return {.data = std::move(jsonObject)};
@@ -64,15 +68,22 @@ namespace Hyprcast {
         }
 
         [[nodiscard]] std::string createMessage(KeyboardId id, Keymap keymap) {
-            return libjson::serialize(makeEvent("modifiers", id, libjson::json_value::object{{"keymap", {.data = std::move(keymap)}}}));
+            libjson::json_value::object jsonObject;
+            jsonObject.emplace("keymap", libjson::json_value{.data = std::move(keymap)});
+
+            return libjson::serialize(makeEvent("keymap", id, std::move(jsonObject)));
         }
 
         [[nodiscard]] std::string createMessage(KeyboardId id, const SRepeatInfo& repeatInfo) {
-            return libjson::serialize(makeEvent("modifiers", id, toJsonObject(repeatInfo)));
+            return libjson::serialize(makeEvent("repeat_info", id, toJsonObject(repeatInfo)));
+        }
+
+        [[nodiscard]] std::string createMessage(SKeyboardSnapshot snapshot) {
+            return libjson::serialize(makeEvent("snapshot", snapshot.id, toJsonObject(std::move(snapshot))));
         }
     }
 
-    CHyprcast::CHyprcast() : m_keyboardRegistry(makeRegistryCallbacks()) {
+    CHyprcast::CHyprcast() : m_socket([this] { requestRegistrySnapshot(); }), m_keyboardRegistry(makeRegistryCallbacks()) {
         m_config.listen([this] { m_keyboardRegistry.updateSubscriptions(m_config.getAcceptedConfig()); });
         m_keyboardRegistry.updateSubscriptions(m_config.getAcceptedConfig());
     };
@@ -82,10 +93,18 @@ namespace Hyprcast {
         m_keyboardRegistry.updateSubscriptions(m_config.getAcceptedConfig());
     }
 
+    void CHyprcast::requestRegistrySnapshot() {
+        auto registrySnapshot = m_keyboardRegistry.getRegistrySnapshot();
+
+        for (auto& keyboardSnapshot : registrySnapshot) {
+            m_socket.queueMessage(createMessage(std::move(keyboardSnapshot)));
+        }
+    }
+
     CKeyboardRegistry::SCallbacks CHyprcast::makeRegistryCallbacks() {
         return {.handleKeyEvent   = [this](KeyboardId id, SKeyEvent keyEvent) { m_socket.queueMessage(createMessage(id, keyEvent)); },
                 .handleModifiers  = [this](KeyboardId id, SModifiers modifiers) { m_socket.queueMessage(createMessage(id, modifiers)); },
-                .handleKeymap     = [this](KeyboardId id, Keymap keymap) { m_socket.queueMessage(std::move(keymap)); },
+                .handleKeymap     = [this](KeyboardId id, Keymap keymap) { m_socket.queueMessage(createMessage(id, std::move(keymap))); },
                 .handleRepeatInfo = [this](KeyboardId id, SRepeatInfo repeatInfo) { m_socket.queueMessage(createMessage(id, repeatInfo)); }};
     }
 }

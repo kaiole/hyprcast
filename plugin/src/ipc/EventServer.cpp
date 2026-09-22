@@ -28,7 +28,9 @@ namespace Hyprcast {
         constexpr std::string_view LOCK_FILE          = "server.lock";
     }
 
-    CEventServer::CEventServer() : m_sockPaths(initSockPaths()), m_sockLock(m_sockPaths.lockFile), m_sockFd(CUniqueFd{createSocket()}), m_sockFile(m_sockPaths.sockFile) {
+    CEventServer::CEventServer(RegistrySnapshotCB callback) :
+        m_registrySnapshotCb(std::move(callback)), m_sockPaths(initSockPaths()), m_sockLock(m_sockPaths.lockFile), m_sockFd(CUniqueFd{createSocket()}),
+        m_sockFile(m_sockPaths.sockFile) {
         std::error_code errorCode;
         const auto      sockStatus = std::filesystem::symlink_status(m_sockPaths.sockFile, errorCode);
         if (errorCode && errorCode != std::errc::no_such_file_or_directory) {
@@ -69,16 +71,17 @@ namespace Hyprcast {
     }
 
     void CEventServer::queueMessage(std::string message) {
-        if (!m_clientFd.getFd()) {
+        if (m_clientFd.getFd() == -1) {
             return;
         }
 
-        constexpr int MAX_MESSAGES = 256;
+        constexpr std::size_t MAX_MESSAGES = 256;
         if (m_messageQueue.size() >= MAX_MESSAGES) {
             disconnectClient();
             return;
         }
 
+        message.push_back('\n');
         m_messageQueue.push_back(std::move(message));
         flushMessages();
     }
@@ -106,7 +109,7 @@ namespace Hyprcast {
     }
 
     int CEventServer::createSocket() {
-        int sockFd = ::socket(AF_UNIX, SOCK_SEQPACKET | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+        int sockFd = ::socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
         if (sockFd == -1) {
             throw std::system_error(errno, std::generic_category(), "socket");
         }
@@ -154,8 +157,16 @@ namespace Hyprcast {
             return 0;
         }
 
+        self->disconnectClient();
+
         self->m_clientFd.reset(clientFd);
         self->m_wlClientWritable.reset(::wl_event_loop_add_fd(g_pCompositor->m_wlEventLoop, self->m_clientFd.getFd(), 0, &onClientWritable, self));
+        if (!self->m_wlClientWritable) {
+            self->disconnectClient();
+            return 0;
+        }
+
+        self->m_registrySnapshotCb();
 
         return 0;
     }
@@ -177,9 +188,18 @@ namespace Hyprcast {
 
     void CEventServer::flushMessages() {
         while (!m_messageQueue.empty()) {
-            const auto& message = m_messageQueue.front();
+            std::string_view message = m_messageQueue.front();
 
-            auto        bytesSent = ::send(m_clientFd.getFd(), message.data(), message.size(), MSG_NOSIGNAL);
+            const auto       fullMessageSize = message.size();
+            if (m_messageOffset >= fullMessageSize) {
+                // TODO: maybe log here idk this shouldn't happen
+                disconnectClient();
+                return;
+            }
+
+            message = message.substr(m_messageOffset);
+
+            auto bytesSent = ::send(m_clientFd.getFd(), message.data(), message.size(), MSG_NOSIGNAL);
             if (bytesSent == -1) {
                 const int error = errno;
 
@@ -188,7 +208,7 @@ namespace Hyprcast {
                 }
 
                 if (error == EAGAIN || error == EWOULDBLOCK) {
-                    updateWlDispathEvent(WL_EVENT_WRITABLE);
+                    updateWlDispatchEvent(WL_EVENT_WRITABLE);
                     return;
                 }
 
@@ -196,24 +216,27 @@ namespace Hyprcast {
                 return;
             }
 
-            if (static_cast<std::size_t>(bytesSent) != message.size()) {
-                disconnectClient();
+            m_messageOffset += static_cast<std::size_t>(bytesSent);
+            if (m_messageOffset != fullMessageSize) {
+                updateWlDispatchEvent(WL_EVENT_WRITABLE);
                 return;
             }
 
             m_messageQueue.pop_front();
+            m_messageOffset = 0;
         }
 
-        updateWlDispathEvent(0);
+        updateWlDispatchEvent(0);
     }
 
-    void CEventServer::updateWlDispathEvent(std::uint32_t mask) {
+    void CEventServer::updateWlDispatchEvent(std::uint32_t mask) {
         if (::wl_event_source_fd_update(m_wlClientWritable.get(), mask) == -1) {
             disconnectClient();
         }
     }
 
     void CEventServer::disconnectClient() {
+        m_messageOffset = 0;
         m_messageQueue.clear();
         m_wlClientWritable.reset();
         m_clientFd.reset();

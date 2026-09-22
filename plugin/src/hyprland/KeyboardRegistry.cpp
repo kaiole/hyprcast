@@ -7,6 +7,7 @@
 #include "hyprcast/protocol/KeyboardId.hpp"
 #include "hyprcast/protocol/Keymap.hpp"
 #include "hyprcast/protocol/Modifiers.hpp"
+#include "hyprcast/protocol/RegistrySnapshot.hpp"
 #include "hyprcast/protocol/RepeatInfo.hpp"
 
 #include <hyprland/src/managers/input/InputManager.hpp>
@@ -64,25 +65,28 @@ namespace Hyprcast {
     }
 
     void CKeyboardRegistry::updateSubscriptions(const SConfig& acceptedConfig) {
-        for (const auto& keyboardPtr : m_keyboardRegistry) {
-            if (keyboardPtr->pendingRemoval) {
+        for (const auto& keyboardInfo : m_keyboardRegistry) {
+            if (keyboardInfo->pendingRemoval) {
                 continue;
             }
 
-            auto it = std::ranges::find(acceptedConfig.filteredKeyboards, keyboardPtr->name);
+            auto it = std::ranges::find(acceptedConfig.filteredKeyboards, keyboardInfo->name);
             if ((acceptedConfig.filter == eKeyboardFilter::INCLUDE && it == acceptedConfig.filteredKeyboards.end()) ||
                 (acceptedConfig.filter == eKeyboardFilter::EXCLUDE && it != acceptedConfig.filteredKeyboards.end())) {
-                unsubscribeListeners(*keyboardPtr);
+                unsubscribeListeners(*keyboardInfo);
                 continue;
             }
 
-            if (keyboardPtr->subscribed) {
+            if (keyboardInfo->subscribed) {
                 continue;
             }
 
-            const auto& keyboardInfo = keyboardPtr.get();
-            const auto& keyboard     = keyboardInfo->keyboard;
-            KeyboardId  keyboardId   = keyboardInfo->id;
+            const auto keyboard = keyboardInfo->keyboard.lock();
+            if (!keyboard) {
+                continue;
+            }
+
+            KeyboardId keyboardId = keyboardInfo->id;
 
             keyboardInfo->keyEventListener =
                 keyboard->m_keyboardEvents.key.listen([this, keyboardId](const IKeyboard::SKeyEvent& event) { m_callbacks.handleKeyEvent(keyboardId, toHyprcastType(event)); });
@@ -94,17 +98,51 @@ namespace Hyprcast {
                 keyboard->m_keyboardEvents.keymap.listen([this, keyboardId](const IKeyboard::SKeymapEvent& event) { m_callbacks.handleKeymap(keyboardId, toHyprcastType(event)); });
 
             keyboardInfo->repeatInfoListener = keyboard->m_keyboardEvents.repeatInfo.listen([this, keyboardId, weakKeyboard = keyboardInfo->keyboard]() {
-                // TODO: syncing issues?
-                auto liveKeyboard = weakKeyboard.lock();
-                if (!liveKeyboard) {
+                auto keyboard = weakKeyboard.lock();
+                if (!keyboard) {
                     return;
                 }
 
-                m_callbacks.handleRepeatInfo(keyboardId, toHyprcastType(liveKeyboard->m_repeatRate, liveKeyboard->m_repeatDelay));
+                m_callbacks.handleRepeatInfo(keyboardId, toHyprcastType(keyboard->m_repeatRate, keyboard->m_repeatDelay));
             });
 
             keyboardInfo->subscribed = true;
         }
+    }
+
+    RegistrySnapshot CKeyboardRegistry::getRegistrySnapshot() {
+        RegistrySnapshot registrySnapshot{};
+
+        for (const auto& keyboardInfo : m_keyboardRegistry) {
+            if (!keyboardInfo->subscribed) {
+                continue;
+            }
+
+            const auto keyboard = keyboardInfo->keyboard.lock();
+            if (!keyboard) {
+                continue;
+            }
+
+            registrySnapshot.push_back({
+                .id   = keyboardInfo->id,
+                .name = keyboardInfo->name,
+                .modifiers =
+                    {
+                        .depressed = keyboard->m_modifiersState.depressed,
+                        .latched   = keyboard->m_modifiersState.latched,
+                        .locked    = keyboard->m_modifiersState.locked,
+                        .group     = keyboard->m_modifiersState.group,
+                    },
+                .keymap = keyboard->m_xkbKeymapString,
+                .repeatInfo =
+                    {
+                        .rate  = keyboard->m_repeatRate,
+                        .delay = keyboard->m_repeatDelay,
+                    },
+            });
+        }
+
+        return registrySnapshot;
     }
 
     void CKeyboardRegistry::unsubscribeListeners(SKeyboardInfo& keyboardInfo) noexcept {
@@ -124,12 +162,13 @@ namespace Hyprcast {
             return;
         }
 
+        // If scheduling fails, retain the inactive records and retry on the next scheduleRemoval() call.
         m_wlIdleKeyboardRemoval.reset(::wl_event_loop_add_idle(
             g_pCompositor->m_wlEventLoop,
             [](void* data) {
                 auto* self = static_cast<CKeyboardRegistry*>(data);
 
-                // Wayland destroys an idle source after dispatch; relinquish our stale ownership.
+                // Wayland removes this source after the callback returns; release ownership to avoid double removal.
                 [[maybe_unused]] auto* obj = self->m_wlIdleKeyboardRemoval.release();
 
                 std::erase_if(self->m_keyboardRegistry, [](const auto& record) { return record->pendingRemoval; });

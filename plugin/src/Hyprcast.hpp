@@ -21,7 +21,8 @@ namespace Hyprcast {
         void addKeyboard(SP<IKeyboard> keyboard);
 
       private:
-        // TODO: better name
+        void                          requestRegistrySnapshot();
+
         CKeyboardRegistry::SCallbacks makeRegistryCallbacks();
 
         Hyprcast::CEventServer        m_socket;

@@ -6,6 +6,7 @@
 #include "hyprcast/protocol/KeyboardId.hpp"
 #include "hyprcast/protocol/Keymap.hpp"
 #include "hyprcast/protocol/Modifiers.hpp"
+#include "hyprcast/protocol/RegistrySnapshot.hpp"
 #include "hyprcast/protocol/RepeatInfo.hpp"
 #include "wayland/WlEventSource.hpp"
 
@@ -35,13 +36,14 @@ namespace Hyprcast {
         explicit CKeyboardRegistry(SCallbacks callbacks);
         ~CKeyboardRegistry() = default;
 
-        CKeyboardRegistry(const CKeyboardRegistry&)            = delete;
-        CKeyboardRegistry& operator=(const CKeyboardRegistry&) = delete;
-        CKeyboardRegistry(CKeyboardRegistry&&)                 = delete;
-        CKeyboardRegistry& operator=(CKeyboardRegistry&&)      = delete;
+        CKeyboardRegistry(const CKeyboardRegistry&)                   = delete;
+        CKeyboardRegistry& operator=(const CKeyboardRegistry&)        = delete;
+        CKeyboardRegistry(CKeyboardRegistry&&)                        = delete;
+        CKeyboardRegistry&             operator=(CKeyboardRegistry&&) = delete;
 
-        void               addKeyboard(SP<IKeyboard> keyboard);
-        void               updateSubscriptions(const SConfig& acceptedConfig);
+        void                           addKeyboard(SP<IKeyboard> keyboard);
+        void                           updateSubscriptions(const SConfig& acceptedConfig);
+        [[nodiscard]] RegistrySnapshot getRegistrySnapshot();
 
       private:
         void                                        unsubscribeListeners(SKeyboardInfo& keyboardInfo) noexcept;

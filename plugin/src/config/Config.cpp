@@ -67,7 +67,7 @@ namespace Hyprcast {
                     require(lua_type(L, -1) == LUA_TSTRING, "filter must be 'include' or 'exclude'");
                     const auto filter = stringAt(L, -1);
                     require(filter == "include" || filter == "exclude", "filter must be 'include' or 'exclude'");
-                    candidate.filter = filter == "include" ? eKeyboardFilter::INCLUDE : eKeyboardFilter::EXCLUDE;
+                    candidate.filterSetting = filter == "include" ? eKeyboardFilterSetting::INCLUDE : eKeyboardFilterSetting::EXCLUDE;
                 } else if (key == "keyboards") {
                     readList(L, candidate.filteredKeyboards);
                 } else {

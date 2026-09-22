@@ -40,7 +40,7 @@ int main() {
     run("configure({filter='include',keyboards={' Foo ', 'foo', ' Foo ', 'not connected'}})");
     check(state.accepted() == SConfig{});
     state.finishReload(true);
-    check(state.accepted().filter == eKeyboardFilter::INCLUDE);
+    check(state.accepted().filterSetting == eKeyboardFilterSetting::INCLUDE);
     check(state.accepted().filteredKeyboards == std::vector<std::string>({" Foo ", "foo", "not connected"}));
     const auto  previous  = state.accepted();
     const char* invalid[] = {"configure()",
@@ -89,7 +89,7 @@ int main() {
     run("configure({filter='include'})");
     state.finishReload(true);
     state.finishReload(true);
-    check(state.accepted().filter == eKeyboardFilter::INCLUDE);
+    check(state.accepted().filterSetting == eKeyboardFilterSetting::INCLUDE);
     check(state.accepted().filteredKeyboards.empty());
     state.beginReload();
     state.finishReload(true);
@@ -101,7 +101,7 @@ int main() {
     state.beginReload();
     run("configure({filter=nil,keyboards={'a','a','A'}})");
     state.finishReload(true);
-    check(state.accepted().filter == eKeyboardFilter::EXCLUDE);
+    check(state.accepted().filterSetting == eKeyboardFilterSetting::EXCLUDE);
     check(state.accepted().filteredKeyboards == std::vector<std::string>({"a", "A"}));
     state.beginReload();
     run("configure({})");

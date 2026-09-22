@@ -71,8 +71,8 @@ namespace Hyprcast {
             }
 
             auto it = std::ranges::find(acceptedConfig.filteredKeyboards, keyboardInfo->name);
-            if ((acceptedConfig.filter == eKeyboardFilter::INCLUDE && it == acceptedConfig.filteredKeyboards.end()) ||
-                (acceptedConfig.filter == eKeyboardFilter::EXCLUDE && it != acceptedConfig.filteredKeyboards.end())) {
+            if ((acceptedConfig.filterSetting == eKeyboardFilterSetting::INCLUDE && it == acceptedConfig.filteredKeyboards.end()) ||
+                (acceptedConfig.filterSetting == eKeyboardFilterSetting::EXCLUDE && it != acceptedConfig.filteredKeyboards.end())) {
                 unsubscribeListeners(*keyboardInfo);
                 continue;
             }
@@ -107,6 +107,7 @@ namespace Hyprcast {
             });
 
             keyboardInfo->subscribed = true;
+            m_callbacks.handleSubscription(getKeyboardSnapshot(*keyboard, keyboardId, keyboardInfo->name));
         }
     }
 
@@ -123,35 +124,10 @@ namespace Hyprcast {
                 continue;
             }
 
-            registrySnapshot.push_back({
-                .id   = keyboardInfo->id,
-                .name = keyboardInfo->name,
-                .modifiers =
-                    {
-                        .depressed = keyboard->m_modifiersState.depressed,
-                        .latched   = keyboard->m_modifiersState.latched,
-                        .locked    = keyboard->m_modifiersState.locked,
-                        .group     = keyboard->m_modifiersState.group,
-                    },
-                .keymap = keyboard->m_xkbKeymapString,
-                .repeatInfo =
-                    {
-                        .rate  = keyboard->m_repeatRate,
-                        .delay = keyboard->m_repeatDelay,
-                    },
-            });
+            registrySnapshot.push_back(getKeyboardSnapshot(*keyboard, keyboardInfo->id, keyboardInfo->name));
         }
 
         return registrySnapshot;
-    }
-
-    void CKeyboardRegistry::unsubscribeListeners(SKeyboardInfo& keyboardInfo) noexcept {
-        keyboardInfo.keyEventListener.reset();
-        keyboardInfo.modifiersListener.reset();
-        keyboardInfo.keymapListener.reset();
-        keyboardInfo.repeatInfoListener.reset();
-
-        keyboardInfo.subscribed = false;
     }
 
     void CKeyboardRegistry::scheduleRemoval(SKeyboardInfo& keyboardInfo) noexcept {
@@ -174,5 +150,39 @@ namespace Hyprcast {
                 std::erase_if(self->m_keyboardRegistry, [](const auto& record) { return record->pendingRemoval; });
             },
             this));
+    }
+
+    void CKeyboardRegistry::unsubscribeListeners(SKeyboardInfo& keyboardInfo) {
+        if (!keyboardInfo.subscribed) {
+            return;
+        }
+
+        keyboardInfo.keyEventListener.reset();
+        keyboardInfo.modifiersListener.reset();
+        keyboardInfo.keymapListener.reset();
+        keyboardInfo.repeatInfoListener.reset();
+
+        keyboardInfo.subscribed = false;
+        m_callbacks.handleUnsubscription(keyboardInfo.id);
+    }
+
+    SKeyboardSnapshot CKeyboardRegistry::getKeyboardSnapshot(const IKeyboard& keyboard, KeyboardId id, const std::string& name) {
+        return {
+            .id   = id,
+            .name = name,
+            .modifiers =
+                {
+                    .depressed = keyboard.m_modifiersState.depressed,
+                    .latched   = keyboard.m_modifiersState.latched,
+                    .locked    = keyboard.m_modifiersState.locked,
+                    .group     = keyboard.m_modifiersState.group,
+                },
+            .keymap = keyboard.m_xkbKeymapString,
+            .repeatInfo =
+                {
+                    .rate  = keyboard.m_repeatRate,
+                    .delay = keyboard.m_repeatDelay,
+                },
+        };
     }
 }

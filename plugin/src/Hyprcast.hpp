@@ -19,6 +19,9 @@ namespace Hyprcast {
 
         void       addKeyboard(SP<IKeyboard> keyboard);
 
+        void       setPause(bool setPause);
+        bool       isPaused() const noexcept;
+
       private:
         void                          requestRegistrySnapshot();
         CKeyboardRegistry::SCallbacks makeRegistryCallbacks();
@@ -31,5 +34,6 @@ namespace Hyprcast {
         Hyprcast::CPluginConfig       m_config;
 
         bool                          m_shutdown = false;
+        bool                          m_paused   = false;
     };
 }

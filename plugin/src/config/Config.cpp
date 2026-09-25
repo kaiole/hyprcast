@@ -4,15 +4,16 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <format>
 #include <stdexcept>
 #include <string_view>
 #include <utility>
 
 namespace Hyprcast {
     namespace {
-        void require(bool condition, const char* message) {
+        void require(bool condition, std::string_view message) {
             if (!condition) {
-                throw std::invalid_argument(message);
+                throw std::invalid_argument(std::string{message});
             }
         }
 
@@ -28,7 +29,8 @@ namespace Hyprcast {
         }
 
         void readList(lua_State* L, std::vector<std::string>& out) {
-            plainTable(L, -1);
+            require(lua_type(L, -1) == LUA_TTABLE, "keyboards must be a table");
+            require(!lua_getmetatable(L, -1), "keyboards must not have a metatable");
             const int    table  = lua_absindex(L, -1);
             const size_t length = lua_rawlen(L, table);
             size_t       count  = 0;
@@ -37,10 +39,10 @@ namespace Hyprcast {
                 require(lua_isinteger(L, -2), "keyboards must be a dense array with integer keys");
                 const auto key = lua_tointeger(L, -2);
                 require(key > 0 && std::cmp_less_equal(key, length), "keyboards must be a dense array starting at 1");
-                require(lua_type(L, -1) == LUA_TSTRING, "keyboard entries must be strings");
+                require(lua_type(L, -1) == LUA_TSTRING, std::format("keyboards[{}] must be a string", key));
                 const auto name = stringAt(L, -1);
-                require(!name.empty(), "keyboard names must not be empty");
-                require(!name.contains('\0'), "keyboard names must not contain NUL bytes");
+                require(!name.empty(), std::format("keyboards[{}] must not be empty", key));
+                require(!name.contains('\0'), std::format("keyboards[{}] must not contain NUL bytes", key));
                 ++count;
                 lua_pop(L, 1);
             }
@@ -71,7 +73,7 @@ namespace Hyprcast {
                 } else if (key == "keyboards") {
                     readList(L, candidate.filteredKeyboards);
                 } else {
-                    throw std::invalid_argument("unknown configuration field; expected filter or keyboards");
+                    throw std::invalid_argument(std::format("unknown configuration field {:?}; expected filter or keyboards", key));
                 }
                 lua_pop(L, 1);
             }

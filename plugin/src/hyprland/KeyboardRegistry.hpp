@@ -2,6 +2,7 @@
 
 #include "KeyboardInfo.hpp"
 #include "hyprcast/config/Config.hpp"
+#include "CallbackBoundary.hpp"
 #include "hyprcast/protocol/KeyEvent.hpp"
 #include "hyprcast/protocol/KeyboardId.hpp"
 #include "hyprcast/protocol/KeyboardSnapshot.hpp"
@@ -11,11 +12,13 @@
 #include "hyprcast/protocol/RepeatInfo.hpp"
 #include "wayland/WlEventSource.hpp"
 
-#include <functional>
 #include <hyprland/src/helpers/memory/Memory.hpp>
 
+#include <functional>
 #include <memory>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 struct wl_event_source;
@@ -23,6 +26,7 @@ struct wl_event_source;
 namespace Hyprcast {
     class CKeyboardRegistry {
       public:
+        using ExceptionCB       = std::move_only_function<void() noexcept>;
         using SubscriptionCB    = std::function<void(SKeyboardSnapshot)>;
         using UnsubscriptionCB  = std::function<void(KeyboardId)>;
         using KeyEventCB        = std::function<void(KeyboardId, SKeyEvent)>;
@@ -31,12 +35,13 @@ namespace Hyprcast {
         using RepeatInfoEventCB = std::function<void(KeyboardId, SRepeatInfo)>;
 
         struct SCallbacks {
-            SubscriptionCB    handleSubscription;
-            UnsubscriptionCB  handleUnsubscription;
-            KeyEventCB        handleKeyEvent;
-            ModifiersEventCB  handleModifiers;
-            KeymapEventCB     handleKeymap;
-            RepeatInfoEventCB handleRepeatInfo;
+            ExceptionCB       onException;
+            SubscriptionCB    onSubscribe;
+            UnsubscriptionCB  onUnsubscribe;
+            KeyEventCB        onKeyEvent;
+            ModifiersEventCB  onModifiersEvent;
+            KeymapEventCB     onKeymapEvent;
+            RepeatInfoEventCB onRepeatInfoEvent;
         };
 
         explicit CKeyboardRegistry(SCallbacks callbacks);
@@ -52,7 +57,14 @@ namespace Hyprcast {
 
         [[nodiscard]] RegistrySnapshot getRegistrySnapshot();
 
+        void                           shutdown() noexcept;
+
       private:
+        template <typename Function>
+        void runGuarded(std::string_view context, Function&& function) {
+            Hyprcast::runGuarded(context, std::forward<Function>(function), m_callbacks.onException);
+        }
+
         void                                        scheduleRemoval(SKeyboardInfo& keyboardInfo) noexcept;
         void                                        unsubscribeListeners(SKeyboardInfo& keyboardInfo);
 

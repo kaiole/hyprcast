@@ -1,6 +1,7 @@
 #pragma once
 
 #include "KeyboardId.hpp"
+
 #include <string>
 
 namespace Hyprcast {

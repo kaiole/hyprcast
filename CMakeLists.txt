@@ -14,8 +14,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(CTest)
 
 option(HYPRCAST_BUILD_PLUGIN "Build the Hyprland plugin" ON)
+option(HYPRCAST_BUILD_OVERLAY "Build the Qt Quick overlay" ON)
 
 add_subdirectory(protocol)
 if(HYPRCAST_BUILD_PLUGIN)
   add_subdirectory(plugin)
+endif()
+if(HYPRCAST_BUILD_OVERLAY)
+  add_subdirectory(overlay)
 endif()

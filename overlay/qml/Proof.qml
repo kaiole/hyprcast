@@ -45,24 +45,40 @@ Item {
         Column {
             width: root.width - 114
             anchors.verticalCenter: parent.verticalCenter
-            spacing: 5
+            spacing: 3
 
             Text {
                 width: parent.width
-                text: "HYPRCAST  /  LAYER-SHELL PROOF"
+                text: "HYPRCAST  /  IPC PROOF"
                 color: "#AAB8CC"
-                font.pixelSize: 11
+                font.pixelSize: 10
                 font.weight: Font.DemiBold
                 elide: Text.ElideRight
             }
 
             Text {
                 width: parent.width
-                text: hyprcastDemoText
+                text: hyprcastIpcClient.statusText
                 color: "#FFFFFF"
-                font.pixelSize: 18
+                font.pixelSize: 16
+                font.weight: Font.DemiBold
                 elide: Text.ElideRight
-                wrapMode: Text.NoWrap
+            }
+
+            Text {
+                width: parent.width
+                text: hyprcastIpcClient.detailsText
+                color: "#D8E7FF"
+                font.pixelSize: 12
+                elide: Text.ElideRight
+            }
+
+            Text {
+                width: parent.width
+                text: hyprcastIpcClient.lastEventText
+                color: "#AAB8CC"
+                font.pixelSize: 11
+                elide: Text.ElideRight
             }
         }
     }

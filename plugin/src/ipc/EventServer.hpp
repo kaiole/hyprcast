@@ -1,8 +1,8 @@
 #pragma once
 
-#include "SockFile.hpp"
 #include "os/FileLock.hpp"
 #include "os/UniqueFd.hpp"
+#include "SockFile.hpp"
 #include "wayland/WlEventSource.hpp"
 
 #include <cstddef>
@@ -11,7 +11,6 @@
 #include <filesystem>
 #include <functional>
 #include <string>
-#include <sys/un.h>
 
 namespace Hyprcast {
     class CEventServer {
@@ -27,6 +26,9 @@ namespace Hyprcast {
         CEventServer& operator=(CEventServer&&)      = delete;
 
         void          queueMessage(std::string message);
+        void          disconnectClient() noexcept;
+
+        void          shutdown() noexcept;
 
       private:
         struct SSockPaths {
@@ -43,7 +45,6 @@ namespace Hyprcast {
 
         void                    flushMessages();
         void                    updateWlDispatchEvent(std::uint32_t mask);
-        void                    disconnectClient();
 
         RegistrySnapshotCB      m_registrySnapshotCb;
 

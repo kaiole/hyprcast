@@ -1,4 +1,5 @@
 #include "EventServer.hpp"
+#include "CallbackBoundary.hpp"
 
 #include <cerrno>
 #include <cstddef>
@@ -6,7 +7,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
-#include <print>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -34,16 +34,16 @@ namespace Hyprcast {
         std::error_code errorCode;
         const auto      sockStatus = std::filesystem::symlink_status(m_sockPaths.sockFile, errorCode);
         if (errorCode && errorCode != std::errc::no_such_file_or_directory) {
-            throw std::system_error(errorCode, "inspect socket pathname");
+            throw std::system_error(errorCode, "Cannot inspect IPC socket '" + m_sockPaths.sockFile.string() + "'");
         }
 
         if (sockStatus.type() != std::filesystem::file_type::not_found) {
             if (!std::filesystem::is_socket(sockStatus)) {
-                throw std::runtime_error("refusing to remove a non-socket entry at socket pathname");
+                throw std::runtime_error("Refusing to remove non-socket entry '" + m_sockPaths.sockFile.string() + "'");
             }
 
             if (::unlink(m_sockPaths.sockFile.c_str()) == -1 && errno != ENOENT) {
-                throw std::system_error(errno, std::generic_category(), "unlink stale socket");
+                throw std::system_error(errno, std::generic_category(), "Cannot remove stale IPC socket '" + m_sockPaths.sockFile.string() + "'");
             }
         }
 
@@ -53,7 +53,7 @@ namespace Hyprcast {
 
         int bindStatus = ::bind(m_sockFd.getFd(), reinterpret_cast<const ::sockaddr*>(&sockAddress), sizeof(sockAddress));
         if (bindStatus == -1) {
-            throw std::system_error(errno, std::generic_category(), "bind");
+            throw std::system_error(errno, std::generic_category(), "Cannot bind IPC socket '" + m_sockPaths.sockFile.string() + "'");
         }
 
         m_sockFile.markBound();
@@ -61,13 +61,14 @@ namespace Hyprcast {
         // TODO: if multiple clients is needed we need to increase BACKLOG_SIZE
         int listenStatus = ::listen(m_sockFd.getFd(), BACKLOG_SIZE);
         if (listenStatus == -1) {
-            throw std::system_error(errno, std::generic_category(), "listen");
+            throw std::system_error(errno, std::generic_category(), "Cannot listen on IPC socket '" + m_sockPaths.sockFile.string() + "'");
         }
 
         m_wlSocketReadable.reset(::wl_event_loop_add_fd(g_pCompositor->m_wlEventLoop, m_sockFd.getFd(), WL_EVENT_READABLE, &onSocketReadable, this));
         if (!m_wlSocketReadable) {
-            throw std::runtime_error("failed to register IPC socket with Wayland event loop");
+            throw std::runtime_error("Cannot register IPC socket with Wayland event loop");
         }
+        logMessage(Log::TRACE, "Listening on IPC socket '{}'", m_sockPaths.sockFile.string());
     }
 
     void CEventServer::queueMessage(std::string message) {
@@ -77,6 +78,7 @@ namespace Hyprcast {
 
         constexpr std::size_t MAX_MESSAGES = 256;
         if (m_messageQueue.size() >= MAX_MESSAGES) {
+            logMessage(Log::WARN, "Client disconnected: outgoing queue reached {} messages", MAX_MESSAGES);
             disconnectClient();
             return;
         }
@@ -84,6 +86,23 @@ namespace Hyprcast {
         message.push_back('\n');
         m_messageQueue.push_back(std::move(message));
         flushMessages();
+    }
+
+    void CEventServer::disconnectClient() noexcept {
+        if (m_clientFd.getFd() != -1) {
+            logMessage(Log::TRACE, "Client disconnected");
+        }
+
+        m_messageOffset = 0;
+        m_messageQueue.clear();
+        m_wlClientWritable.reset();
+        m_clientFd.reset();
+    }
+
+    void CEventServer::shutdown() noexcept {
+        disconnectClient();
+        m_wlSocketReadable.reset();
+        m_sockFd.reset();
     }
 
     CEventServer::SSockPaths CEventServer::initSockPaths() {
@@ -96,13 +115,13 @@ namespace Hyprcast {
         const auto sockFile = sockDir / SOCK_FILE;
 
         if (sockFile.native().size() >= SOCK_PATH_CAPACITY) {
-            throw std::runtime_error("unix socket path is too long");
+            throw std::runtime_error("IPC socket path exceeds Unix socket limit: '" + sockFile.string() + "'");
         }
 
         std::error_code errorCode;
         std::filesystem::create_directories(sockDir, errorCode);
         if (errorCode) {
-            throw std::system_error(errorCode, "failed to create socket directory");
+            throw std::system_error(errorCode, "Cannot create socket directory '" + sockDir.string() + "'");
         }
 
         return {.sockDir = sockDir, .sockFile = sockFile, .lockFile = sockDir / LOCK_FILE};
@@ -111,7 +130,7 @@ namespace Hyprcast {
     int CEventServer::createSocket() {
         int sockFd = ::socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
         if (sockFd == -1) {
-            throw std::system_error(errno, std::generic_category(), "socket");
+            throw std::system_error(errno, std::generic_category(), "Cannot create IPC socket");
         }
 
         return sockFd;
@@ -123,8 +142,8 @@ namespace Hyprcast {
 
         int   clientFd = ::accept4(sockFd, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
 
-        // Client connection failure is not fatal to Hyprcast ∴
-        // simply log the error and return Wayland event loop
+        // Ignore transient failures. Unexpected failures disable the listener
+        // to avoid repeatedly waking the compositor on a broken socket.
         if (clientFd == -1) {
             const int error = errno;
 
@@ -151,22 +170,29 @@ namespace Hyprcast {
                 return 0;
             }
 
-            std::println(stderr, "[hyprcast] accept4 failed: {}; disabling new connections", std::strerror(error));
+            logError("Cannot accept IPC connection: {}; disabling new connections until plugin reload", std::strerror(error));
+            notifyFailure("IPC listener stopped. Unload and reload hyprcast; see Hyprland logs for details.");
             self->m_wlSocketReadable.reset();
 
             return 0;
         }
 
+        if (self->m_clientFd.getFd() != -1) {
+            logMessage(Log::TRACE, "Replacing existing client with new connection");
+        }
         self->disconnectClient();
 
         self->m_clientFd.reset(clientFd);
+        logMessage(Log::TRACE, "Client connected");
+
         self->m_wlClientWritable.reset(::wl_event_loop_add_fd(g_pCompositor->m_wlEventLoop, self->m_clientFd.getFd(), 0, &onClientWritable, self));
         if (!self->m_wlClientWritable) {
+            logError("Cannot register client with Wayland event loop; disconnecting client");
             self->disconnectClient();
             return 0;
         }
 
-        self->m_registrySnapshotCb();
+        runGuarded("Cannot prepare initial keyboard snapshot; disconnecting client", self->m_registrySnapshotCb, [self] noexcept { self->disconnectClient(); });
 
         return 0;
     }
@@ -175,6 +201,10 @@ namespace Hyprcast {
         auto* self = static_cast<CEventServer*>(data);
 
         if (mask & (WL_EVENT_HANGUP | WL_EVENT_ERROR)) {
+            if (mask & WL_EVENT_ERROR) {
+                logError("Wayland reported a client socket error; disconnecting client");
+            }
+
             self->disconnectClient();
             return 0;
         }
@@ -192,7 +222,7 @@ namespace Hyprcast {
 
             const auto       fullMessageSize = message.size();
             if (m_messageOffset >= fullMessageSize) {
-                // TODO: maybe log here idk this shouldn't happen
+                logError("Invalid outgoing message offset {} for {} bytes; disconnecting client", m_messageOffset, fullMessageSize);
                 disconnectClient();
                 return;
             }
@@ -212,6 +242,9 @@ namespace Hyprcast {
                     return;
                 }
 
+                if (error != EPIPE && error != ECONNRESET) {
+                    logError("Cannot send IPC message: {}; disconnecting client", std::strerror(error));
+                }
                 disconnectClient();
                 return;
             }
@@ -231,14 +264,8 @@ namespace Hyprcast {
 
     void CEventServer::updateWlDispatchEvent(std::uint32_t mask) {
         if (::wl_event_source_fd_update(m_wlClientWritable.get(), mask) == -1) {
+            logError("Cannot update client Wayland event source; disconnecting client");
             disconnectClient();
         }
-    }
-
-    void CEventServer::disconnectClient() {
-        m_messageOffset = 0;
-        m_messageQueue.clear();
-        m_wlClientWritable.reset();
-        m_clientFd.reset();
     }
 }

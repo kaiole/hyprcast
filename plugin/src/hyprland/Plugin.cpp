@@ -1,6 +1,7 @@
 #include "Plugin.hpp"
 
 #include "Hyprcast.hpp"
+#include "Log.hpp"
 
 #include <helpers/memory/Memory.hpp>
 #include <memory>
@@ -24,26 +25,42 @@ APICALL EXPORT std::string PLUGIN_API_VERSION() {
     return HYPRLAND_API_VERSION;
 }
 
-APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
+APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) try {
     Hyprcast::PHANDLE = handle;
 
     const std::string COMPOSITOR_HASH = __hyprland_api_get_hash();
     const std::string CLIENT_HASH     = __hyprland_api_get_client_hash();
 
     if (COMPOSITOR_HASH != CLIENT_HASH) {
-        HyprlandAPI::addNotification(Hyprcast::PHANDLE, "[Hyprcast] Mismatched headers! Can't proceed.", CHyprColor{1.0, 0.2, 0.2, 1.0}, 5000);
-        throw std::runtime_error("[Hyprcast] Version mismatch");
+        throw std::runtime_error("Hyprland version mismatch: rebuild hyprcast against the running Hyprland version");
     }
 
     g_pHyprcast = std::make_unique<Hyprcast::CHyprcast>();
 
     static const auto METHODS = HyprlandAPI::findFunctionsByName(Hyprcast::PHANDLE, "setupKeyboard");
-    g_pSetupKeyboardHook      = HyprlandAPI::createFunctionHook(handle, METHODS[0].address, (void*)&setupKeyboardHook);
-    g_pSetupKeyboardHook->hook();
+    if (METHODS.empty()) {
+        throw std::runtime_error("Cannot find Hyprland setupKeyboard function");
+    }
+    g_pSetupKeyboardHook = HyprlandAPI::createFunctionHook(handle, METHODS[0].address, (void*)&setupKeyboardHook);
+    if (!g_pSetupKeyboardHook || !g_pSetupKeyboardHook->hook()) {
+        throw std::runtime_error("Cannot install Hyprland setupKeyboard hook");
+    }
+    Hyprcast::logMessage(Log::TRACE, "Plugin loaded");
 
     return {.name{Hyprcast::PLUGIN_NAME}, .description{Hyprcast::DESCRIPTION}, .author{Hyprcast::AUTHOR}, .version{Hyprcast::VERSION}};
+} catch (const std::exception& error) {
+    Hyprcast::logError("Cannot load plugin: {}", error.what());
+    Hyprcast::notifyFailure(error.what());
+    g_pHyprcast.reset();
+    throw;
+} catch (...) {
+    Hyprcast::logError("Cannot load plugin: unknown exception");
+    Hyprcast::notifyFailure("Cannot load plugin; see Hyprland logs for details.");
+    g_pHyprcast.reset();
+    throw;
 }
 
 APICALL EXPORT void PLUGIN_EXIT() {
     g_pHyprcast.reset();
+    Hyprcast::logMessage(Log::TRACE, "Plugin unloaded");
 }

@@ -2,10 +2,12 @@
 
 #include "KeyState.hpp"
 
+#include <cstdint>
+
 namespace Hyprcast {
     struct SKeyEvent {
-        uint32_t  timeMs;
-        uint32_t  keycode;
-        eKeyState state;
+        std::uint32_t timeMs;
+        std::uint32_t keycode;
+        eKeyState     state;
     };
 }

@@ -5,6 +5,8 @@
 #include "hyprcast/protocol/Modifiers.hpp"
 #include "hyprcast/protocol/RepeatInfo.hpp"
 
+#include <string>
+
 namespace Hyprcast {
     struct SKeyboardSnapshot {
         KeyboardId  id;

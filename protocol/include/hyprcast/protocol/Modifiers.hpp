@@ -4,6 +4,6 @@
 
 namespace Hyprcast {
     struct SModifiers {
-        uint32_t depressed, latched, locked, group;
+        std::uint32_t depressed, latched, locked, group;
     };
 }

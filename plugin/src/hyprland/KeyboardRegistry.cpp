@@ -11,6 +11,7 @@
 #include "hyprcast/protocol/RepeatInfo.hpp"
 
 #include <hyprland/src/managers/input/InputManager.hpp>
+#include <stdexcept>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 #include <xkbcommon/xkbcommon.h>
@@ -35,6 +36,9 @@ namespace Hyprcast {
 
         Keymap toHyprcastType(const IKeyboard::SKeymapEvent& event) {
             std::unique_ptr<char, decltype(&std::free)> keymapString{::xkb_keymap_get_as_string(event.keymap, XKB_KEYMAP_FORMAT_TEXT_V1), &std::free};
+            if (!keymapString) {
+                throw std::runtime_error("Cannot serialize XKB keymap");
+            }
 
             return keymapString.get();
         }
@@ -88,14 +92,18 @@ namespace Hyprcast {
 
             KeyboardId keyboardId = keyboardInfo->id;
 
-            keyboardInfo->keyEventListener =
-                keyboard->m_keyboardEvents.key.listen([this, keyboardId](const IKeyboard::SKeyEvent& event) { m_callbacks.handleKeyEvent(keyboardId, toHyprcastType(event)); });
+            keyboardInfo->keyEventListener = keyboard->m_keyboardEvents.key.listen([this, keyboardId](const IKeyboard::SKeyEvent& event) {
+                runGuarded("Cannot process key event; disconnecting client", [this, keyboardId, &event] { m_callbacks.onKeyEvent(keyboardId, toHyprcastType(event)); });
+            });
 
-            keyboardInfo->modifiersListener = keyboard->m_keyboardEvents.modifiers.listen(
-                [this, keyboardId](const IKeyboard::SModifiersEvent& event) { m_callbacks.handleModifiers(keyboardId, toHyprcastType(event)); });
+            keyboardInfo->modifiersListener = keyboard->m_keyboardEvents.modifiers.listen([this, keyboardId](const IKeyboard::SModifiersEvent& event) {
+                runGuarded("Cannot process modifiers update; disconnecting client",
+                           [this, keyboardId, &event] { m_callbacks.onModifiersEvent(keyboardId, toHyprcastType(event)); });
+            });
 
-            keyboardInfo->keymapListener =
-                keyboard->m_keyboardEvents.keymap.listen([this, keyboardId](const IKeyboard::SKeymapEvent& event) { m_callbacks.handleKeymap(keyboardId, toHyprcastType(event)); });
+            keyboardInfo->keymapListener = keyboard->m_keyboardEvents.keymap.listen([this, keyboardId](const IKeyboard::SKeymapEvent& event) {
+                runGuarded("Cannot process keymap update; disconnecting client", [this, keyboardId, &event] { m_callbacks.onKeymapEvent(keyboardId, toHyprcastType(event)); });
+            });
 
             keyboardInfo->repeatInfoListener = keyboard->m_keyboardEvents.repeatInfo.listen([this, keyboardId, weakKeyboard = keyboardInfo->keyboard]() {
                 auto keyboard = weakKeyboard.lock();
@@ -103,11 +111,14 @@ namespace Hyprcast {
                     return;
                 }
 
-                m_callbacks.handleRepeatInfo(keyboardId, toHyprcastType(keyboard->m_repeatRate, keyboard->m_repeatDelay));
+                runGuarded("Cannot process repeat settings update; disconnecting client",
+                           [this, keyboardId, &keyboard] { m_callbacks.onRepeatInfoEvent(keyboardId, toHyprcastType(keyboard->m_repeatRate, keyboard->m_repeatDelay)); });
             });
 
             keyboardInfo->subscribed = true;
-            m_callbacks.handleSubscription(getKeyboardSnapshot(*keyboard, keyboardId, keyboardInfo->name));
+            logMessage(Log::TRACE, "Subscribed to keyboard {} ('{}')", keyboardId, keyboardInfo->name);
+            runGuarded("Cannot prepare keyboard subscription; disconnecting client",
+                       [this, &keyboard, keyboardId, &keyboardInfo] { m_callbacks.onSubscribe(getKeyboardSnapshot(*keyboard, keyboardId, keyboardInfo->name)); });
         }
     }
 
@@ -130,6 +141,20 @@ namespace Hyprcast {
         return registrySnapshot;
     }
 
+    void CKeyboardRegistry::shutdown() noexcept {
+        m_wlIdleKeyboardRemoval.reset();
+
+        for (auto& keyboardInfo : m_keyboardRegistry) {
+            keyboardInfo->keyEventListener.reset();
+            keyboardInfo->modifiersListener.reset();
+            keyboardInfo->keymapListener.reset();
+            keyboardInfo->repeatInfoListener.reset();
+            keyboardInfo->destroyListener.reset();
+
+            keyboardInfo->subscribed = false;
+        }
+    }
+
     void CKeyboardRegistry::scheduleRemoval(SKeyboardInfo& keyboardInfo) noexcept {
         keyboardInfo.pendingRemoval = true;
         unsubscribeListeners(keyboardInfo);
@@ -150,6 +175,9 @@ namespace Hyprcast {
                 std::erase_if(self->m_keyboardRegistry, [](const auto& record) { return record->pendingRemoval; });
             },
             this));
+        if (!m_wlIdleKeyboardRemoval) {
+            logMessage(Log::WARN, "Cannot schedule keyboard cleanup; retaining inactive records until next removal");
+        }
     }
 
     void CKeyboardRegistry::unsubscribeListeners(SKeyboardInfo& keyboardInfo) {
@@ -163,7 +191,8 @@ namespace Hyprcast {
         keyboardInfo.repeatInfoListener.reset();
 
         keyboardInfo.subscribed = false;
-        m_callbacks.handleUnsubscription(keyboardInfo.id);
+        logMessage(Log::TRACE, "Unsubscribed from keyboard {} ('{}')", keyboardInfo.id, keyboardInfo.name);
+        runGuarded("Cannot prepare keyboard unsubscription; disconnecting client", [this, &keyboardInfo] { m_callbacks.onUnsubscribe(keyboardInfo.id); });
     }
 
     SKeyboardSnapshot CKeyboardRegistry::getKeyboardSnapshot(const IKeyboard& keyboard, KeyboardId id, const std::string& name) {

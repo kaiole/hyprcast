@@ -17,16 +17,19 @@ namespace Hyprcast {
         CHyprcast(CHyprcast&&) noexcept            = delete;
         CHyprcast& operator=(CHyprcast&&) noexcept = delete;
 
-        // Public facing helper for registering function hook behavior
-        void addKeyboard(SP<IKeyboard> keyboard);
+        void       addKeyboard(SP<IKeyboard> keyboard);
 
       private:
         void                          requestRegistrySnapshot();
-
         CKeyboardRegistry::SCallbacks makeRegistryCallbacks();
+        CPluginConfig::SCallbacks     makePluginConfigCallbacks();
+
+        void                          shutdown() noexcept;
 
         Hyprcast::CEventServer        m_socket;
         Hyprcast::CKeyboardRegistry   m_keyboardRegistry;
         Hyprcast::CPluginConfig       m_config;
+
+        bool                          m_shutdown = false;
     };
 }

@@ -1,9 +1,12 @@
+#include "ipc/IpcClient.hpp"
+
 #include <LayerShellQt/Window>
 
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QDebug>
+#include <QDir>
 #include <QGuiApplication>
 #include <QMargins>
 #include <QQmlContext>
@@ -94,6 +97,33 @@ namespace {
     void writeError(const QString& message) {
         QTextStream(stderr) << "hyprcast-overlay: " << message << Qt::endl;
     }
+
+    bool resolveSocketPath(const QCommandLineParser& parser, const QCommandLineOption& socketOption, const QCommandLineOption& instanceOption, QString* socketPath) {
+        if (parser.isSet(socketOption)) {
+            *socketPath = parser.value(socketOption);
+            if (socketPath->isEmpty()) {
+                writeError(QStringLiteral("--socket must not be empty"));
+                return false;
+            }
+            return true;
+        }
+
+        const QString runtimeDirectory = qEnvironmentVariable("XDG_RUNTIME_DIR");
+        if (runtimeDirectory.isEmpty() || !QDir::isAbsolutePath(runtimeDirectory)) {
+            writeError(QStringLiteral("XDG_RUNTIME_DIR must be set to an absolute path (or pass --socket)"));
+            return false;
+        }
+
+        const QString signature = parser.isSet(instanceOption) ? parser.value(instanceOption) : qEnvironmentVariable("HYPRLAND_INSTANCE_SIGNATURE");
+        if (signature.isEmpty() || signature == QStringLiteral(".") || signature == QStringLiteral("..") || signature.contains(QLatin1Char('/')) ||
+            signature.contains(QChar::Null)) {
+            writeError(QStringLiteral("Set HYPRLAND_INSTANCE_SIGNATURE or pass --instance-signature (or --socket)"));
+            return false;
+        }
+
+        *socketPath = QDir(runtimeDirectory).filePath(QStringLiteral("hyprcast/%1/events.sock").arg(signature));
+        return true;
+    }
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -102,7 +132,7 @@ int main(int argc, char* argv[]) {
     QCoreApplication::setApplicationVersion(QStringLiteral("0.1.0"));
 
     QCommandLineParser parser;
-    parser.setApplicationDescription(QStringLiteral("Qt Quick + LayerShellQt windowing proof for Hyprcast."));
+    parser.setApplicationDescription(QStringLiteral("Qt Quick + LayerShellQt IPC proof for Hyprcast."));
     parser.addHelpOption();
     parser.addVersionOption();
 
@@ -116,11 +146,19 @@ int main(int argc, char* argv[]) {
     const QCommandLineOption heightOption(QStringLiteral("height"), QStringLiteral("Surface height in logical pixels."), QStringLiteral("pixels"), QStringLiteral("88"));
     const QCommandLineOption opacityOption(QStringLiteral("background-opacity"), QStringLiteral("Background alpha from 0 (transparent) to 1 (opaque); text stays opaque."),
                                            QStringLiteral("alpha"), QStringLiteral("0.78"));
-    const QCommandLineOption textOption(QStringLiteral("text"), QStringLiteral("Sample text (long text is clipped to the surface)."), QStringLiteral("text"));
+    const QCommandLineOption socketOption(QStringLiteral("socket"), QStringLiteral("Connect to this Hyprcast event socket instead of discovering it from the environment."),
+                                          QStringLiteral("path"));
+    const QCommandLineOption instanceOption(QStringLiteral("instance-signature"), QStringLiteral("Hyprland instance signature (defaults to HYPRLAND_INSTANCE_SIGNATURE)."),
+                                            QStringLiteral("signature"));
     const QCommandLineOption quitAfterOption(QStringLiteral("quit-after-ms"), QStringLiteral("Exit after this many milliseconds (useful for smoke tests)."), QStringLiteral("ms"));
 
-    parser.addOptions({monitorOption, anchorOption, marginsOption, widthOption, heightOption, opacityOption, textOption, quitAfterOption});
+    parser.addOptions({monitorOption, anchorOption, marginsOption, widthOption, heightOption, opacityOption, socketOption, instanceOption, quitAfterOption});
     parser.process(application);
+
+    QString socketPath;
+    if (!resolveSocketPath(parser, socketOption, instanceOption, &socketPath)) {
+        return 2;
+    }
 
     int width  = 0;
     int height = 0;
@@ -181,11 +219,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    const QString sampleText = parser.isSet(textOption) ?
-        parser.value(textOption) :
-        QStringLiteral("Typed text 123  ·  [Ctrl+Shift+K]  ·  This deliberately long sample demonstrates clipping at the fixed surface width.");
+    Hyprcast::Overlay::IpcClient ipcClient(socketPath);
 
-    QQuickView    view;
+    QQuickView                   view;
     view.setTitle(QStringLiteral("Hyprcast Overlay Proof"));
     view.setScreen(selectedScreen);
     view.setResizeMode(QQuickView::SizeRootObjectToView);
@@ -198,7 +234,7 @@ int main(int argc, char* argv[]) {
     // Layer-shell keyboard focus and Wayland pointer input are separate controls.
     view.setFlags(view.flags() | Qt::FramelessWindowHint | Qt::WindowDoesNotAcceptFocus | Qt::WindowTransparentForInput);
 
-    view.rootContext()->setContextProperty(QStringLiteral("hyprcastDemoText"), sampleText);
+    view.rootContext()->setContextProperty(QStringLiteral("hyprcastIpcClient"), &ipcClient);
     view.rootContext()->setContextProperty(QStringLiteral("hyprcastBackgroundOpacity"), backgroundOpacity);
     view.setSource(QUrl(QStringLiteral("qrc:/hyprcast/overlay/qml/Proof.qml")));
     if (view.status() == QQuickView::Error) {
@@ -236,6 +272,7 @@ int main(int argc, char* argv[]) {
                              .arg(parser.value(anchorOption))
                              .arg(backgroundOpacity);
 
+    ipcClient.start();
     view.show();
     if (quitAfterMs > 0) {
         QTimer::singleShot(quitAfterMs, &application, &QCoreApplication::quit);

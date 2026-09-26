@@ -8,7 +8,7 @@ Install Qt 6.5+ (Core, Gui, Network, Qml, Quick), LayerShellQt, `libxkbcommon` 0
 
 ```sh
 cmake --preset debug -DHYPRCAST_BUILD_PLUGIN=OFF -DHYPRCAST_BUILD_OVERLAY=ON
-cmake --build --preset debug --target hyprcast-overlay overlay_ipc_tests overlay_input_tests
+cmake --build --preset debug --target hyprcast-overlay overlay_ipc_tests overlay_input_tests overlay_history_tests
 ctest --preset debug
 ```
 
@@ -40,8 +40,10 @@ The client applies each valid protocol transition before synchronously deliverin
 
 Modifier changes from Hyprland are authoritative: key events update local XKB pressed-key state, then modifier messages reconcile the XKB masks. Pause, keymap replacement, keyboard removal, disconnect, and key release clear affected held/repeat state. Reconnect snapshots do not include held keys, so the overlay does not infer or repeat keys that it did not observe pressed.
 
-The visible output is a bounded, transient display buffer; this phase does not implement editable history, Backspace deletion, retention settings, configuration files, or user themes. XKB translation is not a reconstruction of application- or IME-committed text.
+Interpreted actions are stored as typed history entries with stable entry IDs and keyboard/key identity; display text is derived from those entries. The history retains at most 4096 UTF-16 code units of its rendered representation (including key labels and synthetic separators), independent of surface size or font metrics. Old text is trimmed at grapheme boundaries and special keys/chords at entry boundaries. The QML `Text.ElideLeft` viewport measures the actual font/layout width and shows the history tail without discarding off-screen entries, so older retained content reappears as newer content is erased.
+
+Plain Backspace currently uses the temporary phase-4 default of deletion: it removes one Unicode grapheme from text, or one whole special-key/chord entry. Generated Backspace repeats apply that deletion repeatedly. An explicit internal option also supports displaying Backspace as a key; this is not yet a user-facing setting. Modified shortcuts such as Ctrl+Backspace remain visible chords and do not emulate word deletion. Pause and connection reset preserve the history while clearing input/repeat state. XKB translation is not a reconstruction of application- or IME-committed text.
 
 ## Validation notes
 
-The prior phase-1 implementation session reported live Hyprland checks for placement, scaling, clipping, output removal, and monitor capture. The user separately confirmed pointer click-through and that OBS can record the overlay, and installed LayerShellQt system-wide. Exact Qt/LayerShellQt versions were not recorded, so other environments should still verify their compositor/toolkit combination. Phase-3 keyboard interpretation is covered by deterministic local tests; a live physical-keyboard check remains environment-specific.
+Phase-3 keyboard interpretation and phase-4 history behavior have deterministic local tests, including Unicode deletion, mixed keyboards, retention, and pause/reset preservation. Automated tests passed for the configured overlay targets. Phase-4 changes have not been live-tested in Hyprland in this session; physical keyboard and viewport behavior remain environment-specific. The prior phase-1 session reported live checks for placement, scaling, clipping, output removal, and monitor capture, and the user confirmed pointer click-through and OBS capture. Exact Qt/LayerShellQt versions were not recorded.

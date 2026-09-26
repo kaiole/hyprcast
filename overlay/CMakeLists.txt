@@ -15,6 +15,13 @@ target_include_directories(hyprcast_overlay_ipc PUBLIC "${CMAKE_CURRENT_SOURCE_D
 target_link_libraries(hyprcast_overlay_ipc PUBLIC Qt6::Core Qt6::Network)
 
 add_library(
+  hyprcast_overlay_history STATIC
+  src/history/InputHistory.cpp
+  src/history/InputHistory.hpp)
+target_include_directories(hyprcast_overlay_history PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(hyprcast_overlay_history PUBLIC Qt6::Core)
+
+add_library(
   hyprcast_overlay_input STATIC
   src/input/KeyboardInterpreter.cpp
   src/input/KeyboardInterpreter.hpp
@@ -22,7 +29,7 @@ add_library(
   src/input/KeyboardPresenter.hpp)
 set_target_properties(hyprcast_overlay_input PROPERTIES AUTOMOC ON)
 target_include_directories(hyprcast_overlay_input PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(hyprcast_overlay_input PUBLIC Qt6::Core PkgConfig::XKBCOMMON)
+target_link_libraries(hyprcast_overlay_input PUBLIC Qt6::Core hyprcast_overlay_history PkgConfig::XKBCOMMON)
 
 add_executable(hyprcast-overlay src/main.cpp)
 qt_add_resources(
@@ -42,6 +49,10 @@ if(BUILD_TESTING)
   add_executable(overlay_input_tests tests/Input.cpp)
   target_link_libraries(overlay_input_tests PRIVATE hyprcast_overlay_input)
   add_test(NAME overlay-input COMMAND overlay_input_tests)
+
+  add_executable(overlay_history_tests tests/History.cpp)
+  target_link_libraries(overlay_history_tests PRIVATE hyprcast_overlay_history)
+  add_test(NAME overlay-history COMMAND overlay_history_tests)
 endif()
 
 install(TARGETS hyprcast-overlay RUNTIME DESTINATION bin)

@@ -1,7 +1,6 @@
 #include "KeyboardPresenter.hpp"
 
 #include <QDebug>
-#include <QTextBoundaryFinder>
 
 #include <algorithm>
 #include <limits>
@@ -31,41 +30,9 @@ namespace Hyprcast::Overlay {
     }
 
     void KeyboardPresenter::append(const InterpretedAction& action) {
-        QString addition;
-        if (action.kind == InterpretedActionKind::Text) {
-            addition = action.text;
-        } else if (action.kind == InterpretedActionKind::Chord) {
-            QStringList parts = action.modifiers;
-            if (!action.key.isEmpty()) {
-                parts.push_back(action.key);
-            }
-            addition = QStringLiteral("[%1]").arg(parts.join(QLatin1Char('+')));
-        } else if (!action.key.isEmpty()) {
-            addition = QStringLiteral("[%1]").arg(action.key);
+        if (m_history.apply(action)) {
+            emit outputTextChanged();
         }
-
-        if (addition.isEmpty()) {
-            return;
-        }
-        if (action.kind != InterpretedActionKind::Text && !m_outputText.isEmpty() && !m_outputText.endsWith(QLatin1Char(' '))) {
-            m_outputText.append(QLatin1Char(' '));
-        }
-        m_outputText.append(addition);
-        if (action.kind != InterpretedActionKind::Text) {
-            m_outputText.append(QLatin1Char(' '));
-        }
-
-        if (m_outputText.size() > MaxOutputCharacters) {
-            const qsizetype     desiredCut = m_outputText.size() - MaxOutputCharacters;
-            QTextBoundaryFinder finder(QTextBoundaryFinder::Grapheme, m_outputText);
-            finder.setPosition(desiredCut);
-            qsizetype cut = finder.toNextBoundary();
-            if (cut < 0) {
-                cut = desiredCut;
-            }
-            m_outputText.remove(0, cut);
-        }
-        emit outputTextChanged();
     }
 
     void KeyboardPresenter::scheduleRepeatTimer() {

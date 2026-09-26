@@ -21,6 +21,8 @@ Item {
         color: "#FFFFFF"
         font.pixelSize: 30
         font.weight: Font.Medium
+        // The viewport is measured by Text; retained history stays in the C++ model.
+        wrapMode: Text.NoWrap
         elide: Text.ElideLeft
         verticalAlignment: Text.AlignVCenter
         horizontalAlignment: Text.AlignLeft

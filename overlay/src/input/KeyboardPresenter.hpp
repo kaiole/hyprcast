@@ -1,6 +1,7 @@
 #pragma once
 
 #include "KeyboardInterpreter.hpp"
+#include "../history/InputHistory.hpp"
 
 #include <QObject>
 #include <QTimer>
@@ -14,7 +15,7 @@ namespace Hyprcast::Overlay {
         explicit KeyboardPresenter(QObject* parent = nullptr);
 
         [[nodiscard]] QString outputText() const {
-            return m_outputText;
+            return m_history.displayText();
         }
 
         void processMessage(const ProtocolMessage& message);
@@ -24,14 +25,12 @@ namespace Hyprcast::Overlay {
         void outputTextChanged();
 
       private:
-        void                       append(const InterpretedAction& action);
-        void                       scheduleRepeatTimer();
-        void                       onRepeatTimer();
+        void                append(const InterpretedAction& action);
+        void                scheduleRepeatTimer();
+        void                onRepeatTimer();
 
-        static constexpr qsizetype MaxOutputCharacters = 512;
-
-        KeyboardInterpreter        m_interpreter;
-        QTimer                     m_repeatTimer;
-        QString                    m_outputText;
+        KeyboardInterpreter m_interpreter;
+        QTimer              m_repeatTimer;
+        InputHistory        m_history;
     };
 } // namespace Hyprcast::Overlay

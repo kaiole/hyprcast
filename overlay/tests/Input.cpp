@@ -1,4 +1,5 @@
 #include "input/KeyboardInterpreter.hpp"
+#include "input/KeyboardPresenter.hpp"
 
 #include <xkbcommon/xkbcommon.h>
 
@@ -175,6 +176,19 @@ namespace {
         check(process(interpreter, key(1, 30, true, 4), now + std::chrono::milliseconds(80)).empty(), "removed keyboard cannot produce further output");
     }
 
+    void testPresenterPreservesHistoryAcrossPauseAndReset() {
+        const auto        keymap = makeKeymap("us");
+        KeyboardPresenter presenter;
+        presenter.processMessage(snapshot(keymap));
+        presenter.processMessage(key(1, 30, true));
+        check(presenter.outputText() == QStringLiteral("a"), "presenter records interpreted text");
+
+        presenter.processMessage(CastingStateMessage{.paused = true});
+        check(presenter.outputText() == QStringLiteral("a"), "pausing input preserves retained history");
+        presenter.resetConnection();
+        check(presenter.outputText() == QStringLiteral("a"), "connection reset preserves retained history");
+    }
+
     void testDeterministicRepeatsAndCancellation() {
         const auto          keymap = makeKeymap("us");
         KeyboardInterpreter interpreter;
@@ -213,6 +227,7 @@ int main() {
     testChordsAndPerKeyboardState();
     testLayoutAwareText();
     testKeymapAndKeyboardRemovalResetInputState();
+    testPresenterPreservesHistoryAcrossPauseAndReset();
     testDeterministicRepeatsAndCancellation();
     std::cout << "overlay input tests passed\n";
     return 0;

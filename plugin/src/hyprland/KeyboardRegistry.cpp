@@ -206,7 +206,9 @@ namespace Hyprcast {
                     .locked    = keyboard.m_modifiersState.locked,
                     .group     = keyboard.m_modifiersState.group,
                 },
-            .keymap = keyboard.m_xkbKeymapString,
+            // Keep subscription snapshots consistent with incremental keymap events and
+            // interoperable with Wayland clients: both use libxkbcommon text V1.
+            .keymap = keyboard.m_xkbKeymapV1String,
             .repeatInfo =
                 {
                     .rate  = keyboard.m_repeatRate,

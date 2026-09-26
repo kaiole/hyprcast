@@ -1,3 +1,4 @@
+#include "input/KeyboardPresenter.hpp"
 #include "ipc/IpcClient.hpp"
 
 #include <LayerShellQt/Window>
@@ -132,7 +133,7 @@ int main(int argc, char* argv[]) {
     QCoreApplication::setApplicationVersion(QStringLiteral("0.1.0"));
 
     QCommandLineParser parser;
-    parser.setApplicationDescription(QStringLiteral("Qt Quick + LayerShellQt IPC proof for Hyprcast."));
+    parser.setApplicationDescription(QStringLiteral("A lightweight Hyprland keyboard overlay."));
     parser.addHelpOption();
     parser.addVersionOption();
 
@@ -219,10 +220,16 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    Hyprcast::Overlay::IpcClient ipcClient(socketPath);
+    Hyprcast::Overlay::IpcClient         ipcClient(socketPath);
+    Hyprcast::Overlay::KeyboardPresenter keyboardPresenter;
+    QObject::connect(
+        &ipcClient, &Hyprcast::Overlay::IpcClient::protocolMessageReceived, &keyboardPresenter,
+        [&keyboardPresenter](const Hyprcast::Overlay::ProtocolMessage& message) { keyboardPresenter.processMessage(message); }, Qt::DirectConnection);
+    QObject::connect(
+        &ipcClient, &Hyprcast::Overlay::IpcClient::connectionReset, &keyboardPresenter, [&keyboardPresenter] { keyboardPresenter.resetConnection(); }, Qt::DirectConnection);
 
-    QQuickView                   view;
-    view.setTitle(QStringLiteral("Hyprcast Overlay Proof"));
+    QQuickView view;
+    view.setTitle(QStringLiteral("Hyprcast"));
     view.setScreen(selectedScreen);
     view.setResizeMode(QQuickView::SizeRootObjectToView);
     view.resize(width, height);
@@ -234,9 +241,9 @@ int main(int argc, char* argv[]) {
     // Layer-shell keyboard focus and Wayland pointer input are separate controls.
     view.setFlags(view.flags() | Qt::FramelessWindowHint | Qt::WindowDoesNotAcceptFocus | Qt::WindowTransparentForInput);
 
-    view.rootContext()->setContextProperty(QStringLiteral("hyprcastIpcClient"), &ipcClient);
+    view.rootContext()->setContextProperty(QStringLiteral("hyprcastKeyboardOutput"), &keyboardPresenter);
     view.rootContext()->setContextProperty(QStringLiteral("hyprcastBackgroundOpacity"), backgroundOpacity);
-    view.setSource(QUrl(QStringLiteral("qrc:/hyprcast/overlay/qml/Proof.qml")));
+    view.setSource(QUrl(QStringLiteral("qrc:/hyprcast/overlay/qml/Overlay.qml")));
     if (view.status() == QQuickView::Error) {
         for (const auto& error : view.errors()) {
             writeError(error.toString());
@@ -245,7 +252,7 @@ int main(int argc, char* argv[]) {
     }
 
     LayerWindow* layerWindow = LayerWindow::get(&view);
-    layerWindow->setScope(QStringLiteral("hyprcast-overlay-proof"));
+    layerWindow->setScope(QStringLiteral("hyprcast-overlay"));
     layerWindow->setLayer(LayerWindow::LayerOverlay);
     layerWindow->setAnchors(anchors);
     layerWindow->setMargins(margins);
@@ -264,7 +271,7 @@ int main(int argc, char* argv[]) {
         application.quit();
     });
 
-    qInfo().noquote() << QStringLiteral("Overlay proof on %1 (%2x%3 logical px, scale %4), anchor=%5, opacity=%6")
+    qInfo().noquote() << QStringLiteral("Overlay on %1 (%2x%3 logical px, scale %4), anchor=%5, opacity=%6")
                              .arg(selectedScreen->name())
                              .arg(width)
                              .arg(height)

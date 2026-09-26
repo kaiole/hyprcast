@@ -23,7 +23,7 @@ namespace Hyprcast::Overlay {
 
     class ConnectionState {
       public:
-        [[nodiscard]] bool apply(ProtocolMessage message, QString* error);
+        [[nodiscard]] bool apply(const ProtocolMessage& message, QString* error);
         void               reset() noexcept;
 
         [[nodiscard]] bool hasCastingState() const noexcept {

@@ -162,7 +162,8 @@ namespace Hyprcast::Overlay {
 
         ContextPtr                        context{xkb_context_new(XKB_CONTEXT_NO_FLAGS)};
         std::map<std::uint32_t, Keyboard> keyboards;
-        bool                              paused = false;
+        bool                              paused         = false;
+        bool                              repeatsEnabled = true;
 
         static void                       applyMask(Keyboard& keyboard) {
             if (!keyboard.state || !keyboard.keymap) {
@@ -222,8 +223,8 @@ namespace Hyprcast::Overlay {
             return std::max(interval, KeyboardInterpreter::Clock::duration{1});
         }
 
-        static void configureRepeat(Keyboard& keyboard, PressedKey& key, TimePoint now) {
-            if (!key.repeatable || keyboard.repeatRate == 0 || !keyboard.state) {
+        static void configureRepeat(Keyboard& keyboard, PressedKey& key, TimePoint now, bool enabled) {
+            if (!enabled || !key.repeatable || keyboard.repeatRate == 0 || !keyboard.state) {
                 key.repeatDeadline.reset();
                 key.repeatInterval = KeyboardInterpreter::Clock::duration::zero();
                 return;
@@ -376,7 +377,7 @@ namespace Hyprcast::Overlay {
                         pressed.action.key  = key;
                     }
                     pressed.repeatable = xkb_keymap_key_repeats(keyboard.keymap.get(), xkbKey) != 0;
-                    configureRepeat(keyboard, pressed, now);
+                    configureRepeat(keyboard, pressed, now, repeatsEnabled);
                     actions.push_back(pressed.action);
                 }
 
@@ -542,7 +543,7 @@ namespace Hyprcast::Overlay {
                         keyboard->second.repeatDelay = event.delay;
                         for (auto& [keycode, key] : keyboard->second.pressed) {
                             Q_UNUSED(keycode);
-                            Impl::configureRepeat(keyboard->second, key, now);
+                            Impl::configureRepeat(keyboard->second, key, now, m_impl->repeatsEnabled);
                         }
                     }
                 }
@@ -565,6 +566,20 @@ namespace Hyprcast::Overlay {
 
     QStringList KeyboardInterpreter::heldKeys() const {
         return m_impl ? m_impl->heldKeys() : QStringList{};
+    }
+
+    void KeyboardInterpreter::setRepeatsEnabled(bool enabled, Clock::time_point now) {
+        if (!m_impl || m_impl->repeatsEnabled == enabled) {
+            return;
+        }
+        m_impl->repeatsEnabled = enabled;
+        for (auto& [keyboardId, keyboard] : m_impl->keyboards) {
+            Q_UNUSED(keyboardId);
+            for (auto& [keycode, key] : keyboard.pressed) {
+                Q_UNUSED(keycode);
+                Impl::configureRepeat(keyboard, key, now, enabled);
+            }
+        }
     }
 
     void KeyboardInterpreter::reset() noexcept {

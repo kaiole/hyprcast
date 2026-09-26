@@ -22,7 +22,7 @@ Item {
 
     Row {
         id: caps
-        spacing: 3
+        spacing: hyprcastConfig.values.keycapInnerSpacing
 
         Repeater {
             model: root.labels
@@ -30,20 +30,21 @@ Item {
             delegate: Rectangle {
                 required property string modelData
 
-                implicitWidth: label.implicitWidth + 18
-                implicitHeight: 40
-                radius: 7
-                color: root.kind === "text" ? "#2b3546" : "#39475c"
+                implicitWidth: label.implicitWidth + hyprcastConfig.values.keycapPaddingX * 2
+                implicitHeight: hyprcastConfig.values.keycapHeight
+                radius: hyprcastConfig.values.keycapRadius
+                color: root.kind === "text" ? hyprcastConfig.values.keycapTextBackground : hyprcastConfig.values.keycapKeyBackground
                 border.width: 1
-                border.color: "#66758c"
+                border.color: hyprcastConfig.values.keycapBorderColor
 
                 Text {
                     id: label
                     anchors.centerIn: parent
                     text: modelData
-                    color: "#FFFFFF"
-                    font.pixelSize: 19
-                    font.weight: Font.Medium
+                    color: hyprcastConfig.values.keycapTextColor
+                    font.family: hyprcastConfig.values.fontFamily
+                    font.pixelSize: hyprcastConfig.values.keycapFontSize
+                    font.weight: hyprcastConfig.values.fontWeight
                 }
             }
         }

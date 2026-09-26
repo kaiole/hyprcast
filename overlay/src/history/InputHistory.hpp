@@ -75,6 +75,7 @@ namespace Hyprcast::Overlay {
         // Returns true when an action changed history. Plain Backspace is the only
         // action affected by backspaceMode; modified Backspace remains a chord.
         bool                    apply(const InterpretedAction& action);
+        void                    setOptions(InputHistoryOptions options);
         [[nodiscard]] qsizetype retainedUtf16CodeUnits() const;
 
       private:

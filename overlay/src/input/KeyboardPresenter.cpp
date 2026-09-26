@@ -58,23 +58,42 @@ namespace Hyprcast::Overlay {
         scheduleTimer(Clock::now());
     }
 
+    void KeyboardPresenter::setHistoryOptions(InputHistoryOptions options) {
+        m_history.setOptions(options);
+    }
+
+    void KeyboardPresenter::setRepeatsEnabled(bool enabled, Clock::time_point now) {
+        m_interpreter.setRepeatsEnabled(enabled, now);
+        scheduleTimer(now);
+    }
+
     void KeyboardPresenter::setExpiration(int expireAfterMs, int fadeDurationMs, Clock::time_point now) {
         const int  boundedExpiration = std::max(0, expireAfterMs);
         const int  boundedFade       = std::max(0, fadeDurationMs);
+        const bool expirationChanged = boundedExpiration != m_expireAfterMs;
         const bool fadeChanged       = boundedFade != m_fadeDurationMs;
         m_expireAfterMs              = boundedExpiration;
         m_fadeDurationMs             = boundedFade;
-        if (fadeChanged) {
-            emit fadeDurationMsChanged();
+
+        if (expirationChanged) {
+            if (m_expireAfterMs == 0 || m_history.rowCount() == 0) {
+                m_expirationDeadline.reset();
+            } else {
+                // Updating an inactivity interval starts the new interval from the reload.
+                m_expirationDeadline = now + std::chrono::milliseconds(m_expireAfterMs);
+            }
         }
 
-        if (m_expireAfterMs == 0) {
-            m_expirationDeadline.reset();
-            m_fadeDeadline.reset();
-            m_fadingHistory.clear();
-            setFading(false);
-        } else {
-            noteHistoryActivity(now);
+        if (m_fading && fadeChanged) {
+            if (m_fadeDurationMs == 0) {
+                finishFade();
+            } else {
+                // An in-progress fade restarts from full opacity for the new duration.
+                m_fadeDeadline = now + std::chrono::milliseconds(m_fadeDurationMs);
+            }
+        }
+        if (fadeChanged) {
+            emit fadeDurationMsChanged();
         }
         scheduleTimer(now);
     }

@@ -70,6 +70,23 @@ namespace {
         check(symbols.displayText() == QStringLiteral("x [Backspace] y"), "rendered separators are derived around typed entries");
     }
 
+    void testRuntimeHistoryOptions() {
+        InputHistory history({.maxRetainedUtf16CodeUnits = 16});
+        history.apply(text(QStringLiteral("abcd")));
+        const auto stableId = history.entries().front().id;
+
+        history.setOptions({.backspaceMode = BackspaceMode::Delete, .maxRetainedUtf16CodeUnits = 3});
+        check(history.displayText() == QStringLiteral("bcd"), "lowering retention applies immediately at a grapheme boundary");
+        check(history.entries().front().id == stableId, "live retention changes preserve surviving entry identity");
+        history.setOptions({.backspaceMode = BackspaceMode::Symbol, .maxRetainedUtf16CodeUnits = 16});
+        history.apply(key(QStringLiteral("Backspace")));
+        check(history.displayText() == QStringLiteral("bcd [Backspace] "), "live Backspace mode changes affect only future actions");
+        history.setOptions({.backspaceMode = BackspaceMode::Delete, .maxRetainedUtf16CodeUnits = 16});
+        history.apply(key(QStringLiteral("Backspace")));
+        history.apply(key(QStringLiteral("Backspace")));
+        check(history.displayText() == QStringLiteral("bc"), "switching to deletion mode applies to future actions");
+    }
+
     void testAtomicSpecialKeysAndModifiedBackspace() {
         InputHistory history;
         history.apply(text(QStringLiteral("a")));
@@ -226,6 +243,7 @@ namespace {
 
 int main() {
     testBackspaceModesAndRepeatedDeletion();
+    testRuntimeHistoryOptions();
     testAtomicSpecialKeysAndModifiedBackspace();
     testGraphemesAcrossActions();
     testBoundedRetentionAndStableMetadata();

@@ -3,6 +3,8 @@
 
 #include <xkbcommon/xkbcommon.h>
 
+#include <QCoreApplication>
+
 #include <cstdlib>
 #include <iostream>
 #include <memory>
@@ -163,16 +165,17 @@ namespace {
         process(interpreter, key(1, 42, true), now);
         process(interpreter, key(1, 30, true), now);
         check(interpreter.heldModifiers() == QStringLiteral("Shift"), "held modifier recorded before keymap replacement");
+        check(interpreter.heldKeys().size() == 2, "held-key snapshot includes the modifier and ordinary key");
         check(interpreter.nextRepeatDeadline() != TimePoint::max(), "repeat active before keymap replacement");
 
         send(interpreter, KeymapMessage{.keyboardId = 1, .keymap = keymap.text}, now + std::chrono::milliseconds(50));
-        check(interpreter.heldModifiers().isEmpty(), "keymap replacement clears observed held keys");
+        check(interpreter.heldModifiers().isEmpty() && interpreter.heldKeys().isEmpty(), "keymap replacement clears observed held keys");
         check(interpreter.nextRepeatDeadline() == TimePoint::max(), "keymap replacement cancels repeats");
 
         process(interpreter, key(1, 30, true, 3), now + std::chrono::milliseconds(60));
-        check(interpreter.nextRepeatDeadline() != TimePoint::max(), "new key presses use the replacement keymap");
+        check(interpreter.nextRepeatDeadline() != TimePoint::max() && interpreter.heldKeys() == QStringList{QStringLiteral("a")}, "new key presses use the replacement keymap");
         send(interpreter, UnsubscribeKeyboardMessage{.id = 1}, now + std::chrono::milliseconds(70));
-        check(interpreter.nextRepeatDeadline() == TimePoint::max(), "keyboard removal cancels its repeats");
+        check(interpreter.nextRepeatDeadline() == TimePoint::max() && interpreter.heldKeys().isEmpty(), "keyboard removal clears held keys and cancels repeats");
         check(process(interpreter, key(1, 30, true, 4), now + std::chrono::milliseconds(80)).empty(), "removed keyboard cannot produce further output");
     }
 
@@ -182,11 +185,78 @@ namespace {
         presenter.processMessage(snapshot(keymap));
         presenter.processMessage(key(1, 30, true));
         check(presenter.outputText() == QStringLiteral("a"), "presenter records interpreted text");
+        check(presenter.heldKeys() == QStringList{QStringLiteral("a")} && presenter.heldKeyCount() == 1, "presenter exposes held non-modifier keys and a QML-friendly count");
 
-        presenter.processMessage(CastingStateMessage{.paused = true});
-        check(presenter.outputText() == QStringLiteral("a"), "pausing input preserves retained history");
         presenter.resetConnection();
         check(presenter.outputText() == QStringLiteral("a"), "connection reset preserves retained history");
+        check(presenter.heldKeys().isEmpty(), "connection reset clears the live held-key presentation");
+        presenter.processMessage(snapshot(keymap));
+        presenter.processMessage(key(1, 48, true));
+        check(presenter.outputText() == QStringLiteral("ab"), "input resumes on a fresh keyboard snapshot without clearing retained history");
+
+        presenter.processMessage(CastingStateMessage{.paused = true});
+        check(presenter.outputText() == QStringLiteral("ab"), "pausing input preserves retained history");
+        check(presenter.heldKeys().isEmpty() && presenter.heldKeyCount() == 0, "pausing clears the live held-key presentation");
+        presenter.resetConnection();
+        check(presenter.outputText() == QStringLiteral("ab"), "reset after pause still preserves retained history");
+    }
+
+    void testExpirationFadeSnapshotAndBackspaceLifecycle() {
+        const auto        keymap = makeKeymap("us");
+        const auto        start  = TimePoint{};
+        KeyboardPresenter presenter;
+        presenter.setExpiration(1000, 250, start);
+        presenter.processMessage(snapshot(keymap), start);
+        presenter.processMessage(key(1, 30, true), start + std::chrono::milliseconds(1));
+        presenter.processMessage(key(1, 30, false), start + std::chrono::milliseconds(2));
+        check(presenter.outputText() == QStringLiteral("a"), "history remains active before its idle deadline");
+
+        presenter.advance(start + std::chrono::milliseconds(1000));
+        check(!presenter.fading() && presenter.historyModel().rowCount() == 1, "history does not expire before the idle deadline");
+        presenter.advance(start + std::chrono::milliseconds(1001));
+        check(presenter.fading() && presenter.fadeDurationMs() == 250, "expired history enters the configured optional visual fade");
+        check(presenter.historyModel().rowCount() == 0, "expired content is immediately removed from editable history");
+        check(presenter.fadingHistoryModel().displayText() == QStringLiteral("a"), "fading uses a separate presentation-only snapshot");
+
+        presenter.processMessage(key(1, 14, true), start + std::chrono::milliseconds(1100));
+        check(presenter.historyModel().rowCount() == 0, "Backspace cannot consume entries already expired from editable history");
+        presenter.processMessage(key(1, 14, false), start + std::chrono::milliseconds(1101));
+        presenter.advance(start + std::chrono::milliseconds(1251));
+        check(!presenter.fading() && presenter.fadingHistoryModel().rowCount() == 0, "fade completion clears only the visual snapshot");
+
+        presenter.processMessage(key(1, 48, true), start + std::chrono::milliseconds(1300));
+        check(presenter.outputText() == QStringLiteral("b") && !presenter.fading(), "new input starts a fresh editable history after expiration");
+
+        KeyboardPresenter heldDuringFade;
+        heldDuringFade.setExpiration(1000, 250, start);
+        heldDuringFade.processMessage(snapshot(keymap), start);
+        heldDuringFade.processMessage(key(1, 30, true), start + std::chrono::milliseconds(1));
+        heldDuringFade.processMessage(key(1, 30, false), start + std::chrono::milliseconds(2));
+        heldDuringFade.processMessage(key(1, 42, true), start + std::chrono::milliseconds(3));
+        heldDuringFade.advance(start + std::chrono::milliseconds(1001));
+        check(heldDuringFade.fading() && heldDuringFade.heldKeys() == QStringList{QStringLiteral("Shift")},
+              "held modifier state remains live when history enters its fade");
+        heldDuringFade.advance(start + std::chrono::milliseconds(1251));
+        check(!heldDuringFade.fading() && heldDuringFade.heldKeys() == QStringList{QStringLiteral("Shift")},
+              "finishing the history fade does not clear a still-held modifier");
+
+        KeyboardPresenter recovery;
+        recovery.setExpiration(1000, 250, start);
+        recovery.processMessage(snapshot(keymap), start);
+        recovery.processMessage(key(1, 30, true), start + std::chrono::milliseconds(1));
+        recovery.advance(start + std::chrono::milliseconds(1001));
+        recovery.processMessage(key(1, 48, true), start + std::chrono::milliseconds(1100));
+        check(recovery.outputText() == QStringLiteral("b") && !recovery.fading() && recovery.fadingHistoryModel().rowCount() == 0,
+              "new history cancels the old visual snapshot and reverses an in-progress fade");
+        recovery.advance(start + std::chrono::milliseconds(1251));
+        check(recovery.outputText() == QStringLiteral("b"), "the cancelled fade timer cannot expire newer input");
+
+        KeyboardPresenter immediate;
+        immediate.setExpiration(500, 0, start);
+        immediate.processMessage(snapshot(keymap), start);
+        immediate.processMessage(key(1, 30, true), start + std::chrono::milliseconds(1));
+        immediate.advance(start + std::chrono::milliseconds(501));
+        check(immediate.historyModel().rowCount() == 0 && !immediate.fading(), "zero fade duration expires history immediately");
     }
 
     void testDeterministicRepeatsAndCancellation() {
@@ -221,13 +291,15 @@ namespace {
     }
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
+    QCoreApplication application(argc, argv);
     testTextAndXkbOffset();
     testShiftAndStandaloneModifier();
     testChordsAndPerKeyboardState();
     testLayoutAwareText();
     testKeymapAndKeyboardRemovalResetInputState();
     testPresenterPreservesHistoryAcrossPauseAndReset();
+    testExpirationFadeSnapshotAndBackspaceLifecycle();
     testDeterministicRepeatsAndCancellation();
     std::cout << "overlay input tests passed\n";
     return 0;

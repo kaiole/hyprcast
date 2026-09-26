@@ -45,6 +45,7 @@ namespace Hyprcast::Overlay {
         [[nodiscard]] std::vector<InterpretedAction> advance(Clock::time_point now);
         [[nodiscard]] Clock::time_point              nextRepeatDeadline() const noexcept;
         [[nodiscard]] QString                        heldModifiers() const;
+        [[nodiscard]] QStringList                    heldKeys() const;
         void                                         reset() noexcept;
 
       private:

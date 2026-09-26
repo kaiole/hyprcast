@@ -143,6 +143,85 @@ namespace {
         check(entries[0].action.keyboardId == 11 && entries[1].action.keyboardId == 22 && entries[2].action.keyboardId == 33, "mixed keyboard identity is preserved per entry");
         check(history.displayText() == QStringLiteral("a [Ctrl+C] b"), "mixed-keyboard action order is preserved in display output");
     }
+
+    void testStructuredModelRolesAndNotifications() {
+        InputHistory history;
+        int          inserted = 0;
+        int          removed  = 0;
+        int          changed  = 0;
+        QObject::connect(&history, &QAbstractItemModel::rowsInserted, [&inserted](const QModelIndex&, int, int) { ++inserted; });
+        QObject::connect(&history, &QAbstractItemModel::rowsRemoved, [&removed](const QModelIndex&, int, int) { ++removed; });
+        QObject::connect(&history, &QAbstractItemModel::dataChanged, [&changed](const QModelIndex&, const QModelIndex&, const QList<int>&) { ++changed; });
+
+        history.apply(text(QStringLiteral("ab"), 9, 30));
+        check(history.rowCount() == 1 && inserted == 1, "append inserts a single model row");
+        auto textIndex = history.index(0, 0);
+        check(history.data(textIndex, HistoryListModel::KindRole).toString() == QStringLiteral("text"), "model exposes the action kind role");
+        check(history.data(textIndex, HistoryListModel::TextRole).toString() == QStringLiteral("ab"), "model exposes source text rather than formatted output");
+        check(history.data(textIndex, HistoryListModel::KeyboardIdRole).toUInt() == 9, "model exposes keyboard identity");
+        const auto firstId = history.data(textIndex, HistoryListModel::EntryIdRole).toULongLong();
+        check(history.roleNames().value(HistoryListModel::ModifiersRole) == QByteArrayLiteral("modifiers"), "model publishes QML role names");
+
+        history.apply(key(QStringLiteral("Backspace")));
+        check(history.rowCount() == 1 && changed == 1, "grapheme deletion updates a row without resetting the model");
+        textIndex = history.index(0, 0);
+        check(history.data(textIndex, HistoryListModel::TextRole).toString() == QStringLiteral("a"), "partial text deletion updates structured data");
+        check(history.data(textIndex, Qt::DisplayRole).toString() == QStringLiteral("a"), "partial text deletion notifies standard display-role consumers");
+        check(history.data(textIndex, HistoryListModel::EntryIdRole).toULongLong() == firstId, "partial deletion preserves the entry ID");
+
+        auto repeatedChord        = chord({QStringLiteral("Ctrl")}, QStringLiteral("C"), 42, 46);
+        repeatedChord.eventTimeMs = 99;
+        repeatedChord.repeated    = true;
+        repeatedChord.repeatCount = 2;
+        history.apply(repeatedChord);
+        const auto chordIndex = history.index(1, 0);
+        check(history.data(chordIndex, HistoryListModel::KindRole).toString() == QStringLiteral("chord"), "chord kind is exposed to QML");
+        check(history.data(chordIndex, HistoryListModel::ModifiersRole).toStringList() == QStringList{QStringLiteral("Ctrl")}, "chord modifiers remain structured");
+        check(history.data(chordIndex, HistoryListModel::KeyRole).toString() == QStringLiteral("C"), "chord key is exposed separately");
+        check(history.data(chordIndex, HistoryListModel::KeycodeRole).toUInt() == 46, "key identity is available to presentation models");
+        check(history.data(chordIndex, HistoryListModel::EventTimeMsRole).toUInt() == 99 && history.data(chordIndex, HistoryListModel::RepeatedRole).toBool() &&
+                  history.data(chordIndex, HistoryListModel::RepeatCountRole).toUInt() == 2,
+              "event timing and repeat metadata are exposed without reparsing labels");
+
+        history.apply(key(QStringLiteral("Backspace")));
+        check(history.rowCount() == 1 && removed == 1, "atomic chord deletion removes one complete model row");
+        history.clear();
+        check(history.rowCount() == 0 && removed == 2, "clear reports removal of the remaining model rows");
+
+        history.apply(text(QStringLiteral("e")));
+        history.apply(text(QString::fromUtf8("\xCC\x81")));
+        history.apply(key(QStringLiteral("Backspace")));
+        check(history.rowCount() == 0 && removed == 3, "grapheme deletion across actions removes its contiguous model rows");
+    }
+
+    void testRetentionModelNotificationsAndSnapshot() {
+        InputHistory     history({.maxRetainedUtf16CodeUnits = 5});
+        HistoryListModel snapshot;
+        int              changed = 0;
+        QObject::connect(&history, &QAbstractItemModel::dataChanged, [&changed](const QModelIndex&, const QModelIndex&, const QList<int>&) { ++changed; });
+
+        history.apply(text(QStringLiteral("abcdefg")));
+        const auto retainedId = history.data(history.index(0, 0), HistoryListModel::EntryIdRole).toULongLong();
+        check(history.displayText() == QStringLiteral("cdefg"), "retention truncates the structured text row at a grapheme boundary");
+        check(history.data(history.index(0, 0), HistoryListModel::EntryIdRole).toULongLong() == retainedId, "retention preserves the surviving text entry ID");
+        snapshot.setSnapshot(history.entries());
+        history.clear();
+        check(history.rowCount() == 0 && snapshot.rowCount() == 1, "visual snapshots are independent of editable history");
+        check(snapshot.displayText() == QStringLiteral("cdefg"), "snapshot model uses the same rendering semantics");
+        snapshot.clear();
+        check(changed == 1, "partial retention trimming emits dataChanged rather than a model reset");
+
+        InputHistory multipleRows({.maxRetainedUtf16CodeUnits = 4});
+        int          trimRemovals = 0;
+        QObject::connect(&multipleRows, &QAbstractItemModel::rowsRemoved, [&trimRemovals](const QModelIndex&, int, int) { ++trimRemovals; });
+        multipleRows.apply(text(QStringLiteral("ab")));
+        multipleRows.apply(text(QStringLiteral("cd")));
+        const auto survivingId = multipleRows.entries()[1].id;
+        multipleRows.apply(text(QStringLiteral("ef")));
+        check(multipleRows.displayText() == QStringLiteral("cdef"), "retention can remove complete old action rows");
+        check(multipleRows.rowCount() == 2 && multipleRows.entries().front().id == survivingId && trimRemovals == 1,
+              "retention reports removed rows and preserves IDs of surviving actions");
+    }
 } // namespace
 
 int main() {
@@ -151,6 +230,8 @@ int main() {
     testGraphemesAcrossActions();
     testBoundedRetentionAndStableMetadata();
     testMixedKeyboardOrderAndEntryIdentity();
+    testStructuredModelRolesAndNotifications();
+    testRetentionModelNotificationsAndSnapshot();
     std::cout << "overlay history tests passed\n";
     return 0;
 }

@@ -95,6 +95,16 @@ namespace {
         return true;
     }
 
+    bool parseNonNegativeInt(const QString& value, int maximum, int* result) {
+        bool      ok     = false;
+        const int parsed = value.toInt(&ok);
+        if (!ok || parsed < 0 || parsed > maximum) {
+            return false;
+        }
+        *result = parsed;
+        return true;
+    }
+
     void writeError(const QString& message) {
         QTextStream(stderr) << "hyprcast-overlay: " << message << Qt::endl;
     }
@@ -147,13 +157,21 @@ int main(int argc, char* argv[]) {
     const QCommandLineOption heightOption(QStringLiteral("height"), QStringLiteral("Surface height in logical pixels."), QStringLiteral("pixels"), QStringLiteral("88"));
     const QCommandLineOption opacityOption(QStringLiteral("background-opacity"), QStringLiteral("Background alpha from 0 (transparent) to 1 (opaque); text stays opaque."),
                                            QStringLiteral("alpha"), QStringLiteral("0.78"));
+    const QCommandLineOption presentationOption(QStringLiteral("presentation"), QStringLiteral("Bundled presentation: text or keycaps."), QStringLiteral("mode"),
+                                                QStringLiteral("text"));
+    const QCommandLineOption showHeldKeysOption(QStringLiteral("show-held-keys"), QStringLiteral("Show currently held keys below the history."));
+    const QCommandLineOption expireAfterOption(QStringLiteral("expire-after-ms"), QStringLiteral("Remove history after this much inactivity; 0 disables expiration."),
+                                               QStringLiteral("ms"), QStringLiteral("0"));
+    const QCommandLineOption fadeDurationOption(QStringLiteral("fade-duration-ms"), QStringLiteral("Fade expired history over this duration; 0 disables fading."),
+                                                QStringLiteral("ms"), QStringLiteral("0"));
     const QCommandLineOption socketOption(QStringLiteral("socket"), QStringLiteral("Connect to this Hyprcast event socket instead of discovering it from the environment."),
                                           QStringLiteral("path"));
     const QCommandLineOption instanceOption(QStringLiteral("instance-signature"), QStringLiteral("Hyprland instance signature (defaults to HYPRLAND_INSTANCE_SIGNATURE)."),
                                             QStringLiteral("signature"));
     const QCommandLineOption quitAfterOption(QStringLiteral("quit-after-ms"), QStringLiteral("Exit after this many milliseconds (useful for smoke tests)."), QStringLiteral("ms"));
 
-    parser.addOptions({monitorOption, anchorOption, marginsOption, widthOption, heightOption, opacityOption, socketOption, instanceOption, quitAfterOption});
+    parser.addOptions({monitorOption, anchorOption, marginsOption, widthOption, heightOption, opacityOption, presentationOption, showHeldKeysOption, expireAfterOption,
+                       fadeDurationOption, socketOption, instanceOption, quitAfterOption});
     parser.process(application);
 
     QString socketPath;
@@ -184,6 +202,23 @@ int main(int argc, char* argv[]) {
     const double backgroundOpacity = parser.value(opacityOption).toDouble(&opacityOk);
     if (!opacityOk || !std::isfinite(backgroundOpacity) || backgroundOpacity < 0.0 || backgroundOpacity > 1.0) {
         writeError(QStringLiteral("--background-opacity must be a number from 0 to 1"));
+        return 2;
+    }
+
+    const QString presentation = parser.value(presentationOption).toLower();
+    if (presentation != QStringLiteral("text") && presentation != QStringLiteral("keycaps")) {
+        writeError(QStringLiteral("--presentation must be either 'text' or 'keycaps'"));
+        return 2;
+    }
+
+    int expireAfterMs  = 0;
+    int fadeDurationMs = 0;
+    if (!parseNonNegativeInt(parser.value(expireAfterOption), 86'400'000, &expireAfterMs)) {
+        writeError(QStringLiteral("--expire-after-ms must be an integer from 0 to 86400000"));
+        return 2;
+    }
+    if (!parseNonNegativeInt(parser.value(fadeDurationOption), 60'000, &fadeDurationMs)) {
+        writeError(QStringLiteral("--fade-duration-ms must be an integer from 0 to 60000"));
         return 2;
     }
 
@@ -222,6 +257,7 @@ int main(int argc, char* argv[]) {
 
     Hyprcast::Overlay::IpcClient         ipcClient(socketPath);
     Hyprcast::Overlay::KeyboardPresenter keyboardPresenter;
+    keyboardPresenter.setExpiration(expireAfterMs, fadeDurationMs);
     QObject::connect(
         &ipcClient, &Hyprcast::Overlay::IpcClient::protocolMessageReceived, &keyboardPresenter,
         [&keyboardPresenter](const Hyprcast::Overlay::ProtocolMessage& message) { keyboardPresenter.processMessage(message); }, Qt::DirectConnection);
@@ -242,7 +278,11 @@ int main(int argc, char* argv[]) {
     view.setFlags(view.flags() | Qt::FramelessWindowHint | Qt::WindowDoesNotAcceptFocus | Qt::WindowTransparentForInput);
 
     view.rootContext()->setContextProperty(QStringLiteral("hyprcastKeyboardOutput"), &keyboardPresenter);
+    view.rootContext()->setContextProperty(QStringLiteral("hyprcastHistory"), &keyboardPresenter.historyModel());
+    view.rootContext()->setContextProperty(QStringLiteral("hyprcastFadingHistory"), &keyboardPresenter.fadingHistoryModel());
     view.rootContext()->setContextProperty(QStringLiteral("hyprcastBackgroundOpacity"), backgroundOpacity);
+    view.rootContext()->setContextProperty(QStringLiteral("hyprcastPresentation"), presentation);
+    view.rootContext()->setContextProperty(QStringLiteral("hyprcastShowHeldKeys"), parser.isSet(showHeldKeysOption));
     view.setSource(QUrl(QStringLiteral("qrc:/hyprcast/overlay/qml/Overlay.qml")));
     if (view.status() == QQuickView::Error) {
         for (const auto& error : view.errors()) {

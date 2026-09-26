@@ -47,15 +47,23 @@ set_target_properties(hyprcast_overlay_config PROPERTIES AUTOMOC ON)
 target_include_directories(hyprcast_overlay_config PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(hyprcast_overlay_config PUBLIC Qt6::Core Qt6::Gui tomlplusplus::tomlplusplus)
 
+add_library(hyprcast_overlay_theme STATIC src/theme/Theme.cpp src/theme/Theme.hpp)
+set_target_properties(hyprcast_overlay_theme PROPERTIES AUTOMOC ON)
+target_include_directories(hyprcast_overlay_theme PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(hyprcast_overlay_theme PUBLIC Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick hyprcast_overlay_config hyprcast_overlay_input tomlplusplus::tomlplusplus)
+
 add_executable(hyprcast-overlay src/main.cpp)
 qt_add_resources(
   hyprcast-overlay overlay_qml
   PREFIX "/hyprcast/overlay"
-  FILES qml/Overlay.qml qml/TextPresentation.qml qml/KeycapPresentation.qml qml/KeycapEntry.qml)
+  FILES qml/ThemeHost.qml qml/TextPresentation.qml qml/KeycapPresentation.qml qml/KeycapEntry.qml
+        qml/themes/default/theme.toml qml/themes/default/Main.qml)
 
 target_link_libraries(
-  hyprcast-overlay PRIVATE hyprcast_overlay_ipc hyprcast_overlay_input hyprcast_overlay_config Qt6::Core
+  hyprcast-overlay PRIVATE hyprcast_overlay_ipc hyprcast_overlay_input hyprcast_overlay_config hyprcast_overlay_theme Qt6::Core
                            Qt6::Gui Qt6::Qml Qt6::Quick LayerShellQt::Interface)
+
+install(DIRECTORY examples/themes/ DESTINATION share/hyprcast/themes)
 
 if(BUILD_TESTING)
   add_executable(overlay_ipc_tests tests/Ipc.cpp)
@@ -73,6 +81,12 @@ if(BUILD_TESTING)
   add_executable(overlay_config_tests tests/Config.cpp)
   target_link_libraries(overlay_config_tests PRIVATE hyprcast_overlay_config)
   add_test(NAME overlay-config COMMAND overlay_config_tests)
+
+  add_executable(overlay_theme_tests tests/Theme.cpp)
+  target_compile_definitions(overlay_theme_tests PRIVATE HYPRCAST_OVERLAY_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+  target_link_libraries(overlay_theme_tests PRIVATE hyprcast_overlay_theme)
+  add_test(NAME overlay-theme COMMAND overlay_theme_tests)
+  set_tests_properties(overlay-theme PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()
 
 install(TARGETS hyprcast-overlay RUNTIME DESTINATION bin)

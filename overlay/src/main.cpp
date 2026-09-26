@@ -1,6 +1,7 @@
 #include "config/OverlayConfig.hpp"
 #include "input/KeyboardPresenter.hpp"
 #include "ipc/IpcClient.hpp"
+#include "theme/Theme.hpp"
 
 #include <LayerShellQt/Window>
 
@@ -11,11 +12,13 @@
 #include <QDir>
 #include <QGuiApplication>
 #include <QMargins>
-#include <QQmlContext>
+#include <QQmlError>
+#include <QQmlEngine>
 #include <QQuickView>
 #include <QScreen>
 #include <QSize>
 #include <QSurfaceFormat>
+#include <QStandardPaths>
 #include <QTextStream>
 #include <QTimer>
 #include <QUrl>
@@ -309,8 +312,24 @@ int main(int argc, char* argv[]) {
         return 2;
     }
 
+    QStringList themeRoots;
+    for (const QString& dataLocation : QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation)) {
+        themeRoots.push_back(QDir(dataLocation).filePath(QStringLiteral("hyprcast/themes")));
+    }
+    Hyprcast::Overlay::ThemeCatalog themeCatalog(themeRoots, QUrl(QStringLiteral("qrc:/hyprcast/overlay/qml/themes/default/theme.toml")));
+    QStringList                     themeWarnings;
+    QString                         themeDiscoveryError;
+    if (!themeCatalog.discover(&themeWarnings, &themeDiscoveryError)) {
+        writeError(themeDiscoveryError);
+        return 1;
+    }
+    for (const QString& warning : themeWarnings) {
+        qWarning().noquote() << QStringLiteral("hyprcast-overlay: %1").arg(warning);
+    }
+
+    Hyprcast::Overlay::ThemeRuntime*        themeRuntime = nullptr;
     Hyprcast::Overlay::OverlayConfigManager configuration(configPath, explicitConfigPath, std::move(overrides));
-    configuration.setRuntimeValidator([&application](const std::optional<OverlayConfig>& previous, const OverlayConfig& candidate, QString* error) {
+    configuration.setRuntimeValidator([&application, &themeCatalog, &themeRuntime](const std::optional<OverlayConfig>& previous, const OverlayConfig& candidate, QString* error) {
         if (previous && previous->monitor != candidate.monitor) {
             if (error) {
                 *error = QStringLiteral("window.monitor cannot be changed live; restart the overlay to apply it");
@@ -327,6 +346,13 @@ int main(int argc, char* argv[]) {
             if (error) {
                 *error = unavailableScreenMessage(application, candidate.monitor);
             }
+            return false;
+        }
+        QVariantMap effectiveOptions;
+        if (!themeCatalog.validateOptions(candidate.themeId, candidate.themeOptions, &effectiveOptions, error)) {
+            return false;
+        }
+        if (previous && previous->themeId != candidate.themeId && themeRuntime && !themeRuntime->prepareSwitch(candidate, error)) {
             return false;
         }
         return true;
@@ -384,11 +410,12 @@ int main(int argc, char* argv[]) {
     }
     view.setFlags(flags);
 
-    view.rootContext()->setContextProperty(QStringLiteral("hyprcastKeyboardOutput"), &keyboardPresenter);
-    view.rootContext()->setContextProperty(QStringLiteral("hyprcastHistory"), &keyboardPresenter.historyModel());
-    view.rootContext()->setContextProperty(QStringLiteral("hyprcastFadingHistory"), &keyboardPresenter.fadingHistoryModel());
-    view.rootContext()->setContextProperty(QStringLiteral("hyprcastConfig"), &configuration);
-    view.setSource(QUrl(QStringLiteral("qrc:/hyprcast/overlay/qml/Overlay.qml")));
+    QObject::connect(view.engine(), &QQmlEngine::warnings, &view, [](const QList<QQmlError>& warnings) {
+        for (const auto& warning : warnings) {
+            qWarning().noquote() << QStringLiteral("hyprcast-overlay: QML: %1").arg(warning.toString());
+        }
+    });
+    view.setSource(QUrl(QStringLiteral("qrc:/hyprcast/overlay/qml/ThemeHost.qml")));
     if (view.status() == QQuickView::Error) {
         for (const auto& error : view.errors()) {
             writeError(error.toString());
@@ -412,10 +439,19 @@ int main(int argc, char* argv[]) {
     layerWindow->setActivateOnShow(false);
     layerWindow->setCloseOnDismissed(true);
 
+    Hyprcast::Overlay::ThemeRuntime loadedTheme(themeCatalog, view, keyboardPresenter);
+    QString                         themeLoadError;
+    if (!loadedTheme.loadInitial(initialConfig, &themeLoadError)) {
+        writeError(themeLoadError);
+        return 1;
+    }
+    themeRuntime = &loadedTheme;
+
     OverlayConfig appliedConfig = initialConfig;
     QObject::connect(&configuration, &Hyprcast::Overlay::OverlayConfigManager::configurationChanged, &view,
-                     [&configuration, &keyboardPresenter, &view, layerWindow, &appliedConfig, &makeHistoryOptions] {
+                     [&configuration, &keyboardPresenter, &view, &loadedTheme, layerWindow, &appliedConfig, &makeHistoryOptions] {
                          const OverlayConfig& config = configuration.config();
+                         loadedTheme.applyAcceptedConfiguration(config);
                          view.resize(config.width, config.height);
                          layerWindow->setDesiredSize(QSize(config.width, config.height));
                          LayerWindow::Anchors anchors;
@@ -444,13 +480,13 @@ int main(int argc, char* argv[]) {
         application.quit();
     });
 
-    qInfo().noquote() << QStringLiteral("Overlay on %1 (%2x%3 logical px, scale %4), anchor=%5, opacity=%6")
+    qInfo().noquote() << QStringLiteral("Overlay on %1 (%2x%3 logical px, scale %4), anchor=%5, theme=%6")
                              .arg(selectedScreen->name())
                              .arg(initialConfig.width)
                              .arg(initialConfig.height)
                              .arg(selectedScreen->devicePixelRatio())
                              .arg(initialConfig.anchor)
-                             .arg(initialConfig.backgroundOpacity);
+                             .arg(loadedTheme.activeThemeId());
 
     ipcClient.start();
     view.show();

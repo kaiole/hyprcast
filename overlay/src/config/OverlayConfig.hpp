@@ -50,7 +50,9 @@ namespace Hyprcast::Overlay {
         QString     heldKeyBackground    = QStringLiteral("#46536a");
         QString     heldKeyTextColor     = QStringLiteral("#ffffff");
 
-        QString     presentation              = QStringLiteral("text");
+        QString     presentation = QStringLiteral("text");
+        QString     themeId      = QStringLiteral("builtin:default");
+        QVariantMap themeOptions;
         bool        showHeldKeys              = false;
         QString     backspaceMode             = QStringLiteral("delete");
         qsizetype   maxRetainedUtf16CodeUnits = 4096;
@@ -78,14 +80,13 @@ namespace Hyprcast::Overlay {
     };
 
     [[nodiscard]] QString       defaultConfigPath(QString* warning = nullptr);
+    [[nodiscard]] QVariantMap   overlayConfigToQmlValues(const OverlayConfig& config);
     [[nodiscard]] bool          parseOverlayConfig(const QString& path, OverlayConfig* config, QString* error);
     [[nodiscard]] bool          validateOverlayConfig(OverlayConfig* config, QString* error);
     [[nodiscard]] OverlayConfig applyOverrides(OverlayConfig config, const ConfigOverrides& overrides);
 
     class OverlayConfigManager final : public QObject {
         Q_OBJECT
-        Q_PROPERTY(QVariantMap values READ values NOTIFY configurationChanged)
-
       public:
         using RuntimeValidator = std::function<bool(const std::optional<OverlayConfig>& previous, const OverlayConfig& candidate, QString* error)>;
 
@@ -102,8 +103,6 @@ namespace Hyprcast::Overlay {
         [[nodiscard]] QString configPath() const {
             return m_path;
         }
-        [[nodiscard]] QVariantMap values() const;
-
       signals:
         void configurationChanged();
         void reloadRejected(const QString& reason);
@@ -119,7 +118,6 @@ namespace Hyprcast::Overlay {
         bool               m_initialized     = false;
         ConfigOverrides    m_overrides;
         OverlayConfig      m_config;
-        QVariantMap        m_values;
         RuntimeValidator   m_runtimeValidator;
         QFileSystemWatcher m_watcher;
         QTimer             m_reloadTimer;

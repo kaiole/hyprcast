@@ -15,6 +15,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <utility>
+#include <vector>
 
 using namespace Hyprcast::Overlay;
 
@@ -185,20 +186,66 @@ namespace {
             }
         });
 
-        IpcClient client(socketPath);
+        IpcClient        client(socketPath);
+        std::vector<int> deliveredEvents;
+        int              resetNotifications = 0;
+        QObject::connect(
+            &client, &IpcClient::protocolMessageReceived, &client,
+            [&](const ProtocolMessage& message) {
+                deliveredEvents.push_back(static_cast<int>(message.index()));
+                if (std::holds_alternative<KeyMessage>(message)) {
+                    check(client.keyboardCount() == 1, "message is delivered after its connection-state transition");
+                }
+            },
+            Qt::DirectConnection);
+        QObject::connect(&client, &IpcClient::connectionReset, &client, [&] { ++resetNotifications; }, Qt::DirectConnection);
         client.start();
         check(waitUntil([&] { return client.connected() && client.hasCastingState() && client.keyboardCount() == 1 && client.lastEventText().contains(QStringLiteral("pressed")); },
                         2000),
               "async client connects and consumes coalesced state messages");
+        check(deliveredEvents == std::vector<int>{0, 1, 3}, "validated protocol messages are delivered in wire order");
         check(client.paused(), "casting pause state received over socket");
         check(!firstPeer.isNull(), "first server-side connection accepted");
 
         firstPeer->abort();
         check(waitUntil([&] { return !client.connected() && !client.hasCastingState() && client.keyboardCount() == 0; }, 1000), "disconnect clears connection state");
+        check(resetNotifications > 0, "disconnect explicitly notifies consumers to reset held input state");
         check(waitUntil([&] { return connectionCount >= 2 && client.connected() && client.hasCastingState() && client.keyboardCount() == 1; }, 3000),
               "client reconnects after bounded delay and accepts a fresh snapshot");
         check(!client.paused(), "reconnected casting snapshot replaces stale pause state");
         check(client.detailsText().contains(QStringLiteral("reconnected keyboard")), "reconnected keyboard snapshot replaces prior registry");
+        check(deliveredEvents == std::vector<int>{0, 1, 3, 0, 1}, "reconnected messages continue in wire order");
+
+        server.close();
+        QLocalServer::removeServer(socketPath);
+    }
+
+    void testRejectedTransitionIsNotDelivered() {
+        QTemporaryDir tempDirectory;
+        check(tempDirectory.isValid(), "invalid-transition temporary directory created");
+        const QString socketPath = tempDirectory.filePath(QStringLiteral("invalid-transition.sock"));
+        QLocalServer::removeServer(socketPath);
+
+        QLocalServer server;
+        check(server.listen(socketPath), "invalid-transition test server listens");
+        QObject::connect(&server, &QLocalServer::newConnection, &server, [&] {
+            while (server.hasPendingConnections()) {
+                auto* peer = server.nextPendingConnection();
+                peer->write(QByteArrayLiteral("{\"event\":\"casting_state\",\"keyboard_id\":0,\"paused\":false}\n"
+                                              "{\"event\":\"key\",\"keyboard_id\":7,\"time_ms\":1,\"keycode\":30,\"state\":\"pressed\"}\n"));
+                peer->flush();
+            }
+        });
+
+        IpcClient        client(socketPath);
+        std::vector<int> deliveredEvents;
+        bool             rejected = false;
+        QObject::connect(
+            &client, &IpcClient::protocolMessageReceived, &client, [&](const ProtocolMessage& message) { deliveredEvents.push_back(message.index()); }, Qt::DirectConnection);
+        QObject::connect(&client, &IpcClient::protocolError, &client, [&](const QString&) { rejected = true; }, Qt::DirectConnection);
+        client.start();
+        check(waitUntil([&] { return rejected; }, 1000), "invalid connection-state transition is rejected");
+        check(deliveredEvents == std::vector<int>{0}, "rejected transition never reaches the keyboard interpreter");
 
         server.close();
         QLocalServer::removeServer(socketPath);
@@ -212,6 +259,7 @@ int main(int argc, char* argv[]) {
     testConnectionState();
     testRetryUntilServerAppears();
     testAsyncReconnect();
+    testRejectedTransitionIsNotDelivered();
     std::cout << "overlay IPC tests passed\n";
     return 0;
 }

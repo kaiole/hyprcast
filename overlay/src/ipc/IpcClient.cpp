@@ -93,8 +93,6 @@ namespace Hyprcast::Overlay {
         m_reconnectTimer.stop();
         m_connecting = true;
         m_connected  = false;
-        m_state.reset();
-        m_framer.reset();
         m_connectionTimeoutTimer.start(ConnectionTimeoutMs);
         emit stateChanged();
         m_socket.connectToServer(m_socketPath, QIODevice::ReadOnly);
@@ -106,8 +104,6 @@ namespace Hyprcast::Overlay {
         m_connecting = false;
         m_connected  = true;
         m_lastError.clear();
-        m_state.reset();
-        m_framer.reset();
         m_stableConnectionTimer.start(StableConnectionMs);
         emit stateChanged();
     }
@@ -117,8 +113,7 @@ namespace Hyprcast::Overlay {
         m_stableConnectionTimer.stop();
         m_connecting = false;
         m_connected  = false;
-        m_state.reset();
-        m_framer.reset();
+        resetConnectionState();
         emit stateChanged();
         scheduleReconnect();
     }
@@ -168,11 +163,20 @@ namespace Hyprcast::Overlay {
             failConnection(QStringLiteral("Invalid IPC message: %1").arg(error));
             return;
         }
-        if (!m_state.apply(std::move(message), &error)) {
+        if (!m_state.apply(message, &error)) {
             failConnection(QStringLiteral("Invalid IPC state transition: %1").arg(error));
             return;
         }
+        // The state transition is committed before consumers interpret the event. This is
+        // emitted synchronously on the socket's thread so event order is preserved.
+        emit protocolMessageReceived(message);
         emit stateChanged();
+    }
+
+    void IpcClient::resetConnectionState() {
+        m_state.reset();
+        m_framer.reset();
+        emit connectionReset();
     }
 
     void IpcClient::scheduleReconnect() {

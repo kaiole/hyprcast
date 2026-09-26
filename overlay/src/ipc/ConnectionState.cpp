@@ -1,15 +1,14 @@
 #include "ConnectionState.hpp"
 
 #include <type_traits>
-#include <utility>
 
 namespace Hyprcast::Overlay {
-    bool ConnectionState::apply(ProtocolMessage message, QString* error) {
+    bool ConnectionState::apply(const ProtocolMessage& message, QString* error) {
         if (error) {
             error->clear();
         }
         return std::visit(
-            [this, error](auto&& event) {
+            [this, error](const auto& event) {
                 using T = std::decay_t<decltype(event)>;
                 if constexpr (std::is_same_v<T, CastingStateMessage>) {
                     m_paused           = event.paused;
@@ -26,12 +25,12 @@ namespace Hyprcast::Overlay {
                     const QString name = event.name;
                     m_keyboards.insert(id,
                                        KeyboardState{.id          = id,
-                                                     .name        = std::move(event.name),
+                                                     .name        = event.name,
                                                      .depressed   = event.depressed,
                                                      .latched     = event.latched,
                                                      .locked      = event.locked,
                                                      .group       = event.group,
-                                                     .keymap      = std::move(event.keymap),
+                                                     .keymap      = event.keymap,
                                                      .repeatRate  = event.repeatRate,
                                                      .repeatDelay = event.repeatDelay});
                     m_lastEventSummary = QStringLiteral("Keyboard subscribed: %1 (#%2)").arg(name).arg(id);
@@ -70,7 +69,7 @@ namespace Hyprcast::Overlay {
                     if (!requireKeyboard(event.keyboardId, error)) {
                         return false;
                     }
-                    m_keyboards[event.keyboardId].keymap = std::move(event.keymap);
+                    m_keyboards[event.keyboardId].keymap = event.keymap;
                     m_lastEventSummary                   = QStringLiteral("Keymap updated · keyboard #%1").arg(event.keyboardId);
                     return true;
                 } else if constexpr (std::is_same_v<T, RepeatInfoMessage>) {
@@ -84,7 +83,7 @@ namespace Hyprcast::Overlay {
                     return true;
                 }
             },
-            std::move(message));
+            message);
     }
 
     void ConnectionState::reset() noexcept {

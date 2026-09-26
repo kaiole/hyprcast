@@ -45,6 +45,8 @@ namespace Hyprcast::Overlay {
       signals:
         void stateChanged();
         void protocolError(const QString& reason);
+        void connectionReset();
+        void protocolMessageReceived(const ProtocolMessage& message);
 
       private:
         void                    connectNow();
@@ -53,6 +55,7 @@ namespace Hyprcast::Overlay {
         void                    handleSocketError(QLocalSocket::LocalSocketError error);
         void                    handleReadyRead();
         void                    handleFrame(const QByteArray& frame);
+        void                    resetConnectionState();
         void                    scheduleReconnect();
         void                    failConnection(const QString& reason);
 

@@ -459,6 +459,24 @@ namespace Hyprcast::Overlay {
             }
             return labels.join(QStringLiteral(" + "));
         }
+
+        QStringList heldKeys() const {
+            QStringList labels;
+            for (const auto& [keyboardId, keyboard] : keyboards) {
+                Q_UNUSED(keyboardId);
+                for (const auto& [keycode, key] : keyboard.pressed) {
+                    Q_UNUSED(keycode);
+                    if (key.modifier) {
+                        labels.push_back(key.modifierLabel);
+                    } else if (key.action.kind == InterpretedActionKind::Text) {
+                        labels.push_back(key.action.text);
+                    } else if (!key.action.key.isEmpty()) {
+                        labels.push_back(key.action.key);
+                    }
+                }
+            }
+            return labels;
+        }
     };
 
     KeyboardInterpreter::KeyboardInterpreter() : m_impl(std::make_unique<Impl>()) {}
@@ -543,6 +561,10 @@ namespace Hyprcast::Overlay {
 
     QString KeyboardInterpreter::heldModifiers() const {
         return m_impl ? m_impl->heldModifiers() : QString{};
+    }
+
+    QStringList KeyboardInterpreter::heldKeys() const {
+        return m_impl ? m_impl->heldKeys() : QStringList{};
     }
 
     void KeyboardInterpreter::reset() noexcept {

@@ -18,6 +18,7 @@ add_library(
   hyprcast_overlay_history STATIC
   src/history/InputHistory.cpp
   src/history/InputHistory.hpp)
+set_target_properties(hyprcast_overlay_history PROPERTIES AUTOMOC ON)
 target_include_directories(hyprcast_overlay_history PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(hyprcast_overlay_history PUBLIC Qt6::Core)
 
@@ -35,7 +36,7 @@ add_executable(hyprcast-overlay src/main.cpp)
 qt_add_resources(
   hyprcast-overlay overlay_qml
   PREFIX "/hyprcast/overlay"
-  FILES qml/Overlay.qml)
+  FILES qml/Overlay.qml qml/TextPresentation.qml qml/KeycapPresentation.qml qml/KeycapEntry.qml)
 
 target_link_libraries(
   hyprcast-overlay PRIVATE hyprcast_overlay_ipc hyprcast_overlay_input Qt6::Core

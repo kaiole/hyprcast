@@ -130,6 +130,37 @@ namespace Hyprcast::Overlay {
             return true;
         }
 
+        bool readTheme(const Table& root, OverlayConfig* config, QString* error) {
+            const Table* table = readTable(root, "theme", error);
+            if (!table) {
+                return !error || error->isEmpty();
+            }
+            if (!hasOnlyKeys(*table, {"id", "options"}, QStringLiteral("theme"), error) || !readString(*table, "id", &config->themeId, error)) {
+                return false;
+            }
+            const Table* options = readTable(*table, "options", error);
+            if (!options) {
+                return !error || error->isEmpty();
+            }
+            for (const auto& [key, node] : *options) {
+                const QString name = QString::fromUtf8(key.str().data(), static_cast<qsizetype>(key.str().size()));
+                QVariant      value;
+                if (const auto item = node.value_exact<std::string>()) {
+                    value = QString::fromUtf8(item->data(), static_cast<qsizetype>(item->size()));
+                } else if (const auto item = node.value_exact<bool>()) {
+                    value = *item;
+                } else if (const auto item = node.value_exact<std::int64_t>()) {
+                    value = QVariant::fromValue<qlonglong>(*item);
+                } else if (const auto item = node.value_exact<double>()) {
+                    value = *item;
+                } else {
+                    return fail(error, QStringLiteral("'theme.options.%1' must be a string, boolean, integer, or number").arg(name));
+                }
+                config->themeOptions.insert(name, std::move(value));
+            }
+            return true;
+        }
+
         bool readFontWeight(const Table& table, int* output, QString* error) {
             QString weight;
             if (!readString(table, "font_weight", &weight, error)) {
@@ -194,7 +225,7 @@ namespace Hyprcast::Overlay {
         }
 
         bool readConfigTables(const Table& root, OverlayConfig* config, QString* error) {
-            if (!hasOnlyKeys(root, {"window", "appearance", "display", "history", "repeat", "expiration"}, {}, error)) {
+            if (!hasOnlyKeys(root, {"window", "appearance", "display", "history", "repeat", "expiration", "theme"}, {}, error)) {
                 return false;
             }
 
@@ -236,6 +267,10 @@ namespace Hyprcast::Overlay {
                     return false;
                 }
             } else if (error && !error->isEmpty()) {
+                return false;
+            }
+
+            if (!readTheme(root, config, error)) {
                 return false;
             }
 
@@ -318,6 +353,10 @@ namespace Hyprcast::Overlay {
                     {QStringLiteral("showHeldKeys"), c.showHeldKeys}};
         }
     } // namespace
+
+    QVariantMap overlayConfigToQmlValues(const OverlayConfig& config) {
+        return toQmlValues(config);
+    }
 
     QString defaultConfigPath(QString* warning) {
         if (warning) {
@@ -414,6 +453,9 @@ namespace Hyprcast::Overlay {
             !validateColor(config->heldKeyBackground, QStringLiteral("appearance.held_key_background"), error) ||
             !validateColor(config->heldKeyTextColor, QStringLiteral("appearance.held_key_text_color"), error)) {
             return false;
+        }
+        if (config->themeId.trimmed().isEmpty() || config->themeId.size() > 128 || config->themeId.contains(QChar::Null)) {
+            return fail(error, QStringLiteral("'theme.id' must be a non-empty theme identifier (max 128 characters)"));
         }
         config->presentation = config->presentation.toLower();
         if (config->presentation != QStringLiteral("text") && config->presentation != QStringLiteral("keycaps")) {
@@ -514,10 +556,6 @@ namespace Hyprcast::Overlay {
         refreshWatchTargets();
     }
 
-    QVariantMap OverlayConfigManager::values() const {
-        return m_values;
-    }
-
     bool OverlayConfigManager::loadCandidate(OverlayConfig* candidate, QString* error) const {
         QString localError;
         if (!error) {
@@ -556,7 +594,6 @@ namespace Hyprcast::Overlay {
         }
         if (!m_initialized || candidate != m_config) {
             m_config      = std::move(candidate);
-            m_values      = toQmlValues(m_config);
             m_initialized = true;
             emit configurationChanged();
         }

@@ -1,35 +1,31 @@
 import QtQuick
 
 Item {
-    id: root
-
     property var historyModel: null
 
     ListView {
         id: historyView
-
         anchors.fill: parent
         clip: true
         orientation: ListView.Horizontal
-        spacing: hyprcastConfig.values.keycapSpacing
+        spacing: hyprcast.settings.keycapSpacing
         interactive: false
         boundsBehavior: Flickable.StopAtBounds
         cacheBuffer: width
-        model: root.historyModel
+        model: historyModel
 
         delegate: KeycapEntry {
             kind: model.kind
             text: model.text
             keyLabel: model.key
             modifiers: model.modifiers
-            // Preserve keycap boundaries at the clipped left edge; the newest
-            // entries stay right-aligned while an overflowing oldest cap is hidden whole.
+            // Keep caps whole at the leading edge while following the newest retained entry.
             visible: x >= historyView.contentX - 0.5
         }
 
         function followTail() {
             if (count > 0)
-                positionViewAtEnd();
+                positionViewAtEnd()
         }
 
         onCountChanged: Qt.callLater(followTail)

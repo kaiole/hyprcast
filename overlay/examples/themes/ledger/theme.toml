@@ -1,0 +1,17 @@
+[theme]
+id = "ledger"
+name = "Ledger timeline"
+api_version = 1
+entry = "Main.qml"
+
+[options.accent]
+type = "color"
+default = "#72d6b0"
+description = "Accent used for the active-history rail and held-key markers."
+
+[options.item_spacing]
+type = "integer"
+default = 5
+minimum = 0
+maximum = 24
+description = "Vertical spacing between recent history actions, in logical pixels."

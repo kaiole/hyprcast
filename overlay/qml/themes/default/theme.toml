@@ -1,0 +1,5 @@
+[theme]
+id = "default"
+name = "Hyprcast default"
+api_version = 1
+entry = "Main.qml"

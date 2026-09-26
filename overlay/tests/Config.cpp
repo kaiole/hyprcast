@@ -57,12 +57,19 @@ int main(int argc, char** argv) {
     OverlayConfig defaults;
     check(defaults.width == 600 && defaults.height == 88 && defaults.anchor == QStringLiteral("bottom-right"), "use built-in window defaults");
     check(defaults.maxRetainedUtf16CodeUnits == 4096 && defaults.backspaceMode == QStringLiteral("delete"), "preserve documented history defaults");
+    check(defaults.themeId == QStringLiteral("builtin:default"), "select the bundled theme for legacy and absent configurations");
 
     OverlayConfig config;
     QString       error;
     check(parse("[appearance]\nfont_size = 36\nbackground_color = '#112233'\n[display]\npresentation = 'keycaps'\n", &config, &error), "load a valid partial TOML file");
     check(config.fontSize == 36 && config.backgroundColor == QStringLiteral("#112233"), "read appearance overrides");
-    check(config.presentation == QStringLiteral("keycaps") && config.width == 600, "partial file inherits defaults");
+    check(config.presentation == QStringLiteral("keycaps") && config.width == 600 && config.themeId == QStringLiteral("builtin:default"),
+          "legacy partial files keep their presentation and inherit the bundled theme");
+    check(parse("[theme]\nid='ledger'\n[theme.options]\nitem_spacing=7\naccent='#abcdef'\n", &config, &error), "parse theme selection and scalar options");
+    check(config.themeId == QStringLiteral("ledger") && config.themeOptions.value(QStringLiteral("item_spacing")).toLongLong() == 7 &&
+              config.themeOptions.value(QStringLiteral("accent")).toString() == QStringLiteral("#abcdef"),
+          "preserve dynamic theme option values for descriptor validation");
+    check(!parse("[theme.options]\nbad=[1,2]\n", &config, &error), "reject non-scalar theme option values");
 
     ConfigOverrides overrides;
     overrides.width          = 600;

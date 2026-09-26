@@ -8,13 +8,13 @@ Item {
     property string keyLabel: ""
     property var modifiers: []
     readonly property var labels: {
-        if (kind === "chord") {
-            const result = Array.from(modifiers);
-            if (keyLabel.length > 0)
-                result.push(keyLabel);
-            return result;
+        if (root.kind === "chord") {
+            const result = Array.from(root.modifiers)
+            if (root.keyLabel.length > 0)
+                result.push(root.keyLabel)
+            return result
         }
-        return [kind === "text" ? text : keyLabel];
+        return [root.kind === "text" ? root.text : root.keyLabel]
     }
 
     width: caps.implicitWidth
@@ -22,29 +22,29 @@ Item {
 
     Row {
         id: caps
-        spacing: hyprcastConfig.values.keycapInnerSpacing
+        spacing: hyprcast.settings.keycapInnerSpacing
 
         Repeater {
-            model: root.labels
+            model: labels
 
             delegate: Rectangle {
                 required property string modelData
 
-                implicitWidth: label.implicitWidth + hyprcastConfig.values.keycapPaddingX * 2
-                implicitHeight: hyprcastConfig.values.keycapHeight
-                radius: hyprcastConfig.values.keycapRadius
-                color: root.kind === "text" ? hyprcastConfig.values.keycapTextBackground : hyprcastConfig.values.keycapKeyBackground
+                implicitWidth: label.implicitWidth + hyprcast.settings.keycapPaddingX * 2
+                implicitHeight: hyprcast.settings.keycapHeight
+                radius: hyprcast.settings.keycapRadius
+                color: root.kind === "text" ? hyprcast.settings.keycapTextBackground : hyprcast.settings.keycapKeyBackground
                 border.width: 1
-                border.color: hyprcastConfig.values.keycapBorderColor
+                border.color: hyprcast.settings.keycapBorderColor
 
                 Text {
                     id: label
                     anchors.centerIn: parent
                     text: modelData
-                    color: hyprcastConfig.values.keycapTextColor
-                    font.family: hyprcastConfig.values.fontFamily
-                    font.pixelSize: hyprcastConfig.values.keycapFontSize
-                    font.weight: hyprcastConfig.values.fontWeight
+                    color: hyprcast.settings.keycapTextColor
+                    font.family: hyprcast.settings.fontFamily
+                    font.pixelSize: hyprcast.settings.keycapFontSize
+                    font.weight: hyprcast.settings.fontWeight
                 }
             }
         }

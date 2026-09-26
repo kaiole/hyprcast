@@ -234,11 +234,9 @@ namespace {
         heldDuringFade.processMessage(key(1, 30, false), start + std::chrono::milliseconds(2));
         heldDuringFade.processMessage(key(1, 42, true), start + std::chrono::milliseconds(3));
         heldDuringFade.advance(start + std::chrono::milliseconds(1001));
-        check(heldDuringFade.fading() && heldDuringFade.heldKeys() == QStringList{QStringLiteral("Shift")},
-              "held modifier state remains live when history enters its fade");
+        check(heldDuringFade.fading() && heldDuringFade.heldKeys() == QStringList{QStringLiteral("Shift")}, "held modifier state remains live when history enters its fade");
         heldDuringFade.advance(start + std::chrono::milliseconds(1251));
-        check(!heldDuringFade.fading() && heldDuringFade.heldKeys() == QStringList{QStringLiteral("Shift")},
-              "finishing the history fade does not clear a still-held modifier");
+        check(!heldDuringFade.fading() && heldDuringFade.heldKeys() == QStringList{QStringLiteral("Shift")}, "finishing the history fade does not clear a still-held modifier");
 
         KeyboardPresenter recovery;
         recovery.setExpiration(1000, 250, start);
@@ -257,6 +255,38 @@ namespace {
         immediate.processMessage(key(1, 30, true), start + std::chrono::milliseconds(1));
         immediate.advance(start + std::chrono::milliseconds(501));
         check(immediate.historyModel().rowCount() == 0 && !immediate.fading(), "zero fade duration expires history immediately");
+
+        KeyboardPresenter expirationReload;
+        expirationReload.setExpiration(1000, 0, start);
+        expirationReload.processMessage(snapshot(keymap), start);
+        expirationReload.processMessage(key(1, 30, true), start + std::chrono::milliseconds(1));
+        expirationReload.setExpiration(2000, 0, start + std::chrono::milliseconds(500));
+        expirationReload.advance(start + std::chrono::milliseconds(1499));
+        check(expirationReload.historyModel().rowCount() == 1, "live inactivity changes restart the current history deadline");
+        expirationReload.advance(start + std::chrono::milliseconds(2500));
+        check(expirationReload.historyModel().rowCount() == 0, "history expires using the newly accepted inactivity interval");
+
+        KeyboardPresenter fadeOnlyReload;
+        fadeOnlyReload.setExpiration(1000, 0, start);
+        fadeOnlyReload.processMessage(snapshot(keymap), start);
+        fadeOnlyReload.processMessage(key(1, 30, true), start + std::chrono::milliseconds(1));
+        fadeOnlyReload.setExpiration(1000, 250, start + std::chrono::milliseconds(500));
+        fadeOnlyReload.advance(start + std::chrono::milliseconds(1001));
+        check(fadeOnlyReload.fading(), "changing fade duration does not reset the active inactivity deadline");
+
+        KeyboardPresenter reconfiguredFade;
+        reconfiguredFade.setExpiration(1000, 250, start);
+        reconfiguredFade.processMessage(snapshot(keymap), start);
+        reconfiguredFade.processMessage(key(1, 30, true), start + std::chrono::milliseconds(1));
+        reconfiguredFade.advance(start + std::chrono::milliseconds(1001));
+        reconfiguredFade.setExpiration(0, 500, start + std::chrono::milliseconds(1100));
+        check(reconfiguredFade.fading() && reconfiguredFade.fadeDurationMs() == 500, "live fade-duration changes restart the active visual fade");
+        reconfiguredFade.advance(start + std::chrono::milliseconds(1251));
+        check(reconfiguredFade.fading(), "the old fade deadline cannot clear a reconfigured snapshot");
+        reconfiguredFade.advance(start + std::chrono::milliseconds(1599));
+        check(reconfiguredFade.fading(), "reconfigured fade remains visible until its new deadline");
+        reconfiguredFade.advance(start + std::chrono::milliseconds(1600));
+        check(!reconfiguredFade.fading(), "reconfigured fade clears at its new deadline even when expiration is disabled");
     }
 
     void testDeterministicRepeatsAndCancellation() {
@@ -288,6 +318,17 @@ namespace {
         check(interpreter.heldModifiers().isEmpty(), "pause clears observed held state");
         check(interpreter.nextRepeatDeadline() == TimePoint::max(), "pause cancels active repeats");
         check(interpreter.advance(start + std::chrono::seconds(20)).empty(), "paused key does not repeat");
+
+        KeyboardInterpreter toggle;
+        send(toggle, snapshot(keymap, 2, 10, 500), start);
+        process(toggle, key(2, 30, true), start);
+        toggle.setRepeatsEnabled(false, start + std::chrono::milliseconds(100));
+        check(toggle.nextRepeatDeadline() == TimePoint::max(), "disabling repeat removes existing held-key deadlines");
+        check(toggle.advance(start + std::chrono::seconds(2)).empty(), "a disabled repeat cannot fire later");
+        toggle.setRepeatsEnabled(true, start + std::chrono::seconds(2));
+        check(toggle.advance(start + std::chrono::milliseconds(2499)).empty(), "enabling repeat restarts the configured initial delay");
+        repeated = toggle.advance(start + std::chrono::milliseconds(2500));
+        check(repeated.size() == 1 && repeated.front().repeated, "repeat resumes for a key that remains held after re-enabling");
     }
 } // namespace
 

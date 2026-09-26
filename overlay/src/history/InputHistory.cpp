@@ -154,6 +154,20 @@ namespace Hyprcast::Overlay {
         return true;
     }
 
+    void InputHistory::setOptions(InputHistoryOptions options) {
+        options.maxRetainedUtf16CodeUnits = std::max<qsizetype>(0, options.maxRetainedUtf16CodeUnits);
+        if (options.backspaceMode == m_options.backspaceMode && options.maxRetainedUtf16CodeUnits == m_options.maxRetainedUtf16CodeUnits) {
+            return;
+        }
+
+        const QString previousText = displayText();
+        m_options                  = options;
+        trimRetention();
+        if (displayText() != previousText) {
+            emit displayTextChanged();
+        }
+    }
+
     qsizetype InputHistory::retainedUtf16CodeUnits() const {
         qsizetype size = 0;
         QChar     lastChar{};
@@ -225,7 +239,11 @@ namespace Hyprcast::Overlay {
 
     void InputHistory::trimRetention() {
         if (m_options.maxRetainedUtf16CodeUnits == 0) {
-            clear();
+            if (!m_entries.empty()) {
+                beginRemoveRows({}, 0, rowCount() - 1);
+                m_entries.clear();
+                endRemoveRows();
+            }
             return;
         }
 

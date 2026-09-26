@@ -11,7 +11,7 @@ Item {
         anchors.fill: parent
         clip: true
         orientation: ListView.Horizontal
-        spacing: 6
+        spacing: hyprcastConfig.values.keycapSpacing
         interactive: false
         boundsBehavior: Flickable.StopAtBounds
         cacheBuffer: width

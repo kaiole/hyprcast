@@ -46,6 +46,7 @@ namespace Hyprcast::Overlay {
         [[nodiscard]] Clock::time_point              nextRepeatDeadline() const noexcept;
         [[nodiscard]] QString                        heldModifiers() const;
         [[nodiscard]] QStringList                    heldKeys() const;
+        void                                         setRepeatsEnabled(bool enabled, Clock::time_point now = Clock::now());
         void                                         reset() noexcept;
 
       private:

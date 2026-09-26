@@ -9,8 +9,9 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: 12
-        color: Qt.rgba(0.055, 0.065, 0.085, hyprcastBackgroundOpacity)
+        radius: hyprcastConfig.values.cornerRadius
+        color: hyprcastConfig.values.backgroundColor
+        opacity: hyprcastConfig.values.backgroundOpacity
     }
 
     Item {
@@ -19,16 +20,16 @@ Item {
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: heldRow.visible ? heldRow.top : parent.bottom
-        anchors.leftMargin: 16
-        anchors.rightMargin: 16
-        anchors.topMargin: hyprcastShowHeldKeys && heldRow.visible ? 8 : 0
+        anchors.leftMargin: hyprcastConfig.values.historyPaddingX
+        anchors.rightMargin: hyprcastConfig.values.historyPaddingX
+        anchors.topMargin: hyprcastConfig.values.showHeldKeys && heldRow.visible ? 8 : 0
         anchors.bottomMargin: heldRow.visible ? 4 : 0
 
         Loader {
             id: activePresentation
             anchors.fill: parent
             property var historyModel: hyprcastHistory
-            source: hyprcastPresentation === "keycaps" ? "KeycapPresentation.qml" : "TextPresentation.qml"
+            source: hyprcastConfig.values.presentation === "keycaps" ? "KeycapPresentation.qml" : "TextPresentation.qml"
             onLoaded: item.historyModel = activePresentation.historyModel
         }
 
@@ -39,7 +40,7 @@ Item {
             property real snapshotOpacity: 1
             opacity: snapshotOpacity
             visible: hyprcastKeyboardOutput.fading
-            source: hyprcastPresentation === "keycaps" ? "KeycapPresentation.qml" : "TextPresentation.qml"
+            source: hyprcastConfig.values.presentation === "keycaps" ? "KeycapPresentation.qml" : "TextPresentation.qml"
             onLoaded: item.historyModel = fadingPresentation.historyModel
 
             NumberAnimation {
@@ -59,12 +60,12 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        anchors.leftMargin: 16
-        anchors.rightMargin: 16
-        anchors.bottomMargin: 10
-        height: visible ? 22 : 0
-        spacing: 5
-        visible: hyprcastShowHeldKeys && hyprcastKeyboardOutput.heldKeyCount > 0
+        anchors.leftMargin: hyprcastConfig.values.heldRowPaddingX
+        anchors.rightMargin: hyprcastConfig.values.heldRowPaddingX
+        anchors.bottomMargin: hyprcastConfig.values.heldRowPaddingBottom
+        height: visible ? hyprcastConfig.values.heldKeyHeight : 0
+        spacing: hyprcastConfig.values.heldKeySpacing
+        visible: hyprcastConfig.values.showHeldKeys && hyprcastKeyboardOutput.heldKeyCount > 0
 
         Repeater {
             model: hyprcastKeyboardOutput.heldKeys
@@ -72,18 +73,19 @@ Item {
             delegate: Rectangle {
                 required property string modelData
 
-                implicitWidth: label.implicitWidth + 14
-                implicitHeight: 22
-                radius: 5
-                color: "#46536a"
+                implicitWidth: label.implicitWidth + hyprcastConfig.values.heldKeyPaddingX * 2
+                implicitHeight: hyprcastConfig.values.heldKeyHeight
+                radius: hyprcastConfig.values.heldKeyRadius
+                color: hyprcastConfig.values.heldKeyBackground
 
                 Text {
                     id: label
                     anchors.centerIn: parent
                     text: modelData
-                    color: "#FFFFFF"
-                    font.pixelSize: 14
-                    font.weight: Font.Medium
+                    color: hyprcastConfig.values.heldKeyTextColor
+                    font.family: hyprcastConfig.values.fontFamily
+                    font.pixelSize: hyprcastConfig.values.heldFontSize
+                    font.weight: hyprcastConfig.values.fontWeight
                 }
             }
         }
@@ -97,6 +99,14 @@ Item {
             fadingPresentation.snapshotOpacity = 1
             if (hyprcastKeyboardOutput.fading)
                 snapshotFade.start()
+        }
+
+        function onFadeDurationMsChanged() {
+            if (hyprcastKeyboardOutput.fading) {
+                snapshotFade.stop()
+                fadingPresentation.snapshotOpacity = 1
+                snapshotFade.start()
+            }
         }
     }
 

@@ -1,6 +1,16 @@
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Network Qml Quick)
 find_package(LayerShellQt REQUIRED)
 find_package(PkgConfig REQUIRED)
+find_package(tomlplusplus 3.4 CONFIG QUIET)
+if(NOT TARGET tomlplusplus::tomlplusplus)
+  include(FetchContent)
+  FetchContent_Declare(
+    tomlplusplus
+    GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
+    GIT_TAG v3.4.0
+    GIT_SHALLOW TRUE)
+  FetchContent_MakeAvailable(tomlplusplus)
+endif()
 pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET "xkbcommon>=0.7")
 
 add_library(
@@ -32,6 +42,11 @@ set_target_properties(hyprcast_overlay_input PROPERTIES AUTOMOC ON)
 target_include_directories(hyprcast_overlay_input PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(hyprcast_overlay_input PUBLIC Qt6::Core hyprcast_overlay_history PkgConfig::XKBCOMMON)
 
+add_library(hyprcast_overlay_config STATIC src/config/OverlayConfig.cpp src/config/OverlayConfig.hpp)
+set_target_properties(hyprcast_overlay_config PROPERTIES AUTOMOC ON)
+target_include_directories(hyprcast_overlay_config PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(hyprcast_overlay_config PUBLIC Qt6::Core Qt6::Gui tomlplusplus::tomlplusplus)
+
 add_executable(hyprcast-overlay src/main.cpp)
 qt_add_resources(
   hyprcast-overlay overlay_qml
@@ -39,7 +54,7 @@ qt_add_resources(
   FILES qml/Overlay.qml qml/TextPresentation.qml qml/KeycapPresentation.qml qml/KeycapEntry.qml)
 
 target_link_libraries(
-  hyprcast-overlay PRIVATE hyprcast_overlay_ipc hyprcast_overlay_input Qt6::Core
+  hyprcast-overlay PRIVATE hyprcast_overlay_ipc hyprcast_overlay_input hyprcast_overlay_config Qt6::Core
                            Qt6::Gui Qt6::Qml Qt6::Quick LayerShellQt::Interface)
 
 if(BUILD_TESTING)
@@ -54,6 +69,10 @@ if(BUILD_TESTING)
   add_executable(overlay_history_tests tests/History.cpp)
   target_link_libraries(overlay_history_tests PRIVATE hyprcast_overlay_history)
   add_test(NAME overlay-history COMMAND overlay_history_tests)
+
+  add_executable(overlay_config_tests tests/Config.cpp)
+  target_link_libraries(overlay_config_tests PRIVATE hyprcast_overlay_config)
+  add_test(NAME overlay-config COMMAND overlay_config_tests)
 endif()
 
 install(TARGETS hyprcast-overlay RUNTIME DESTINATION bin)

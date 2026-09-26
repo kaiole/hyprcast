@@ -7,12 +7,13 @@ Item {
 
     Text {
         anchors.fill: parent
-        anchors.leftMargin: 20
-        anchors.rightMargin: 20
+        anchors.leftMargin: hyprcastConfig.values.textExtraPaddingX
+        anchors.rightMargin: hyprcastConfig.values.textExtraPaddingX
         text: root.historyModel ? root.historyModel.displayText : ""
-        color: "#FFFFFF"
-        font.pixelSize: 30
-        font.weight: Font.Medium
+        color: hyprcastConfig.values.foregroundColor
+        font.family: hyprcastConfig.values.fontFamily
+        font.pixelSize: hyprcastConfig.values.fontSize
+        font.weight: hyprcastConfig.values.fontWeight
         wrapMode: Text.NoWrap
         elide: Text.ElideLeft
         verticalAlignment: Text.AlignVCenter

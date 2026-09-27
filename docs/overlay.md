@@ -1,28 +1,20 @@
-# Hyprcast overlay
+# Overlay configuration and themes
 
 The separate Qt Quick + LayerShellQt executable displays interpreted keyboard input. Its bundled default theme shows typed characters, special-key labels, and shortcut chords using one editable history; users may select text or keycap rendering. User-loadable QML themes can change the composition while the C++ backend retains ownership of input interpretation, history, and window lifecycle. Held-key feedback is optional. Connection and protocol diagnostics stay in logs.
 
-## Build
-
-Install Qt 6.5+ (Core, Gui, Network, Qml, Quick), LayerShellQt, `libxkbcommon` 0.7+ development files, XKB keymap data for the input tests, and toml++ 3.4+. CMake uses an installed toml++ package when available, otherwise fetches the pinned v3.4.0 source. Build the overlay without the Hyprland plugin:
-
-```sh
-cmake --preset debug -DHYPRCAST_BUILD_PLUGIN=OFF -DHYPRCAST_BUILD_OVERLAY=ON
-cmake --build --preset debug --target hyprcast-overlay overlay_ipc_tests overlay_input_tests overlay_history_tests overlay_config_tests overlay_theme_tests
-ctest --preset debug
-```
+For build and installation instructions, see the [project README](../README.md).
 
 ## Run
 
 ### One-key operation
 
-Load the Hyprcast plugin through your normal Hyprland configuration, then bind a key to the installed executable:
+Load the Hyprcast plugin through your normal Hyprland configuration (see the [README](../README.md)), then bind a key to the installed executable:
 
 ```lua
-hl.bind("ALT + O", hl.dsp.exec_cmd("hyprcast-overlay toggle"))
+hl.bind("SUPER + O", hl.dsp.exec_cmd("hyprcast-overlay toggle"))
 ```
 
-For a source checkout, use the absolute path to `build/debug/overlay/hyprcast-overlay` instead. Rebuild **and reload the plugin** as well as rebuilding the overlay: capture commands require the updated server.
+For a source checkout, substitute the absolute path to `build/debug/overlay/hyprcast-overlay`. When updating the capture protocol, rebuild **and reload the plugin** as well as rebuilding the overlay.
 
 - First press starts the overlay and requests capture enabled after connecting to the plugin.
 - Later presses contact the resident overlay: disable capture, clear history and fade snapshots, and hide; or enable capture and show it again.
@@ -222,4 +214,4 @@ Held-key feedback reports keys observed as currently pressed, including modifier
 
 ## Validation
 
-The debug suite covers parser validation, semantic deletion/retention, counted-repeat projection and stable model notifications, symbol identity/substitution, and theme loading; the lifecycle suite also covers single-instance ownership, stale-socket recovery, forwarded toggles, acknowledgements, busy/unavailable errors, and reconnect safety. The current 25-test run passes 24 tests; the offscreen theme suite has symbol-mapping failures also reproduced from the unmodified HEAD. Offscreen QML tests assert default-panel width growth/shrink/capping, ledger timeline height growth/shrink/capping, with-content visibility, and transparent-fill/border independence. Theme tests also cover user/system/bundled precedence, API/manifest/options validation, live option updates, rejected theme switches, and history preservation. An isolated acceptance pack at `/tmp/hyprcast-customization-acceptance/` provides a safe no-socket QML smoke script and a separately confirmed live-input launcher. These checks do not verify physical input/repeat timing, installed font glyphs, or compositor rendering under Hyprland.
+Run the debug test suite with `ctest --preset debug` after building the test targets. The automated tests cover configuration, input interpretation, history, IPC/lifecycle, and theme behavior (including offscreen QML checks). They do not verify physical input timing, installed font glyphs, or rendering under a live Hyprland session; test those separately before release.

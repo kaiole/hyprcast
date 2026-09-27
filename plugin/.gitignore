@@ -2,4 +2,3 @@
 /Hyprland/
 *.so
 .gdbinit
-/dev/hyprcast.lua

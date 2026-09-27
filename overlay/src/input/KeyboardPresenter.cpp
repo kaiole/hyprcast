@@ -73,6 +73,13 @@ namespace Hyprcast::Overlay {
         scheduleTimer(Clock::now());
     }
 
+    void KeyboardPresenter::clearHistory() {
+        m_history.clear();
+        m_expirationDeadline.reset();
+        finishFade();
+        scheduleTimer(Clock::now());
+    }
+
     void KeyboardPresenter::setHistoryOptions(InputHistoryOptions options) {
         const auto previousPresentation = m_history.presentationOptions();
         m_history.setOptions(options);

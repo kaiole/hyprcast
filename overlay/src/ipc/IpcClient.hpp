@@ -22,6 +22,8 @@ namespace Hyprcast::Overlay {
         ~IpcClient() override;
 
         void               start();
+        bool               setCaptureEnabled(bool enabled);
+        void               restartConnection();
 
         [[nodiscard]] bool connected() const noexcept {
             return m_connected;

@@ -16,6 +16,7 @@ local loadHyprcast =
 
 hl.bind(mainMod .. " + Return", hl.dsp.exec_cmd(terminal))
 hl.bind(mainMod .. " + P", hl.dsp.exec_cmd(loadHyprcast))
+hl.bind(mainMod .. " + O", hl.dsp.exec_cmd("/home/red/personal/hyprcast/build/debug/overlay/hyprcast-overlay toggle"))
 hl.bind(mainMod .. " + Q", hl.dsp.window.close())
 hl.bind(mainMod .. " + M", hl.dsp.exit())
 hl.bind(mainMod .. " + R", hl.dsp.exec_cmd(hyprctl .. " reload"))

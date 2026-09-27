@@ -46,6 +46,7 @@ Item {
             anchors.fill: parent
             radius: hyprcast.settings.cornerRadius
             visible: root.panelDecorationVisible
+            opacity: hyprcast.fading && hyprcast.historyCount === 0 && !root.heldVisible ? fadingPresentation.snapshotOpacity : 1
             color: {
                 const base = Qt.color(hyprcast.settings.backgroundColor)
                 return Qt.rgba(base.r, base.g, base.b, base.a * hyprcast.settings.backgroundOpacity)
@@ -58,6 +59,7 @@ Item {
             radius: hyprcast.settings.cornerRadius
             color: "transparent"
             visible: root.panelDecorationVisible && hyprcast.settings.panelBorderWidth > 0
+            opacity: hyprcast.fading && hyprcast.historyCount === 0 && !root.heldVisible ? fadingPresentation.snapshotOpacity : 1
             border.width: hyprcast.settings.panelBorderWidth
             border.color: hyprcast.settings.panelBorderColor
         }

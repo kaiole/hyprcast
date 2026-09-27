@@ -28,9 +28,9 @@ namespace Hyprcast {
         constexpr std::string_view LOCK_FILE          = "server.lock";
     }
 
-    CEventServer::CEventServer(RegistrySnapshotCB callback) :
-        m_registrySnapshotCb(std::move(callback)), m_sockPaths(initSockPaths()), m_sockLock(m_sockPaths.lockFile), m_sockFd(CUniqueFd{createSocket()}),
-        m_sockFile(m_sockPaths.sockFile) {
+    CEventServer::CEventServer(RegistrySnapshotCB callback, CaptureCB capture, RegistrySnapshotCB disconnected) :
+        m_registrySnapshotCb(std::move(callback)), m_captureCb(std::move(capture)), m_disconnectedCb(std::move(disconnected)), m_sockPaths(initSockPaths()),
+        m_sockLock(m_sockPaths.lockFile), m_sockFd(CUniqueFd{createSocket()}), m_sockFile(m_sockPaths.sockFile) {
         std::error_code errorCode;
         const auto      sockStatus = std::filesystem::symlink_status(m_sockPaths.sockFile, errorCode);
         if (errorCode && errorCode != std::errc::no_such_file_or_directory) {
@@ -93,10 +93,15 @@ namespace Hyprcast {
             logMessage(Log::TRACE, "Client disconnected");
         }
 
+        const bool hadClient = m_clientFd.getFd() != -1;
+        m_commandBuffer.clear();
         m_messageOffset = 0;
         m_messageQueue.clear();
         m_wlClientWritable.reset();
         m_clientFd.reset();
+        if (hadClient) {
+            runGuarded("Cannot pause disconnected capture", m_disconnectedCb, [] noexcept {});
+        }
     }
 
     void CEventServer::shutdown() noexcept {
@@ -185,7 +190,7 @@ namespace Hyprcast {
         self->m_clientFd.reset(clientFd);
         logMessage(Log::TRACE, "Client connected");
 
-        self->m_wlClientWritable.reset(::wl_event_loop_add_fd(g_pCompositor->m_wlEventLoop, self->m_clientFd.getFd(), 0, &onClientWritable, self));
+        self->m_wlClientWritable.reset(::wl_event_loop_add_fd(g_pCompositor->m_wlEventLoop, self->m_clientFd.getFd(), WL_EVENT_READABLE, &onClientWritable, self));
         if (!self->m_wlClientWritable) {
             logError("Cannot register client with Wayland event loop; disconnecting client");
             self->disconnectClient();
@@ -209,11 +214,50 @@ namespace Hyprcast {
             return 0;
         }
 
+        if (mask & WL_EVENT_READABLE) {
+            runGuarded("Cannot process capture command", [self] { self->readCommands(); }, [self] noexcept { self->disconnectClient(); });
+        }
+        if (self->m_clientFd.getFd() == -1) {
+            return 0;
+        }
         if (mask & WL_EVENT_WRITABLE) {
             self->flushMessages();
         }
 
         return 0;
+    }
+
+    void CEventServer::readCommands() {
+        // Bound work per compositor dispatch as well as per command.
+        char       buffer[64];
+        const auto size = ::recv(m_clientFd.getFd(), buffer, sizeof(buffer), 0);
+        if (size < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) {
+            return;
+        }
+        if (size <= 0) {
+            disconnectClient();
+            return;
+        }
+        m_commandBuffer.append(buffer, static_cast<std::size_t>(size));
+        while (true) {
+            const auto end = m_commandBuffer.find('\n');
+            if (end == std::string::npos) {
+                if (m_commandBuffer.size() > 7) {
+                    disconnectClient();
+                }
+                return;
+            }
+            const auto command = m_commandBuffer.substr(0, end);
+            m_commandBuffer.erase(0, end + 1);
+            if (command != "enable" && command != "disable") {
+                disconnectClient();
+                return;
+            }
+            m_captureCb(command == "enable");
+            if (m_clientFd.getFd() == -1) {
+                return;
+            }
+        }
     }
 
     void CEventServer::flushMessages() {
@@ -263,7 +307,7 @@ namespace Hyprcast {
     }
 
     void CEventServer::updateWlDispatchEvent(std::uint32_t mask) {
-        if (::wl_event_source_fd_update(m_wlClientWritable.get(), mask) == -1) {
+        if (::wl_event_source_fd_update(m_wlClientWritable.get(), mask | WL_EVENT_READABLE) == -1) {
             logError("Cannot update client Wayland event source; disconnecting client");
             disconnectClient();
         }

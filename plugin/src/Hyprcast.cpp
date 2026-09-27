@@ -96,7 +96,9 @@ namespace Hyprcast {
         }
     }
 
-    CHyprcast::CHyprcast() : m_socket([this] { requestRegistrySnapshot(); }), m_keyboardRegistry(makeRegistryCallbacks()), m_config(makePluginConfigCallbacks()) {
+    CHyprcast::CHyprcast() :
+        m_socket([this] { requestRegistrySnapshot(); }, [this](bool enabled) { setPause(!enabled); }, [this] { m_paused = true; }), m_keyboardRegistry(makeRegistryCallbacks()),
+        m_config(makePluginConfigCallbacks()) {
         m_keyboardRegistry.updateSubscriptions(m_config.getAcceptedConfig());
     };
 
@@ -119,10 +121,7 @@ namespace Hyprcast {
             throw std::runtime_error("Hyprcast is stopped; reload the plugin");
         }
 
-        if (m_paused == setPause) {
-            return;
-        }
-
+        // Always echo the authoritative state, including idempotent control requests.
         m_paused = setPause;
         m_socket.queueMessage(createMessage(m_paused));
     }

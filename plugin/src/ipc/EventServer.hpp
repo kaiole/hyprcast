@@ -17,7 +17,8 @@ namespace Hyprcast {
       public:
         using RegistrySnapshotCB = std::function<void()>;
 
-        explicit CEventServer(RegistrySnapshotCB callback);
+        using CaptureCB = std::function<void(bool)>;
+        explicit CEventServer(RegistrySnapshotCB callback, CaptureCB capture, RegistrySnapshotCB disconnected);
         ~CEventServer() = default;
 
         CEventServer(const CEventServer&)            = delete;
@@ -43,10 +44,14 @@ namespace Hyprcast {
         static int              onSocketReadable(int sockFd, std::uint32_t mask, void* data);
         static int              onClientWritable(int clientFd, std::uint32_t mask, void* data);
 
+        void                    readCommands();
         void                    flushMessages();
         void                    updateWlDispatchEvent(std::uint32_t mask);
 
         RegistrySnapshotCB      m_registrySnapshotCb;
+        CaptureCB               m_captureCb;
+        RegistrySnapshotCB      m_disconnectedCb;
+        std::string             m_commandBuffer;
 
         SSockPaths              m_sockPaths;
         CFileLock               m_sockLock;

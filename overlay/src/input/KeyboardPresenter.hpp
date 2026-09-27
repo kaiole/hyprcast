@@ -51,6 +51,7 @@ namespace Hyprcast::Overlay {
         void processMessage(const ProtocolMessage& message, Clock::time_point now = Clock::now());
         void advance(Clock::time_point now = Clock::now());
         void resetConnection();
+        void clearHistory();
         void setHistoryOptions(InputHistoryOptions options);
         void setRepeatsEnabled(bool enabled, Clock::time_point now = Clock::now());
         void setExpiration(int expireAfterMs, int fadeDurationMs, Clock::time_point now = Clock::now());

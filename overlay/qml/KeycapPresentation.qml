@@ -2,6 +2,7 @@ import QtQuick
 
 Item {
     property var historyModel: null
+    readonly property real naturalWidth: historyView.contentWidth
 
     ListView {
         id: historyView
@@ -17,8 +18,10 @@ Item {
         delegate: KeycapEntry {
             kind: model.kind
             text: model.text
-            keyLabel: model.key
-            modifiers: model.modifiers
+            keyLabel: model.displayKey
+            modifiers: model.displayModifiers
+            counted: model.counted
+            repeatCount: model.repeatCount
             // Keep caps whole at the leading edge while following the newest retained entry.
             visible: x >= historyView.contentX - 0.5
         }

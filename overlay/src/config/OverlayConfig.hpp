@@ -17,11 +17,16 @@ namespace Hyprcast::Overlay {
         QMargins    margins{24, 24, 24, 24};
         int         width        = 600;
         int         height       = 88;
+        bool        dynamicSize  = false;
+        int         minWidth     = 240;
+        int         minHeight    = 64;
         bool        clickThrough = true;
 
         QString     backgroundColor   = QStringLiteral("#0e1116");
         double      backgroundOpacity = 0.78;
         int         cornerRadius      = 12;
+        int         panelBorderWidth  = 0;
+        QString     panelBorderColor  = QStringLiteral("#66758c");
         QString     foregroundColor   = QStringLiteral("#ffffff");
         QString     fontFamily        = QStringLiteral("Sans Serif");
         int         fontSize          = 30;
@@ -38,6 +43,7 @@ namespace Hyprcast::Overlay {
         QString     keycapTextBackground = QStringLiteral("#2b3546");
         QString     keycapKeyBackground  = QStringLiteral("#39475c");
         QString     keycapBorderColor    = QStringLiteral("#66758c");
+        int         keycapBorderWidth    = 1;
         QString     keycapTextColor      = QStringLiteral("#ffffff");
 
         int         heldFontSize         = 14;
@@ -49,14 +55,23 @@ namespace Hyprcast::Overlay {
         int         heldRowPaddingBottom = 10;
         QString     heldKeyBackground    = QStringLiteral("#46536a");
         QString     heldKeyTextColor     = QStringLiteral("#ffffff");
+        int         heldKeyBorderWidth   = 0;
+        QString     heldKeyBorderColor   = QStringLiteral("#66758c");
+
+        QString     symbolFontFamily;
+        QVariantMap keySymbols;
+        QVariantMap modifierSymbols;
 
         QString     presentation = QStringLiteral("text");
         QString     themeId      = QStringLiteral("builtin:default");
         QVariantMap themeOptions;
         bool        showHeldKeys              = false;
+        QString     panelVisibility           = QStringLiteral("always");
         QString     backspaceMode             = QStringLiteral("delete");
         qsizetype   maxRetainedUtf16CodeUnits = 4096;
         bool        repeatsEnabled            = true;
+        QString     repeatPresentation        = QStringLiteral("expanded");
+        int         repeatCountThreshold      = 4;
         int         expireAfterMs             = 0;
         int         fadeDurationMs            = 0;
 

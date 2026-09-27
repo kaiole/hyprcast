@@ -13,6 +13,21 @@ namespace Hyprcast::Overlay {
         connect(&m_history, &HistoryListModel::displayTextChanged, this, &KeyboardPresenter::outputTextChanged);
     }
 
+    QVariantList KeyboardPresenter::heldKeyItems() const {
+        QVariantList result;
+        const auto&  symbols = m_history.presentationOptions();
+        for (const HeldKey& item : m_interpreter.heldKeyItems()) {
+            QString label = item.kind == QStringLiteral("text") ? item.text : item.identity;
+            if (item.kind == QStringLiteral("modifier")) {
+                label = symbols.modifierSymbols.value(item.identity, item.identity).toString();
+            } else if (item.kind == QStringLiteral("key")) {
+                label = symbols.keySymbols.value(item.identity, item.identity).toString();
+            }
+            result.push_back(QVariantMap{{QStringLiteral("kind"), item.kind}, {QStringLiteral("identity"), item.identity}, {QStringLiteral("label"), label}});
+        }
+        return result;
+    }
+
     void KeyboardPresenter::processMessage(const ProtocolMessage& message, Clock::time_point now) {
         const QStringList previousHeldKeys = m_interpreter.heldKeys();
         QString           error;
@@ -59,7 +74,13 @@ namespace Hyprcast::Overlay {
     }
 
     void KeyboardPresenter::setHistoryOptions(InputHistoryOptions options) {
+        const auto previousPresentation = m_history.presentationOptions();
         m_history.setOptions(options);
+        m_fadingHistory.setPresentationOptions(options.presentation, m_fadingHistory.collapsedRepeatRuns());
+        if (previousPresentation.keySymbols != options.presentation.keySymbols || previousPresentation.modifierSymbols != options.presentation.modifierSymbols ||
+            previousPresentation.symbolFontFamily != options.presentation.symbolFontFamily) {
+            emit heldKeysChanged();
+        }
     }
 
     void KeyboardPresenter::setRepeatsEnabled(bool enabled, Clock::time_point now) {
@@ -128,7 +149,7 @@ namespace Hyprcast::Overlay {
         if (m_fadeDurationMs > 0) {
             // Expired entries leave editable history immediately. The snapshot exists only
             // for QML's visual fade and can never consume Backspace.
-            m_fadingHistory.setSnapshot(m_history.entries());
+            m_fadingHistory.setSnapshot(m_history.entries(), m_history.presentationOptions(), m_history.collapsedRepeatRuns());
             m_history.clear();
             setFading(true);
             m_fadeDeadline = now + std::chrono::milliseconds(m_fadeDurationMs);

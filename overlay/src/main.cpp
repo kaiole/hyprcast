@@ -259,9 +259,9 @@ int main(int argc, char* argv[]) {
     const QCommandLineOption anchorOption(QStringLiteral("anchor"), QStringLiteral("Position: top, bottom, left, right, or a corner such as bottom-right."),
                                           QStringLiteral("position"));
     const QCommandLineOption marginsOption(QStringLiteral("margins"), QStringLiteral("Layer-shell margins in left,top,right,bottom order."), QStringLiteral("pixels"));
-    const QCommandLineOption widthOption(QStringLiteral("width"), QStringLiteral("Surface width in logical pixels."), QStringLiteral("pixels"));
-    const QCommandLineOption heightOption(QStringLiteral("height"), QStringLiteral("Surface height in logical pixels."), QStringLiteral("pixels"));
-    const QCommandLineOption opacityOption(QStringLiteral("background-opacity"), QStringLiteral("Background alpha from 0 (transparent) to 1 (opaque); text stays opaque."),
+    const QCommandLineOption widthOption(QStringLiteral("width"), QStringLiteral("Maximum surface/panel width in logical pixels."), QStringLiteral("pixels"));
+    const QCommandLineOption heightOption(QStringLiteral("height"), QStringLiteral("Maximum surface/panel height in logical pixels."), QStringLiteral("pixels"));
+    const QCommandLineOption opacityOption(QStringLiteral("background-opacity"), QStringLiteral("Panel fill opacity from 0 (transparent) to 1 (opaque); borders are independent."),
                                            QStringLiteral("alpha"));
     const QCommandLineOption presentationOption(QStringLiteral("presentation"), QStringLiteral("Bundled presentation: text or keycaps."), QStringLiteral("mode"));
     const QCommandLineOption showHeldKeysOption(QStringLiteral("show-held-keys"), QStringLiteral("Show currently held keys below the history."));
@@ -381,6 +381,14 @@ int main(int argc, char* argv[]) {
         return Hyprcast::Overlay::InputHistoryOptions{
             .backspaceMode             = config.backspaceMode == QStringLiteral("symbol") ? Hyprcast::Overlay::BackspaceMode::Symbol : Hyprcast::Overlay::BackspaceMode::Delete,
             .maxRetainedUtf16CodeUnits = config.maxRetainedUtf16CodeUnits,
+            .presentation =
+                {
+                    .countedRepeats   = config.repeatPresentation == QStringLiteral("counted"),
+                    .repeatThreshold  = config.repeatCountThreshold,
+                    .symbolFontFamily = config.symbolFontFamily,
+                    .keySymbols       = config.keySymbols,
+                    .modifierSymbols  = config.modifierSymbols,
+                },
         };
     };
     keyboardPresenter.setHistoryOptions(makeHistoryOptions(initialConfig));
@@ -459,7 +467,10 @@ int main(int argc, char* argv[]) {
                          layerWindow->setAnchors(anchors);
                          layerWindow->setMargins(config.margins);
 
-                         if (config.backspaceMode != appliedConfig.backspaceMode || config.maxRetainedUtf16CodeUnits != appliedConfig.maxRetainedUtf16CodeUnits) {
+                         if (config.backspaceMode != appliedConfig.backspaceMode || config.maxRetainedUtf16CodeUnits != appliedConfig.maxRetainedUtf16CodeUnits ||
+                             config.repeatPresentation != appliedConfig.repeatPresentation || config.repeatCountThreshold != appliedConfig.repeatCountThreshold ||
+                             config.symbolFontFamily != appliedConfig.symbolFontFamily || config.keySymbols != appliedConfig.keySymbols ||
+                             config.modifierSymbols != appliedConfig.modifierSymbols) {
                              keyboardPresenter.setHistoryOptions(makeHistoryOptions(config));
                          }
                          if (config.repeatsEnabled != appliedConfig.repeatsEnabled) {

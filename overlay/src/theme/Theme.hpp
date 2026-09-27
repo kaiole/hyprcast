@@ -60,7 +60,12 @@ namespace Hyprcast::Overlay {
         Q_PROPERTY(QString themeId READ themeId CONSTANT)
         Q_PROPERTY(HistoryListModel* history READ history CONSTANT)
         Q_PROPERTY(HistoryListModel* expiredHistory READ expiredHistory CONSTANT)
+        Q_PROPERTY(HistoryProjectionModel* displayHistory READ displayHistory CONSTANT)
+        Q_PROPERTY(HistoryProjectionModel* expiredDisplayHistory READ expiredDisplayHistory CONSTANT)
+        Q_PROPERTY(int historyCount READ historyCount NOTIFY historyCountChanged)
+        Q_PROPERTY(int expiredHistoryCount READ expiredHistoryCount NOTIFY expiredHistoryCountChanged)
         Q_PROPERTY(QStringList heldKeys READ heldKeys NOTIFY heldKeysChanged)
+        Q_PROPERTY(QVariantList heldKeyItems READ heldKeyItems NOTIFY heldKeysChanged)
         Q_PROPERTY(int heldKeyCount READ heldKeyCount NOTIFY heldKeysChanged)
         Q_PROPERTY(bool fading READ fading NOTIFY fadingChanged)
         Q_PROPERTY(int fadeDurationMs READ fadeDurationMs NOTIFY fadeDurationMsChanged)
@@ -76,13 +81,18 @@ namespace Hyprcast::Overlay {
         [[nodiscard]] QString themeId() const {
             return m_themeId;
         }
-        [[nodiscard]] HistoryListModel* history() const;
-        [[nodiscard]] HistoryListModel* expiredHistory() const;
-        [[nodiscard]] QStringList       heldKeys() const;
-        [[nodiscard]] int               heldKeyCount() const;
-        [[nodiscard]] bool              fading() const;
-        [[nodiscard]] int               fadeDurationMs() const;
-        [[nodiscard]] QVariantMap       settings() const {
+        [[nodiscard]] HistoryListModel*       history() const;
+        [[nodiscard]] HistoryListModel*       expiredHistory() const;
+        [[nodiscard]] HistoryProjectionModel* displayHistory() const;
+        [[nodiscard]] HistoryProjectionModel* expiredDisplayHistory() const;
+        [[nodiscard]] int                     historyCount() const;
+        [[nodiscard]] int                     expiredHistoryCount() const;
+        [[nodiscard]] QStringList             heldKeys() const;
+        [[nodiscard]] QVariantList            heldKeyItems() const;
+        [[nodiscard]] int                     heldKeyCount() const;
+        [[nodiscard]] bool                    fading() const;
+        [[nodiscard]] int                     fadeDurationMs() const;
+        [[nodiscard]] QVariantMap             settings() const {
             return m_settings;
         }
         [[nodiscard]] QVariantMap options() const {
@@ -93,6 +103,8 @@ namespace Hyprcast::Overlay {
 
       signals:
         void heldKeysChanged();
+        void historyCountChanged();
+        void expiredHistoryCountChanged();
         void fadingChanged();
         void fadeDurationMsChanged();
         void settingsChanged();

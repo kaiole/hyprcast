@@ -1,5 +1,7 @@
 #include "theme/Theme.hpp"
 
+#include <QColor>
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -7,6 +9,7 @@
 #include <QQuickView>
 #include <QTemporaryDir>
 #include <QUrl>
+#include <QtMath>
 
 #include <cstdlib>
 #include <iostream>
@@ -21,6 +24,18 @@ namespace {
             std::cerr << "FAIL: " << message << '\n';
             ++failures;
         }
+    }
+
+    bool hasVisualText(QQuickItem* item, const QString& text) {
+        if (item->property("text").toString() == text) {
+            return true;
+        }
+        for (auto* child : item->childItems()) {
+            if (hasVisualText(child, text)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     bool writeFile(const QString& path, const QByteArray& contents) {
@@ -120,31 +135,147 @@ namespace {
               "enforce declared enum values");
     }
 
-    void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot, const QString& bundledRoot) {
+    void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         const QByteArray gapDeclaration = QByteArrayLiteral("[options.gap]\ntype='integer'\ndefault=5\nminimum=0\nmaximum=20\n");
         const QString    goodDirectory  = themeDirectory(userRoot, QStringLiteral("good"), manifest(QByteArrayLiteral("good"), gapDeclaration), optionQml());
         Q_UNUSED(goodDirectory);
         themeDirectory(userRoot, QStringLiteral("badroot"), manifest(QByteArrayLiteral("badroot")), QByteArrayLiteral("import QtQml\nQtObject {}\n"));
         themeDirectory(userRoot, QStringLiteral("syntax"), manifest(QByteArrayLiteral("syntax")), QByteArrayLiteral("import QtQuick\nItem { broken\n"));
-        const QString builtinDirectory = themeDirectory(bundledRoot, QStringLiteral("default"), manifest(QByteArrayLiteral("default")), validQml());
-
-        const QString sampleThemes = QDir(QStringLiteral(HYPRCAST_OVERLAY_SOURCE_DIR)).filePath(QStringLiteral("examples/themes"));
-        ThemeCatalog  catalog({userRoot, sampleThemes}, QUrl::fromLocalFile(QDir(builtinDirectory).filePath(QStringLiteral("theme.toml"))));
+        const QString bundledManifest = QDir(QStringLiteral(HYPRCAST_OVERLAY_SOURCE_DIR)).filePath(QStringLiteral("qml/themes/default/theme.toml"));
+        const QString sampleThemes    = QDir(QStringLiteral(HYPRCAST_OVERLAY_SOURCE_DIR)).filePath(QStringLiteral("examples/themes"));
+        ThemeCatalog  catalog({userRoot, sampleThemes}, QUrl::fromLocalFile(bundledManifest));
         QString       error;
         check(catalog.discover(nullptr, &error), "discover themes before QML loading test");
 
         QTemporaryDir hostDirectory;
         const QString hostPath = hostDirectory.filePath(QStringLiteral("Host.qml"));
-        check(writeFile(hostPath, QByteArrayLiteral("import QtQuick\nItem { width: 600; height: 88 }\n")), "write QML host fixture");
+        check(writeFile(hostPath, QByteArrayLiteral("import QtQuick\nItem { width: 600; height: 120 }\n")), "write QML host fixture");
         QQuickView view;
+        view.resize(600, 120);
+        view.setResizeMode(QQuickView::SizeRootObjectToView);
         view.setSource(QUrl::fromLocalFile(hostPath));
         check(view.status() == QQuickView::Ready && view.rootObject(), "load a simple offscreen QML host");
 
         KeyboardPresenter presenter;
         ThemeRuntime      runtime(catalog, view, presenter);
         OverlayConfig     config;
+        config.width             = 600;
+        config.height            = 120;
+        config.dynamicSize       = true;
+        config.minWidth          = 160;
+        config.minHeight         = 50;
+        config.panelVisibility   = QStringLiteral("with-content");
+        config.backgroundOpacity = 0.0;
+        config.panelBorderWidth  = 2;
+        config.panelBorderColor  = QStringLiteral("#80ffffff");
         check(runtime.loadInitial(config, &error), "load the bundled default as a real QML component");
         check(runtime.activeThemeId() == QStringLiteral("builtin:default"), "bundled default is active initially");
+        view.show();
+        QCoreApplication::processEvents();
+        auto* panelFrame  = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastPanelFrame"), Qt::FindChildrenRecursively);
+        auto* panelFill   = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastPanelBackground"), Qt::FindChildrenRecursively);
+        auto* panelBorder = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastPanelBorder"), Qt::FindChildrenRecursively);
+        check(panelFrame && panelFill && panelBorder, "bundled theme exposes its panel frame, fill, and border to the offscreen scene");
+        if (panelFrame && panelFill && panelBorder) {
+            const qreal emptyWidth = panelFrame->width();
+            check(emptyWidth >= config.minWidth && emptyWidth < config.width && !panelFill->isVisible(),
+                  "dynamic empty panel starts at its minimum and with-content hides only its decoration");
+            InterpretedAction longText;
+            longText.kind = InterpretedActionKind::Text;
+            longText.text = QString(80, QLatin1Char('a'));
+            presenter.historyModel().apply(longText);
+            QCoreApplication::processEvents();
+            const qreal  fullWidth = panelFrame->width();
+            const QColor fillColor = panelFill->property("color").value<QColor>();
+            check(qFuzzyCompare(fullWidth, static_cast<qreal>(config.width)) && panelFill->isVisible() && panelBorder->isVisible() && fillColor.alphaF() == 0.0,
+                  "measured history grows to the maximum while a visible border remains independent of transparent fill opacity");
+            InterpretedAction backspace;
+            backspace.kind = InterpretedActionKind::Key;
+            backspace.key  = QStringLiteral("Backspace");
+            for (int i = 0; i < 60; ++i) {
+                presenter.historyModel().apply(backspace);
+            }
+            QCoreApplication::processEvents();
+            check(panelFrame->width() < fullWidth, "deleting content shrinks the dynamic panel and recovers viewport space");
+            config.panelVisibility = QStringLiteral("never");
+            runtime.applyAcceptedConfiguration(config);
+            QCoreApplication::processEvents();
+            check(!panelFill->isVisible() && presenter.historyModel().rowCount() == 1, "never suppresses the outer fill while preserving visible semantic input");
+            presenter.historyModel().clear();
+            config.panelVisibility = QStringLiteral("with-content");
+            runtime.applyAcceptedConfiguration(config);
+            QCoreApplication::processEvents();
+            check(!panelFill->isVisible(), "with-content hides the panel decoration after history is cleared");
+
+            config.presentation         = QStringLiteral("keycaps");
+            config.repeatPresentation   = QStringLiteral("counted");
+            config.repeatCountThreshold = 2;
+            config.symbolFontFamily     = QStringLiteral("Symbols Nerd Font");
+            config.keySymbols           = {{QStringLiteral("C"), QStringLiteral("COPY")}};
+            config.modifierSymbols      = {{QStringLiteral("Ctrl"), QStringLiteral("CTRL")}};
+            config.keycapBorderWidth    = 0;
+            InputHistoryOptions historyOptions;
+            historyOptions.presentation.countedRepeats   = true;
+            historyOptions.presentation.repeatThreshold  = 2;
+            historyOptions.presentation.symbolFontFamily = config.symbolFontFamily;
+            historyOptions.presentation.keySymbols       = config.keySymbols;
+            historyOptions.presentation.modifierSymbols  = config.modifierSymbols;
+            presenter.setHistoryOptions(historyOptions);
+            runtime.applyAcceptedConfiguration(config);
+
+            InterpretedAction chord;
+            chord.kind       = InterpretedActionKind::Chord;
+            chord.keyboardId = 1;
+            chord.keycode    = 46;
+            chord.key        = QStringLiteral("C");
+            chord.modifiers  = {QStringLiteral("Ctrl")};
+            presenter.historyModel().apply(chord);
+            chord.repeated    = true;
+            chord.repeatCount = 1;
+            presenter.historyModel().apply(chord);
+            QCoreApplication::processEvents();
+            check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("[CTRL+COPY x2] ") && panelFill->isVisible(),
+                  "keycap QML consumes resolved chord labels and counted-repeat rows through the additive theme API");
+            presenter.historyModel().clear();
+
+            // Reproduce live symbol reload, then append fresh actions. Inspect actual
+            // QML text items as well as the model: a correct projection alone is insufficient.
+            historyOptions.backspaceMode = BackspaceMode::Symbol;
+            historyOptions.presentation.countedRepeats = false;
+            historyOptions.presentation.keySymbols = {{QStringLiteral("Backspace"), QStringLiteral("ERASE")},
+                                                       {QStringLiteral("Enter"), QStringLiteral("RETURN")}};
+            presenter.setHistoryOptions(historyOptions);
+            InterpretedAction special;
+            special.kind = InterpretedActionKind::Key;
+            special.key = QStringLiteral("Backspace");
+            presenter.historyModel().apply(special);
+            QCoreApplication::processEvents();
+            check(hasVisualText(view.rootObject(), QStringLiteral("ERASE")), "keycap renders the initial symbol mapping");
+
+            historyOptions.presentation.keySymbols = {{QStringLiteral("Backspace"), QStringLiteral("⌫")},
+                                                       {QStringLiteral("Enter"), QStringLiteral("↵")}};
+            historyOptions.presentation.modifierSymbols = {{QStringLiteral("Ctrl"), QStringLiteral("⌃")},
+                                                            {QStringLiteral("Shift"), QStringLiteral("⇧")}};
+            presenter.setHistoryOptions(historyOptions);
+            QCoreApplication::processEvents();
+            check(hasVisualText(view.rootObject(), QStringLiteral("⌫")), "symbol reload updates existing keycaps");
+            special.key = QStringLiteral("Enter");
+            presenter.historyModel().apply(special);
+            presenter.historyModel().apply(chord);
+            QCoreApplication::processEvents();
+            check(hasVisualText(view.rootObject(), QStringLiteral("↵")), "new special-key keycaps use the reloaded symbol mapping");
+            check(hasVisualText(view.rootObject(), QStringLiteral("⌃")), "new chord keycaps use the reloaded modifier mapping");
+            special.key = QStringLiteral("Shift");
+            presenter.historyModel().apply(special);
+            QCoreApplication::processEvents();
+            check(hasVisualText(view.rootObject(), QStringLiteral("⇧")), "new standalone modifier keycaps use the reloaded modifier mapping");
+            check(presenter.historyModel().presentationModel().displayText().endsWith(QStringLiteral("[⇧] ")) &&
+                      presenter.historyModel().entries().back().action.key == QStringLiteral("Shift"),
+                  "standalone modifier projection resolves glyphs without changing canonical identity");
+            presenter.historyModel().clear();
+            historyOptions.backspaceMode = BackspaceMode::Delete;
+            presenter.setHistoryOptions(historyOptions);
+        }
 
         config.themeId      = QStringLiteral("ledger");
         config.themeOptions = {{QStringLiteral("item_spacing"), 8}, {QStringLiteral("accent"), QStringLiteral("#40ccaa")}};
@@ -152,6 +283,35 @@ namespace {
         runtime.applyAcceptedConfiguration(config);
         check(view.rootObject()->findChild<QQuickItem*>(QStringLiteral("ledger-8"), Qt::FindChildrenRecursively) != nullptr,
               "the shipped example receives its declared options through the public API");
+        auto* ledgerPanel = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastLedgerPanelFrame"), Qt::FindChildrenRecursively);
+        check(ledgerPanel != nullptr, "ledger exposes its dynamic panel frame");
+        if (ledgerPanel) {
+            InterpretedAction line;
+            line.kind = InterpretedActionKind::Text;
+            for (int i = 0; i < 2; ++i) {
+                line.text = QString::number(i);
+                presenter.historyModel().apply(line);
+            }
+            QCoreApplication::processEvents();
+            const qreal growingHeight = ledgerPanel->height();
+            check(growingHeight > config.minHeight && growingHeight < config.height, "ledger grows vertically with its timeline content");
+            for (int i = 2; i < 10; ++i) {
+                line.text = QString::number(i);
+                presenter.historyModel().apply(line);
+            }
+            QCoreApplication::processEvents();
+            const qreal fullHeight = ledgerPanel->height();
+            check(qFuzzyCompare(fullHeight, static_cast<qreal>(config.height)), "ledger caps its dynamic height at the configured maximum");
+            InterpretedAction backspace;
+            backspace.kind = InterpretedActionKind::Key;
+            backspace.key  = QStringLiteral("Backspace");
+            for (int i = 0; i < 8; ++i) {
+                presenter.historyModel().apply(backspace);
+            }
+            QCoreApplication::processEvents();
+            check(ledgerPanel->height() < fullHeight, "ledger panel shrinks as Backspace shortens the timeline");
+            presenter.historyModel().clear();
+        }
         config.themeId = QStringLiteral("builtin:default");
         config.themeOptions.clear();
         check(runtime.prepareSwitch(config, &error), "stage return to the bundled theme");
@@ -234,8 +394,7 @@ int main(int argc, char** argv) {
     testOptions(optionUser.path(), optionBundled.path());
 
     QTemporaryDir runtimeUser;
-    QTemporaryDir runtimeBundled;
-    testRuntimeLoadingAndSwitchRecovery(runtimeUser.path(), runtimeBundled.path());
+    testRuntimeLoadingAndSwitchRecovery(runtimeUser.path());
 
     if (failures == 0) {
         std::cout << "Overlay theme tests passed\n";

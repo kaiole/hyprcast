@@ -211,6 +211,242 @@ namespace {
         check(history.rowCount() == 0 && removed == 3, "grapheme deletion across actions removes its contiguous model rows");
     }
 
+    void testCountedRepeatProjectionAndBackspace() {
+        InputHistory history({.presentation = {.countedRepeats = true, .repeatThreshold = 4}});
+        auto         first = text(QStringLiteral("a"));
+        history.apply(first);
+        for (std::uint32_t i = 1; i <= 4; ++i) {
+            auto repeat        = first;
+            repeat.repeated    = true;
+            repeat.repeatCount = i;
+            history.apply(repeat);
+            const QString expected = i < 3 ? QString(i + 1, QLatin1Char('a')) : QStringLiteral("[a x%1] ").arg(i + 1);
+            check(history.presentationModel().displayText() == expected, "counted repeats collapse at the configured occurrence threshold");
+        }
+        check(history.rowCount() == 5 && history.presentationModel().rowCount() == 1, "projection collapses rows without discarding semantic actions");
+        check(history.presentationModel().data(history.presentationModel().index(0, 0), HistoryProjectionModel::RepeatCountRole).toUInt() == 5,
+              "projected count includes the initial press and generated repeats");
+
+        history.apply(key(QStringLiteral("Backspace")));
+        check(history.presentationModel().displayText() == QStringLiteral("[a x4] "), "Backspace decrements the retained counted run");
+        history.apply(key(QStringLiteral("Backspace")));
+        check(history.presentationModel().displayText() == QStringLiteral("[a x3] "), "a collapsed row stays collapsed below its threshold");
+        history.apply(first);
+        check(history.presentationModel().displayText() == QStringLiteral("[a x4] "), "a new equivalent tap extends the same group after decrementing it");
+        history.apply(key(QStringLiteral("Backspace")));
+        history.apply(key(QStringLiteral("Backspace")));
+        history.apply(key(QStringLiteral("Backspace")));
+        check(history.presentationModel().displayText() == QStringLiteral("a"), "a counted run returns to a plain action at one occurrence");
+        history.apply(key(QStringLiteral("Backspace")));
+        check(history.presentationModel().displayText().isEmpty(), "Backspace removes the final underlying occurrence");
+
+        InputHistory retained({.maxRetainedUtf16CodeUnits = 4, .presentation = {.countedRepeats = true, .repeatThreshold = 4}});
+        auto         retainedAction = text(QStringLiteral("x"));
+        for (std::uint32_t i = 0; i < 5; ++i) {
+            retainedAction.repeated    = i > 0;
+            retainedAction.repeatCount = i;
+            retained.apply(retainedAction);
+        }
+        check(retained.retainedUtf16CodeUnits() == 4 && retained.displayText() == QStringLiteral("xxxx"),
+              "retention charges every underlying occurrence rather than the compressed counter");
+        check(retained.presentationModel().displayText() == QStringLiteral("[x x4] "), "retention trimming reduces the projected occurrence count");
+        retained.apply(key(QStringLiteral("Backspace")));
+        check(retained.presentationModel().displayText() == QStringLiteral("[x x3] "), "retention-trimmed groups retain sticky collapse while erasing");
+    }
+
+    void testAdjacentCountedInputsAndUnicodeEligibility() {
+        InputHistory options({.presentation = {.countedRepeats = true, .repeatThreshold = 2}});
+        auto         first = text(QStringLiteral("x"));
+        options.apply(first);
+        options.apply(text(QStringLiteral("b"), 2, 48));
+        auto later        = first;
+        later.repeated    = true;
+        later.repeatCount = 1;
+        options.apply(later);
+        check(options.presentationModel().displayText() == QStringLiteral("xbx"), "an interleaved action starts a new counted group");
+
+        InputHistory interleavedRuns({.presentation = {.countedRepeats = true, .repeatThreshold = 2}});
+        interleavedRuns.apply(text(QStringLiteral("a"), 1, 30));
+        interleavedRuns.apply(text(QStringLiteral("a"), 1, 30));
+        interleavedRuns.apply(text(QStringLiteral("b"), 1, 48));
+        interleavedRuns.apply(text(QStringLiteral("a"), 1, 30));
+        interleavedRuns.apply(text(QStringLiteral("a"), 1, 30));
+        check(interleavedRuns.presentationModel().displayText() == QStringLiteral("[a x2] b [a x2] "),
+              "matching inputs on opposite sides of another key form separate counted groups");
+
+        InputHistory changed({.presentation = {.countedRepeats = true, .repeatThreshold = 2}});
+        auto         changedAction = text(QStringLiteral("x"));
+        changed.apply(changedAction);
+        changedAction.text        = QStringLiteral("y");
+        changedAction.repeated    = true;
+        changedAction.repeatCount = 1;
+        changed.apply(changedAction);
+        changedAction.repeatCount = 2;
+        changed.apply(changedAction);
+        check(changed.presentationModel().displayText() == QStringLiteral("x [y x2] "), "a changed interpretation starts a distinct counted group");
+
+        InputHistory mixed({.presentation = {.countedRepeats = true, .repeatThreshold = 3}});
+        auto         manualFirst = text(QStringLiteral("m"), 1, 50);
+        manualFirst.eventTimeMs  = 1;
+        mixed.apply(manualFirst);
+        auto manualTap        = manualFirst;
+        manualTap.eventTimeMs = 600000;
+        mixed.apply(manualTap);
+        auto generatedRepeat        = manualTap;
+        generatedRepeat.repeated    = true;
+        generatedRepeat.repeatCount = 1;
+        generatedRepeat.eventTimeMs = 600001;
+        mixed.apply(generatedRepeat);
+        check(mixed.presentationModel().displayText() == QStringLiteral("[m x3] "), "manual taps and generated repeats share one no-timeout equivalent-input group");
+
+        InputHistory separate({.presentation = {.countedRepeats = true, .repeatThreshold = 2}});
+        auto         tapA = text(QStringLiteral("a"), 1, 30);
+        tapA.eventTimeMs  = 1;
+        auto tapB         = tapA;
+        tapB.eventTimeMs  = 900000;
+        separate.apply(tapA);
+        separate.apply(tapB);
+        check(separate.presentationModel().displayText() == QStringLiteral("[a x2] "), "same-key taps count together regardless of the gap between them");
+
+        InputHistory crossKeyboard({.presentation = {.countedRepeats = true, .repeatThreshold = 2}});
+        crossKeyboard.apply(text(QStringLiteral("a"), 1, 30));
+        crossKeyboard.apply(text(QStringLiteral("a"), 2, 30));
+        check(crossKeyboard.presentationModel().displayText() == QStringLiteral("aa"), "matching inputs from different keyboards remain separate");
+
+        InputHistory chords({.presentation = {.countedRepeats = true, .repeatThreshold = 2}});
+        chords.apply(chord({QStringLiteral("Ctrl")}, QStringLiteral("C"), 1, 46));
+        chords.apply(chord({QStringLiteral("Ctrl")}, QStringLiteral("C"), 1, 46));
+        check(chords.presentationModel().displayText() == QStringLiteral("[Ctrl+C x2] "), "identical chord taps combine across release and repress");
+
+        InputHistory specialKeys({.presentation = {.countedRepeats = true, .repeatThreshold = 2}});
+        specialKeys.apply(key(QStringLiteral("Enter"), 1, 28));
+        specialKeys.apply(key(QStringLiteral("Enter"), 1, 28));
+        check(specialKeys.presentationModel().displayText() == QStringLiteral("[Enter x2] "), "identical special-key taps combine across release and repress");
+
+        HistoryPresentationOptions sharedGlyphs;
+        sharedGlyphs.countedRepeats  = true;
+        sharedGlyphs.repeatThreshold = 2;
+        sharedGlyphs.keySymbols      = {{QStringLiteral("A"), QStringLiteral("★")}, {QStringLiteral("B"), QStringLiteral("★")}};
+        sharedGlyphs.modifierSymbols = {{QStringLiteral("Ctrl"), QStringLiteral("M")}, {QStringLiteral("Shift"), QStringLiteral("M")}};
+        InputHistory canonicalKeys({.presentation = sharedGlyphs});
+        canonicalKeys.apply(key(QStringLiteral("A"), 1, 30));
+        canonicalKeys.apply(key(QStringLiteral("B"), 1, 48));
+        canonicalKeys.apply(chord({QStringLiteral("Ctrl")}, QStringLiteral("C"), 1, 46));
+        canonicalKeys.apply(chord({QStringLiteral("Shift")}, QStringLiteral("C"), 1, 46));
+        check(canonicalKeys.presentationModel().displayText() == QStringLiteral("[★] [★] [M+C] [M+C] "),
+              "canonical keys and modifiers remain distinct even when symbol mappings render them identically");
+
+        InputHistory deletedIntervening({.presentation = {.countedRepeats = true, .repeatThreshold = 2}});
+        deletedIntervening.apply(text(QStringLiteral("a"), 1, 30));
+        deletedIntervening.apply(text(QStringLiteral("a"), 1, 30));
+        deletedIntervening.apply(text(QStringLiteral("b"), 1, 48));
+        deletedIntervening.apply(key(QStringLiteral("Backspace")));
+        deletedIntervening.apply(text(QStringLiteral("a"), 1, 30));
+        check(deletedIntervening.presentationModel().displayText() == QStringLiteral("[a x2] a"),
+              "deleting an intervening input does not retroactively merge two previously separate groups");
+
+        InputHistory multiGrapheme({.presentation = {.countedRepeats = true, .repeatThreshold = 2}});
+        auto         twoChars = text(QStringLiteral("ab"));
+        multiGrapheme.apply(twoChars);
+        twoChars.repeated    = true;
+        twoChars.repeatCount = 1;
+        multiGrapheme.apply(twoChars);
+        check(multiGrapheme.presentationModel().displayText() == QStringLiteral("abab"), "multi-grapheme actions remain expanded rather than corrupting deletion semantics");
+
+        InputHistory joined({.presentation = {.countedRepeats = true, .repeatThreshold = 2}});
+        joined.apply(text(QStringLiteral("e")));
+        auto combining = text(QString::fromUtf8("\xCC\x81"));
+        joined.apply(combining);
+        combining.repeated    = true;
+        combining.repeatCount = 1;
+        joined.apply(combining);
+        check(joined.presentationModel().displayText() == QString::fromUtf8("e\xCC\x81\xCC\x81"), "graphemes spanning action boundaries prevent unsafe count projection");
+        joined.apply(key(QStringLiteral("Backspace")));
+        check(joined.displayText().isEmpty(), "Unicode deletion still removes one grapheme across source actions");
+    }
+
+    void testSymbolProjectionAndRetentionAccounting() {
+        HistoryPresentationOptions presentation;
+        presentation.symbolFontFamily = QStringLiteral("Symbols & Friends");
+        presentation.keySymbols       = {{QStringLiteral("Backspace"), QStringLiteral("⌫")}, {QStringLiteral("C"), QStringLiteral("COPY")}};
+        presentation.modifierSymbols  = {{QStringLiteral("Ctrl"), QStringLiteral("CTRL")}};
+        InputHistory history({.backspaceMode = BackspaceMode::Symbol, .maxRetainedUtf16CodeUnits = 64, .presentation = presentation});
+        history.apply(chord({QStringLiteral("Ctrl")}, QStringLiteral("C")));
+        history.apply(key(QStringLiteral("Backspace")));
+        check(history.displayText() == QStringLiteral("[Ctrl+C] [Backspace] "), "canonical raw labels remain available and unchanged");
+        check(history.presentationModel().displayText() == QStringLiteral("[CTRL+COPY] [⌫] "), "configured key and modifier labels are projected consistently");
+        check(history.entries()[0].action.key == QStringLiteral("C") && history.entries()[0].action.modifiers == QStringList{QStringLiteral("Ctrl")},
+              "symbol substitutions do not alter canonical key or modifier identity");
+        check(history.presentationModel().displayRichText().contains(QStringLiteral("Symbols &amp; Friends")), "rich text escapes configured symbol font names");
+
+        const qsizetype before = history.retainedUtf16CodeUnits();
+        presentation.keySymbols.insert(QStringLiteral("C"), QStringLiteral("a much longer presentation-only label"));
+        history.setOptions({.backspaceMode = BackspaceMode::Symbol, .maxRetainedUtf16CodeUnits = 64, .presentation = presentation});
+        check(history.retainedUtf16CodeUnits() == before, "symbol changes do not change the stable canonical retention budget");
+
+        InputHistory deletion({.presentation = presentation});
+        deletion.apply(text(QStringLiteral("abc")));
+        deletion.apply(key(QStringLiteral("Backspace")));
+        check(deletion.displayText() == QStringLiteral("ab"), "a Backspace symbol mapping cannot alter deletion identity");
+
+        InputHistory backspaceSymbols({.backspaceMode = BackspaceMode::Symbol,
+                                       .presentation  = {.countedRepeats = true, .repeatThreshold = 3, .keySymbols = {{QStringLiteral("Backspace"), QStringLiteral("⌫")}}}});
+        auto         backspace = key(QStringLiteral("Backspace"));
+        backspaceSymbols.apply(backspace);
+        for (std::uint32_t i = 1; i <= 2; ++i) {
+            backspace.repeated    = true;
+            backspace.repeatCount = i;
+            backspaceSymbols.apply(backspace);
+        }
+        check(backspaceSymbols.presentationModel().displayText() == QStringLiteral("[⌫ x3] "), "symbol-mode repeated Backspace is grouped and uses its configured display glyph");
+    }
+
+    void testProjectionPreservesStableTailIdsDuringRetention() {
+        InputHistory history({.maxRetainedUtf16CodeUnits = 3});
+        history.apply(text(QStringLiteral("a")));
+        history.apply(text(QStringLiteral("b")));
+        history.apply(text(QStringLiteral("c")));
+        auto&      projection   = history.presentationModel();
+        const auto middleId     = projection.data(projection.index(1, 0), HistoryProjectionModel::EntryIdRole).toULongLong();
+        const auto tailId       = projection.data(projection.index(2, 0), HistoryProjectionModel::EntryIdRole).toULongLong();
+        int        removedFirst = -1;
+        QObject::connect(&projection, &QAbstractItemModel::rowsRemoved, [&removedFirst](const QModelIndex&, int first, int) { removedFirst = first; });
+        history.apply(text(QStringLiteral("d")));
+        check(projection.rowCount() == 3 && projection.data(projection.index(0, 0), HistoryProjectionModel::EntryIdRole).toULongLong() == middleId &&
+                  projection.data(projection.index(1, 0), HistoryProjectionModel::EntryIdRole).toULongLong() == tailId,
+              "retention preserves stable IDs for surviving projected tail rows");
+        check(removedFirst == 0 && projection.data(projection.index(2, 0), HistoryProjectionModel::TextRole).toString() == QStringLiteral("d"),
+              "projection emits precise front-removal and tail-insertion notifications during retention");
+    }
+
+    void testProjectionNotificationsAndSnapshot() {
+        InputHistory history({.presentation = {.countedRepeats = true, .repeatThreshold = 3}});
+        int          inserted   = 0;
+        int          removed    = 0;
+        int          changed    = 0;
+        auto&        projection = history.presentationModel();
+        QObject::connect(&projection, &QAbstractItemModel::rowsInserted, [&inserted](const QModelIndex&, int, int) { ++inserted; });
+        QObject::connect(&projection, &QAbstractItemModel::rowsRemoved, [&removed](const QModelIndex&, int, int) { ++removed; });
+        QObject::connect(&projection, &QAbstractItemModel::dataChanged, [&changed](const QModelIndex&, const QModelIndex&, const QList<int>&) { ++changed; });
+
+        auto action = text(QStringLiteral("z"));
+        history.apply(action);
+        action.repeated    = true;
+        action.repeatCount = 1;
+        history.apply(action);
+        action.repeatCount = 2;
+        history.apply(action);
+        const auto groupId = projection.data(projection.index(0, 0), HistoryProjectionModel::EntryIdRole).toULongLong();
+        check(projection.rowCount() == 1 && removed == 1 && changed == 1, "crossing the threshold sends row-removal and data-change notifications");
+        check(projection.data(projection.index(0, 0), HistoryProjectionModel::EntryIdRole).toULongLong() == groupId,
+              "projected group identity stays anchored to its first retained semantic action");
+
+        HistoryListModel snapshot;
+        snapshot.setSnapshot(history.entries(), history.presentationOptions(), history.collapsedRepeatRuns());
+        check(snapshot.presentationModel().displayText() == QStringLiteral("[z x3] "), "expiration-style snapshots preserve counted projection state");
+        check(inserted >= 2, "projection emits insert notifications for expanded semantic rows");
+    }
+
     void testRetentionModelNotificationsAndSnapshot() {
         InputHistory     history({.maxRetainedUtf16CodeUnits = 5});
         HistoryListModel snapshot;
@@ -249,6 +485,11 @@ int main() {
     testBoundedRetentionAndStableMetadata();
     testMixedKeyboardOrderAndEntryIdentity();
     testStructuredModelRolesAndNotifications();
+    testCountedRepeatProjectionAndBackspace();
+    testAdjacentCountedInputsAndUnicodeEligibility();
+    testSymbolProjectionAndRetentionAccounting();
+    testProjectionPreservesStableTailIdsDuringRetention();
+    testProjectionNotificationsAndSnapshot();
     testRetentionModelNotificationsAndSnapshot();
     std::cout << "overlay history tests passed\n";
     return 0;

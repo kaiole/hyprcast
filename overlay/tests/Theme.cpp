@@ -185,6 +185,9 @@ namespace {
             longText.text = QString(80, QLatin1Char('a'));
             presenter.historyModel().apply(longText);
             QCoreApplication::processEvents();
+            auto* tailText = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastTailText"), Qt::FindChildrenRecursively);
+            check(tailText && tailText->x() < 0 && tailText->x() + tailText->width() <= tailText->parentItem()->width() + 1,
+                  "overflowing rich text follows newest characters rather than clipping the tail");
             const qreal  fullWidth = panelFrame->width();
             const QColor fillColor = panelFill->property("color").value<QColor>();
             check(qFuzzyCompare(fullWidth, static_cast<qreal>(config.width)) && panelFill->isVisible() && panelBorder->isVisible() && fillColor.alphaF() == 0.0,
@@ -197,6 +200,7 @@ namespace {
             }
             QCoreApplication::processEvents();
             check(panelFrame->width() < fullWidth, "deleting content shrinks the dynamic panel and recovers viewport space");
+            check(tailText && tailText->x() == 0, "shortened text returns to the start of the viewport");
             config.panelVisibility = QStringLiteral("never");
             runtime.applyAcceptedConfiguration(config);
             QCoreApplication::processEvents();
@@ -234,7 +238,7 @@ namespace {
             chord.repeatCount = 1;
             presenter.historyModel().apply(chord);
             QCoreApplication::processEvents();
-            check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("[CTRL+COPY x2] ") && panelFill->isVisible(),
+            check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("CTRL+COPY…2x ") && panelFill->isVisible(),
                   "keycap QML consumes resolved chord labels and counted-repeat rows through the additive theme API");
             presenter.historyModel().clear();
 
@@ -269,7 +273,7 @@ namespace {
             presenter.historyModel().apply(special);
             QCoreApplication::processEvents();
             check(hasVisualText(view.rootObject(), QStringLiteral("⇧")), "new standalone modifier keycaps use the reloaded modifier mapping");
-            check(presenter.historyModel().presentationModel().displayText().endsWith(QStringLiteral("[⇧] ")) &&
+            check(presenter.historyModel().presentationModel().displayText().endsWith(QStringLiteral("⇧ ")) &&
                       presenter.historyModel().entries().back().action.key == QStringLiteral("Shift"),
                   "standalone modifier projection resolves glyphs without changing canonical identity");
             presenter.historyModel().clear();

@@ -34,6 +34,6 @@ namespace Hyprcast {
         Hyprcast::CPluginConfig       m_config;
 
         bool                          m_shutdown = false;
-        bool                          m_paused   = false;
+        bool                          m_paused   = true;
     };
 }

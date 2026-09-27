@@ -27,26 +27,34 @@ Item {
         spacing: hyprcast.settings.keycapInnerSpacing
 
         Repeater {
-            model: labels
+            model: root.counted ? Math.min(root.repeatCount, hyprcast.settings.repeatCountThreshold - 1) : 1
 
-            delegate: Rectangle {
-                required property string modelData
+            delegate: Row {
+                spacing: hyprcast.settings.keycapInnerSpacing
 
-                implicitWidth: label.implicitWidth + hyprcast.settings.keycapPaddingX * 2
-                implicitHeight: hyprcast.settings.keycapHeight
-                radius: hyprcast.settings.keycapRadius
-                color: root.kind === "text" ? hyprcast.settings.keycapTextBackground : hyprcast.settings.keycapKeyBackground
-                border.width: hyprcast.settings.keycapBorderWidth
-                border.color: hyprcast.settings.keycapBorderColor
+                Repeater {
+                    model: root.labels
 
-                Text {
-                    id: label
-                    anchors.centerIn: parent
-                    text: modelData
-                    color: hyprcast.settings.keycapTextColor
-                    font.family: root.kind === "text" || hyprcast.settings.symbolFontFamily.length === 0 ? hyprcast.settings.fontFamily : hyprcast.settings.symbolFontFamily
-                    font.pixelSize: hyprcast.settings.keycapFontSize
-                    font.weight: hyprcast.settings.fontWeight
+                    delegate: Rectangle {
+                        required property string modelData
+
+                        implicitWidth: label.implicitWidth + hyprcast.settings.keycapPaddingX * 2
+                        implicitHeight: hyprcast.settings.keycapHeight
+                        radius: hyprcast.settings.keycapRadius
+                        color: root.kind === "text" ? hyprcast.settings.keycapTextBackground : hyprcast.settings.keycapKeyBackground
+                        border.width: hyprcast.settings.keycapBorderWidth
+                        border.color: hyprcast.settings.keycapBorderColor
+
+                        Text {
+                            id: label
+                            anchors.centerIn: parent
+                            text: modelData
+                            color: hyprcast.settings.keycapTextColor
+                            font.family: root.kind === "text" || hyprcast.settings.symbolFontFamily.length === 0 ? hyprcast.settings.fontFamily : hyprcast.settings.symbolFontFamily
+                            font.pixelSize: hyprcast.settings.keycapFontSize
+                            font.weight: hyprcast.settings.fontWeight
+                        }
+                    }
                 }
             }
         }
@@ -56,9 +64,10 @@ Item {
         id: countBadge
         anchors.left: caps.right
         anchors.leftMargin: hyprcast.settings.keycapInnerSpacing
-        anchors.verticalCenter: parent.verticalCenter
+        anchors.bottom: caps.bottom
+        anchors.bottomMargin: -Math.max(2, hyprcast.settings.keycapFontSize * 0.15)
         visible: root.counted
-        text: "x" + root.repeatCount
+        text: "…" + root.repeatCount + "x"
         color: hyprcast.settings.foregroundColor
         font.family: hyprcast.settings.fontFamily
         font.pixelSize: Math.max(10, hyprcast.settings.keycapFontSize * 0.72)

@@ -201,6 +201,26 @@ namespace {
         check(presenter.outputText() == QStringLiteral("ab"), "reset after pause still preserves retained history");
     }
 
+    void testExplicitHistoryClear() {
+        const auto        keymap = makeKeymap("us");
+        const auto        start  = TimePoint{};
+        KeyboardPresenter presenter;
+        presenter.setExpiration(1000, 250, start);
+        presenter.processMessage(snapshot(keymap), start);
+        presenter.processMessage(key(1, 30, true), start);
+        presenter.processMessage(key(1, 30, false), start);
+        presenter.clearHistory();
+        check(presenter.outputText().isEmpty(), "explicit clear removes active history");
+        presenter.processMessage(key(1, 48, true), start);
+        presenter.processMessage(key(1, 48, false), start);
+        presenter.advance(start + std::chrono::milliseconds(1000));
+        check(presenter.fading(), "history has a fade snapshot");
+        presenter.clearHistory();
+        check(!presenter.fading() && presenter.fadingHistoryModel().rowCount() == 0, "explicit clear removes fade snapshot");
+        presenter.advance(start + std::chrono::milliseconds(5000));
+        check(presenter.outputText().isEmpty() && !presenter.fading(), "cleared history cannot reappear");
+    }
+
     void testExpirationFadeSnapshotAndBackspaceLifecycle() {
         const auto        keymap = makeKeymap("us");
         const auto        start  = TimePoint{};
@@ -419,6 +439,7 @@ int main(int argc, char** argv) {
     testLayoutAwareText();
     testKeymapAndKeyboardRemovalResetInputState();
     testPresenterPreservesHistoryAcrossPauseAndReset();
+    testExplicitHistoryClear();
     testExpirationFadeSnapshotAndBackspaceLifecycle();
     testCountedProjectionSurvivesBackspaceAndReconnect();
     testManualTapsCountWhenAutoRepeatIsDisabled();

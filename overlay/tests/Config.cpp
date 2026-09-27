@@ -58,6 +58,13 @@ int main(int argc, char** argv) {
     check(defaults.width == 600 && defaults.height == 88 && defaults.anchor == QStringLiteral("bottom-right"), "use built-in window defaults");
     check(defaults.maxRetainedUtf16CodeUnits == 4096 && defaults.backspaceMode == QStringLiteral("delete"), "preserve documented history defaults");
     check(defaults.themeId == QStringLiteral("builtin:default"), "select the bundled theme for legacy and absent configurations");
+    check(defaults.dynamicSize && defaults.minWidth == 240 && defaults.minHeight == 64 && defaults.width == 600 && defaults.height == 88,
+          "default panel grows up to the unchanged maximum surface size");
+    check(defaults.panelVisibility == QStringLiteral("with-content") && defaults.expireAfterMs == 3000 && defaults.fadeDurationMs == 250,
+          "default panel hides when history expires after inactivity");
+    check(defaults.panelBorderWidth == 1 && defaults.panelBorderColor == QStringLiteral("#ffffff"), "default panel has a white one-pixel border");
+    check(defaults.repeatPresentation == QStringLiteral("counted") && defaults.repeatCountThreshold == 4,
+          "default repeats collapse at four occurrences");
 
     OverlayConfig config;
     QString       error;
@@ -102,7 +109,7 @@ int main(int argc, char** argv) {
     check(!parse("[appearance]\nbackground_opacity=2.0\n", &config, &error), "reject values outside documented ranges");
     check(!parse("[appearance]\nbackground_color='not-a-color'\n", &config, &error), "reject invalid colors");
     check(!parse("[window]\ndynamic_size=true\nwidth=100\nmin_width=101\n", &config, &error), "reject dynamic minimum dimensions above the maximum surface");
-    check(parse("[window]\nwidth=100\n", &config, &error), "existing fixed-size surfaces may retain dimensions below the unused dynamic minimum");
+    check(parse("[window]\ndynamic_size=false\nwidth=100\n", &config, &error), "fixed-size surfaces may retain dimensions below the unused dynamic minimum");
     check(!parse("[appearance]\npanel_border_width=-1\n", &config, &error), "reject negative border widths");
     check(!parse("[display]\npanel_visibility='sometimes'\n", &config, &error), "reject unknown panel visibility policies");
     check(!parse("[repeat]\npresentation='counted'\ncount_threshold=1\n", &config, &error), "reject counted repeat thresholds below two occurrences");

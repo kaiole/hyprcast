@@ -48,6 +48,18 @@ namespace Hyprcast::Overlay {
         connectNow();
     }
 
+    void IpcClient::restartConnection() {
+        failConnection(QStringLiteral("Capture control timed out"));
+    }
+
+    bool IpcClient::setCaptureEnabled(bool enabled) {
+        if (!m_connected || !m_state.hasCastingState()) {
+            return false;
+        }
+        const QByteArray command = enabled ? QByteArrayLiteral("enable\n") : QByteArrayLiteral("disable\n");
+        return m_socket.write(command) == command.size();
+    }
+
     QString IpcClient::statusText() const {
         if (m_connected) {
             return QStringLiteral("Connected");
@@ -95,7 +107,7 @@ namespace Hyprcast::Overlay {
         m_connected  = false;
         m_connectionTimeoutTimer.start(ConnectionTimeoutMs);
         emit stateChanged();
-        m_socket.connectToServer(m_socketPath, QIODevice::ReadOnly);
+        m_socket.connectToServer(m_socketPath, QIODevice::ReadWrite);
     }
 
     void IpcClient::handleConnected() {

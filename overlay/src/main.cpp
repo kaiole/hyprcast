@@ -1,6 +1,8 @@
 #include "config/OverlayConfig.hpp"
 #include "input/KeyboardPresenter.hpp"
 #include "ipc/IpcClient.hpp"
+#include "ipc/OverlayInstance.hpp"
+#include "ipc/CaptureController.hpp"
 #include "theme/Theme.hpp"
 
 #include <LayerShellQt/Window>
@@ -10,6 +12,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDir>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QMargins>
 #include <QQmlError>
@@ -252,6 +255,7 @@ int main(int argc, char* argv[]) {
     parser.setApplicationDescription(QStringLiteral("A lightweight Hyprland keyboard overlay."));
     parser.addHelpOption();
     parser.addVersionOption();
+    parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("toggle: launch and enable, or toggle the resident overlay."), QStringLiteral("[toggle]"));
 
     const QCommandLineOption configOption(QStringLiteral("config"), QStringLiteral("Load this TOML configuration file (must exist)."), QStringLiteral("path"));
     const QCommandLineOption monitorOption({QStringLiteral("m"), QStringLiteral("monitor")}, QStringLiteral("Output name (defaults to the primary output)."),
@@ -284,6 +288,27 @@ int main(int argc, char* argv[]) {
                        hideHeldKeysOption, expireAfterOption, fadeDurationOption, backspaceOption, retentionOption, repeatEnabledOption, socketOption, instanceOption,
                        quitAfterOption});
     parser.process(application);
+    const QStringList commands = parser.positionalArguments();
+    if (commands.size() > 1 || (!commands.isEmpty() && commands.front() != QStringLiteral("toggle"))) {
+        writeError(QStringLiteral("Expected no command or 'toggle'"));
+        return 2;
+    }
+    const bool toggle = !commands.isEmpty();
+    QString    socketPath;
+    if (!resolveSocketPath(parser, socketOption, instanceOption, &socketPath)) {
+        return 2;
+    }
+    socketPath = QFileInfo(socketPath).absoluteFilePath();
+    Hyprcast::Overlay::OverlayInstance instance(socketPath);
+    QString                            instanceError;
+    const auto                         ownership = instance.acquire(toggle, &instanceError);
+    if (ownership == Hyprcast::Overlay::OverlayInstance::Result::Forwarded) {
+        return 0;
+    }
+    if (ownership == Hyprcast::Overlay::OverlayInstance::Result::Error) {
+        writeError(instanceError);
+        return 1;
+    }
 
     ConfigOverrides overrides;
     if (!parseOverrides(parser, monitorOption, anchorOption, marginsOption, widthOption, heightOption, opacityOption, presentationOption, showHeldKeysOption, hideHeldKeysOption,
@@ -305,11 +330,6 @@ int main(int argc, char* argv[]) {
         if (!warning.isEmpty()) {
             qWarning().noquote() << QStringLiteral("hyprcast-overlay: %1").arg(warning);
         }
-    }
-
-    QString socketPath;
-    if (!resolveSocketPath(parser, socketOption, instanceOption, &socketPath)) {
-        return 2;
     }
 
     QStringList themeRoots;
@@ -499,8 +519,30 @@ int main(int argc, char* argv[]) {
                              .arg(initialConfig.anchor)
                              .arg(loadedTheme.activeThemeId());
 
+    Hyprcast::Overlay::CaptureController capture(ipcClient);
+    QObject::connect(&instance, &Hyprcast::Overlay::OverlayInstance::toggleRequested, &capture, &Hyprcast::Overlay::CaptureController::toggle);
+    QObject::connect(&capture, &Hyprcast::Overlay::CaptureController::activeChanged, &view, [&view, &keyboardPresenter](bool active) {
+        if (!active) {
+            keyboardPresenter.clearHistory();
+        }
+        view.setVisible(active);
+    });
+    bool initialActivation = toggle;
+    QObject::connect(&capture, &Hyprcast::Overlay::CaptureController::commandFailed, &application, [&application, &initialActivation](const QString& error) {
+        writeError(error);
+        if (initialActivation) {
+            application.exit(1);
+        }
+    });
+    QObject::connect(&capture, &Hyprcast::Overlay::CaptureController::activeChanged, &application, [&initialActivation](bool active) {
+        if (active) {
+            initialActivation = false;
+        }
+    });
+    if (toggle) {
+        capture.enableWhenReady();
+    }
     ipcClient.start();
-    view.show();
     configuration.startWatching();
     if (quitAfterMs > 0) {
         QTimer::singleShot(quitAfterMs, &application, &QCoreApplication::quit);

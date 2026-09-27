@@ -157,15 +157,26 @@ namespace Hyprcast::Overlay {
         const QString symbolFont = m_source->presentationOptions().symbolFontFamily;
         for (const Row& row : m_rows) {
             const auto& action = row.source.action;
-            if (action.kind == InterpretedActionKind::Text && !row.counted) {
-                result.append(rich ? action.text.toHtmlEscaped() : action.text);
+            const auto visibleCount = row.counted ? std::min(row.occurrences, static_cast<std::uint32_t>(m_source->presentationOptions().repeatThreshold - 1)) : 1u;
+            if (action.kind == InterpretedActionKind::Text) {
+                if (row.counted && !result.isEmpty() && !result.endsWith(QLatin1Char(' '))) {
+                    result.append(QLatin1Char(' '));
+                }
+                const QString label = rich ? action.text.toHtmlEscaped() : action.text;
+                for (std::uint32_t i = 0; i < visibleCount; ++i) {
+                    result.append(label);
+                }
+                if (row.counted) {
+                    const QString suffix = QStringLiteral("…%1x").arg(row.occurrences);
+                    result.append(rich ? QStringLiteral("<sub><small>%1</small></sub>").arg(suffix) : suffix);
+                    result.append(QLatin1Char(' '));
+                }
                 continue;
             }
 
             if (!result.isEmpty() && !result.endsWith(QLatin1Char(' '))) {
                 result.append(QLatin1Char(' '));
             }
-            result.append(QLatin1Char('['));
             QString label = row.displayLabel;
             if (rich) {
                 label = label.toHtmlEscaped();
@@ -173,11 +184,17 @@ namespace Hyprcast::Overlay {
                     label = QStringLiteral("<font face=\"%1\">%2</font>").arg(symbolFont.toHtmlEscaped(), label);
                 }
             }
-            result.append(label);
-            if (row.counted) {
-                result.append(QStringLiteral(" x%1").arg(row.occurrences));
+            for (std::uint32_t i = 0; i < visibleCount; ++i) {
+                if (i != 0) {
+                    result.append(QLatin1Char(' '));
+                }
+                result.append(label);
             }
-            result.append(QStringLiteral("] "));
+            if (row.counted) {
+                const QString suffix = QStringLiteral("…%1x").arg(row.occurrences);
+                result.append(rich ? QStringLiteral("<sub><small>%1</small></sub>").arg(suffix) : suffix);
+            }
+            result.append(QLatin1Char(' '));
         }
         return result;
     }

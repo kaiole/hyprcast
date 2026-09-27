@@ -220,19 +220,21 @@ namespace {
             repeat.repeated    = true;
             repeat.repeatCount = i;
             history.apply(repeat);
-            const QString expected = i < 3 ? QString(i + 1, QLatin1Char('a')) : QStringLiteral("[a x%1] ").arg(i + 1);
+            const QString expected = i < 3 ? QString(i + 1, QLatin1Char('a')) : QStringLiteral("aaa…%1x ").arg(i + 1);
             check(history.presentationModel().displayText() == expected, "counted repeats collapse at the configured occurrence threshold");
         }
         check(history.rowCount() == 5 && history.presentationModel().rowCount() == 1, "projection collapses rows without discarding semantic actions");
+        check(history.presentationModel().displayRichText() == QStringLiteral("aaa<sub><small>…5x</small></sub> "),
+              "text theme can render the total-count suffix smaller and below the baseline");
         check(history.presentationModel().data(history.presentationModel().index(0, 0), HistoryProjectionModel::RepeatCountRole).toUInt() == 5,
               "projected count includes the initial press and generated repeats");
 
         history.apply(key(QStringLiteral("Backspace")));
-        check(history.presentationModel().displayText() == QStringLiteral("[a x4] "), "Backspace decrements the retained counted run");
+        check(history.presentationModel().displayText() == QStringLiteral("aaa…4x "), "Backspace decrements the retained counted run");
         history.apply(key(QStringLiteral("Backspace")));
-        check(history.presentationModel().displayText() == QStringLiteral("[a x3] "), "a collapsed row stays collapsed below its threshold");
+        check(history.presentationModel().displayText() == QStringLiteral("aaa…3x "), "a collapsed row stays collapsed below its threshold");
         history.apply(first);
-        check(history.presentationModel().displayText() == QStringLiteral("[a x4] "), "a new equivalent tap extends the same group after decrementing it");
+        check(history.presentationModel().displayText() == QStringLiteral("aaa…4x "), "a new equivalent tap extends the same group after decrementing it");
         history.apply(key(QStringLiteral("Backspace")));
         history.apply(key(QStringLiteral("Backspace")));
         history.apply(key(QStringLiteral("Backspace")));
@@ -249,9 +251,9 @@ namespace {
         }
         check(retained.retainedUtf16CodeUnits() == 4 && retained.displayText() == QStringLiteral("xxxx"),
               "retention charges every underlying occurrence rather than the compressed counter");
-        check(retained.presentationModel().displayText() == QStringLiteral("[x x4] "), "retention trimming reduces the projected occurrence count");
+        check(retained.presentationModel().displayText() == QStringLiteral("xxx…4x "), "retention trimming reduces the projected occurrence count");
         retained.apply(key(QStringLiteral("Backspace")));
-        check(retained.presentationModel().displayText() == QStringLiteral("[x x3] "), "retention-trimmed groups retain sticky collapse while erasing");
+        check(retained.presentationModel().displayText() == QStringLiteral("xxx…3x "), "retention-trimmed groups retain sticky collapse while erasing");
     }
 
     void testAdjacentCountedInputsAndUnicodeEligibility() {
@@ -271,7 +273,7 @@ namespace {
         interleavedRuns.apply(text(QStringLiteral("b"), 1, 48));
         interleavedRuns.apply(text(QStringLiteral("a"), 1, 30));
         interleavedRuns.apply(text(QStringLiteral("a"), 1, 30));
-        check(interleavedRuns.presentationModel().displayText() == QStringLiteral("[a x2] b [a x2] "),
+        check(interleavedRuns.presentationModel().displayText() == QStringLiteral("a…2x b a…2x "),
               "matching inputs on opposite sides of another key form separate counted groups");
 
         InputHistory changed({.presentation = {.countedRepeats = true, .repeatThreshold = 2}});
@@ -283,7 +285,7 @@ namespace {
         changed.apply(changedAction);
         changedAction.repeatCount = 2;
         changed.apply(changedAction);
-        check(changed.presentationModel().displayText() == QStringLiteral("x [y x2] "), "a changed interpretation starts a distinct counted group");
+        check(changed.presentationModel().displayText() == QStringLiteral("x y…2x "), "a changed interpretation starts a distinct counted group");
 
         InputHistory mixed({.presentation = {.countedRepeats = true, .repeatThreshold = 3}});
         auto         manualFirst = text(QStringLiteral("m"), 1, 50);
@@ -297,7 +299,7 @@ namespace {
         generatedRepeat.repeatCount = 1;
         generatedRepeat.eventTimeMs = 600001;
         mixed.apply(generatedRepeat);
-        check(mixed.presentationModel().displayText() == QStringLiteral("[m x3] "), "manual taps and generated repeats share one no-timeout equivalent-input group");
+        check(mixed.presentationModel().displayText() == QStringLiteral("mm…3x "), "manual taps and generated repeats share one no-timeout equivalent-input group");
 
         InputHistory separate({.presentation = {.countedRepeats = true, .repeatThreshold = 2}});
         auto         tapA = text(QStringLiteral("a"), 1, 30);
@@ -306,7 +308,7 @@ namespace {
         tapB.eventTimeMs  = 900000;
         separate.apply(tapA);
         separate.apply(tapB);
-        check(separate.presentationModel().displayText() == QStringLiteral("[a x2] "), "same-key taps count together regardless of the gap between them");
+        check(separate.presentationModel().displayText() == QStringLiteral("a…2x "), "same-key taps count together regardless of the gap between them");
 
         InputHistory crossKeyboard({.presentation = {.countedRepeats = true, .repeatThreshold = 2}});
         crossKeyboard.apply(text(QStringLiteral("a"), 1, 30));
@@ -316,12 +318,12 @@ namespace {
         InputHistory chords({.presentation = {.countedRepeats = true, .repeatThreshold = 2}});
         chords.apply(chord({QStringLiteral("Ctrl")}, QStringLiteral("C"), 1, 46));
         chords.apply(chord({QStringLiteral("Ctrl")}, QStringLiteral("C"), 1, 46));
-        check(chords.presentationModel().displayText() == QStringLiteral("[Ctrl+C x2] "), "identical chord taps combine across release and repress");
+        check(chords.presentationModel().displayText() == QStringLiteral("Ctrl+C…2x "), "identical chord taps combine across release and repress");
 
         InputHistory specialKeys({.presentation = {.countedRepeats = true, .repeatThreshold = 2}});
         specialKeys.apply(key(QStringLiteral("Enter"), 1, 28));
         specialKeys.apply(key(QStringLiteral("Enter"), 1, 28));
-        check(specialKeys.presentationModel().displayText() == QStringLiteral("[Enter x2] "), "identical special-key taps combine across release and repress");
+        check(specialKeys.presentationModel().displayText() == QStringLiteral("Enter…2x "), "identical special-key taps combine across release and repress");
 
         HistoryPresentationOptions sharedGlyphs;
         sharedGlyphs.countedRepeats  = true;
@@ -333,7 +335,7 @@ namespace {
         canonicalKeys.apply(key(QStringLiteral("B"), 1, 48));
         canonicalKeys.apply(chord({QStringLiteral("Ctrl")}, QStringLiteral("C"), 1, 46));
         canonicalKeys.apply(chord({QStringLiteral("Shift")}, QStringLiteral("C"), 1, 46));
-        check(canonicalKeys.presentationModel().displayText() == QStringLiteral("[★] [★] [M+C] [M+C] "),
+        check(canonicalKeys.presentationModel().displayText() == QStringLiteral("★ ★ M+C M+C "),
               "canonical keys and modifiers remain distinct even when symbol mappings render them identically");
 
         InputHistory deletedIntervening({.presentation = {.countedRepeats = true, .repeatThreshold = 2}});
@@ -342,7 +344,7 @@ namespace {
         deletedIntervening.apply(text(QStringLiteral("b"), 1, 48));
         deletedIntervening.apply(key(QStringLiteral("Backspace")));
         deletedIntervening.apply(text(QStringLiteral("a"), 1, 30));
-        check(deletedIntervening.presentationModel().displayText() == QStringLiteral("[a x2] a"),
+        check(deletedIntervening.presentationModel().displayText() == QStringLiteral("a…2x a"),
               "deleting an intervening input does not retroactively merge two previously separate groups");
 
         InputHistory multiGrapheme({.presentation = {.countedRepeats = true, .repeatThreshold = 2}});
@@ -374,10 +376,17 @@ namespace {
         history.apply(chord({QStringLiteral("Ctrl")}, QStringLiteral("C")));
         history.apply(key(QStringLiteral("Backspace")));
         check(history.displayText() == QStringLiteral("[Ctrl+C] [Backspace] "), "canonical raw labels remain available and unchanged");
-        check(history.presentationModel().displayText() == QStringLiteral("[CTRL+COPY] [⌫] "), "configured key and modifier labels are projected consistently");
+        check(history.presentationModel().displayText() == QStringLiteral("CTRL+COPY ⌫ "), "configured key and modifier labels are projected consistently");
         check(history.entries()[0].action.key == QStringLiteral("C") && history.entries()[0].action.modifiers == QStringList{QStringLiteral("Ctrl")},
               "symbol substitutions do not alter canonical key or modifier identity");
         check(history.presentationModel().displayRichText().contains(QStringLiteral("Symbols &amp; Friends")), "rich text escapes configured symbol font names");
+
+        InputHistory wrapped({.presentation = {.keySymbols = {{QStringLiteral("Enter"), QStringLiteral("[Enter]")}}}});
+        wrapped.apply(text(QStringLiteral("a")));
+        wrapped.apply(key(QStringLiteral("Enter")));
+        wrapped.apply(text(QStringLiteral("b")));
+        check(wrapped.presentationModel().displayText() == QStringLiteral("a [Enter] b"), "users can opt into brackets via a key symbol");
+        check(wrapped.presentationModel().displayRichText() == QStringLiteral("a [Enter] b"), "rich text uses the same opt-in punctuation");
 
         const qsizetype before = history.retainedUtf16CodeUnits();
         presentation.keySymbols.insert(QStringLiteral("C"), QStringLiteral("a much longer presentation-only label"));
@@ -398,7 +407,7 @@ namespace {
             backspace.repeatCount = i;
             backspaceSymbols.apply(backspace);
         }
-        check(backspaceSymbols.presentationModel().displayText() == QStringLiteral("[⌫ x3] "), "symbol-mode repeated Backspace is grouped and uses its configured display glyph");
+        check(backspaceSymbols.presentationModel().displayText() == QStringLiteral("⌫ ⌫…3x "), "symbol-mode repeated Backspace is grouped and uses its configured display glyph");
     }
 
     void testProjectionPreservesStableTailIdsDuringRetention() {
@@ -443,7 +452,7 @@ namespace {
 
         HistoryListModel snapshot;
         snapshot.setSnapshot(history.entries(), history.presentationOptions(), history.collapsedRepeatRuns());
-        check(snapshot.presentationModel().displayText() == QStringLiteral("[z x3] "), "expiration-style snapshots preserve counted projection state");
+        check(snapshot.presentationModel().displayText() == QStringLiteral("zz…3x "), "expiration-style snapshots preserve counted projection state");
         check(inserted >= 2, "projection emits insert notifications for expanded semantic rows");
     }
 

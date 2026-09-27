@@ -15,6 +15,10 @@ pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET "xkbcommon>=0.7")
 
 add_library(
   hyprcast_overlay_ipc STATIC
+  src/ipc/CaptureController.cpp
+  src/ipc/CaptureController.hpp
+  src/ipc/OverlayInstance.cpp
+  src/ipc/OverlayInstance.hpp
   src/ipc/ConnectionState.cpp
   src/ipc/IpcClient.cpp
   src/ipc/IpcClient.hpp
@@ -66,6 +70,10 @@ target_link_libraries(
 install(DIRECTORY examples/themes/ DESTINATION share/hyprcast/themes)
 
 if(BUILD_TESTING)
+  add_executable(overlay_lifecycle_tests tests/Lifecycle.cpp)
+  target_link_libraries(overlay_lifecycle_tests PRIVATE hyprcast_overlay_ipc)
+  add_test(NAME overlay-lifecycle COMMAND overlay_lifecycle_tests)
+
   add_executable(overlay_ipc_tests tests/Ipc.cpp)
   target_link_libraries(overlay_ipc_tests PRIVATE hyprcast_overlay_ipc Qt6::Network)
   add_test(NAME overlay-ipc COMMAND overlay_ipc_tests)

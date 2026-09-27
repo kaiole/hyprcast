@@ -96,6 +96,18 @@ namespace Hyprcast::Overlay {
             return true;
         }
 
+        bool readStringMap(const Table& table, QVariantMap* output, QString* error, const QString& prefix) {
+            for (const auto& [key, node] : table) {
+                const QString name  = QString::fromUtf8(key.str().data(), static_cast<qsizetype>(key.str().size()));
+                const auto    value = node.value_exact<std::string>();
+                if (!value) {
+                    return fail(error, QStringLiteral("'%1.%2' must be a string").arg(prefix, name));
+                }
+                output->insert(name, QString::fromUtf8(value->data(), static_cast<qsizetype>(value->size())));
+            }
+            return true;
+        }
+
         bool readOpacity(const Table& table, QString* error, double* output) {
             const auto* node = table.get("background_opacity");
             if (!node) {
@@ -127,6 +139,32 @@ namespace Hyprcast::Overlay {
                 values[i] = static_cast<int>(*value);
             }
             *output = QMargins(values[0], values[1], values[2], values[3]);
+            return true;
+        }
+
+        bool readSymbols(const Table& root, OverlayConfig* config, QString* error) {
+            const Table* symbols = readTable(root, "symbols", error);
+            if (!symbols) {
+                return !error || error->isEmpty();
+            }
+            if (!hasOnlyKeys(*symbols, {"font_family", "keys", "modifiers"}, QStringLiteral("symbols"), error) ||
+                !readString(*symbols, "font_family", &config->symbolFontFamily, error)) {
+                return false;
+            }
+            if (const Table* keys = readTable(*symbols, "keys", error)) {
+                if (!readStringMap(*keys, &config->keySymbols, error, QStringLiteral("symbols.keys"))) {
+                    return false;
+                }
+            } else if (error && !error->isEmpty()) {
+                return false;
+            }
+            if (const Table* modifiers = readTable(*symbols, "modifiers", error)) {
+                if (!readStringMap(*modifiers, &config->modifierSymbols, error, QStringLiteral("symbols.modifiers"))) {
+                    return false;
+                }
+            } else if (error && !error->isEmpty()) {
+                return false;
+            }
             return true;
         }
 
@@ -225,15 +263,18 @@ namespace Hyprcast::Overlay {
         }
 
         bool readConfigTables(const Table& root, OverlayConfig* config, QString* error) {
-            if (!hasOnlyKeys(root, {"window", "appearance", "display", "history", "repeat", "expiration", "theme"}, {}, error)) {
+            if (!hasOnlyKeys(root, {"window", "appearance", "display", "history", "repeat", "expiration", "theme", "symbols"}, {}, error)) {
                 return false;
             }
 
             if (const Table* table = readTable(root, "window", error)) {
-                if (!hasOnlyKeys(*table, {"monitor", "anchor", "margins", "width", "height", "click_through"}, QStringLiteral("window"), error) ||
+                if (!hasOnlyKeys(*table, {"monitor", "anchor", "margins", "width", "height", "min_width", "min_height", "dynamic_size", "click_through"}, QStringLiteral("window"),
+                                 error) ||
                     !readString(*table, "monitor", &config->monitor, error) || !readString(*table, "anchor", &config->anchor, error) ||
                     !readMargins(*table, &config->margins, error) || !readInteger(*table, "width", &config->width, error) ||
-                    !readInteger(*table, "height", &config->height, error) || !readBoolean(*table, "click_through", &config->clickThrough, error)) {
+                    !readInteger(*table, "height", &config->height, error) || !readInteger(*table, "min_width", &config->minWidth, error) ||
+                    !readInteger(*table, "min_height", &config->minHeight, error) || !readBoolean(*table, "dynamic_size", &config->dynamicSize, error) ||
+                    !readBoolean(*table, "click_through", &config->clickThrough, error)) {
                     return false;
                 }
             } else if (error && !error->isEmpty()) {
@@ -242,14 +283,43 @@ namespace Hyprcast::Overlay {
 
             if (const Table* table = readTable(root, "appearance", error)) {
                 if (!hasOnlyKeys(*table,
-                                 {"background_color",   "background_opacity",      "corner_radius",        "foreground_color",       "font_family",           "font_size",
-                                  "font_weight",        "history_padding_x",       "text_extra_padding_x", "keycap_font_size",       "keycap_height",         "keycap_padding_x",
-                                  "keycap_radius",      "keycap_spacing",          "keycap_inner_spacing", "keycap_text_background", "keycap_key_background", "keycap_border_color",
-                                  "keycap_text_color",  "held_font_size",          "held_key_height",      "held_key_padding_x",     "held_key_radius",       "held_key_spacing",
-                                  "held_row_padding_x", "held_row_padding_bottom", "held_key_background",  "held_key_text_color"},
+                                 {"background_color",
+                                  "background_opacity",
+                                  "corner_radius",
+                                  "panel_border_width",
+                                  "panel_border_color",
+                                  "foreground_color",
+                                  "font_family",
+                                  "font_size",
+                                  "font_weight",
+                                  "history_padding_x",
+                                  "text_extra_padding_x",
+                                  "keycap_font_size",
+                                  "keycap_height",
+                                  "keycap_padding_x",
+                                  "keycap_radius",
+                                  "keycap_spacing",
+                                  "keycap_inner_spacing",
+                                  "keycap_text_background",
+                                  "keycap_key_background",
+                                  "keycap_border_color",
+                                  "keycap_border_width",
+                                  "keycap_text_color",
+                                  "held_font_size",
+                                  "held_key_height",
+                                  "held_key_padding_x",
+                                  "held_key_radius",
+                                  "held_key_spacing",
+                                  "held_row_padding_x",
+                                  "held_row_padding_bottom",
+                                  "held_key_background",
+                                  "held_key_text_color",
+                                  "held_key_border_width",
+                                  "held_key_border_color"},
                                  QStringLiteral("appearance"), error) ||
                     !readString(*table, "background_color", &config->backgroundColor, error) || !readOpacity(*table, error, &config->backgroundOpacity) ||
-                    !readInteger(*table, "corner_radius", &config->cornerRadius, error) || !readString(*table, "foreground_color", &config->foregroundColor, error) ||
+                    !readInteger(*table, "corner_radius", &config->cornerRadius, error) || !readInteger(*table, "panel_border_width", &config->panelBorderWidth, error) ||
+                    !readString(*table, "panel_border_color", &config->panelBorderColor, error) || !readString(*table, "foreground_color", &config->foregroundColor, error) ||
                     !readString(*table, "font_family", &config->fontFamily, error) || !readInteger(*table, "font_size", &config->fontSize, error) ||
                     !readFontWeight(*table, &config->fontWeight, error) || !readInteger(*table, "history_padding_x", &config->historyPaddingX, error) ||
                     !readInteger(*table, "text_extra_padding_x", &config->textExtraPaddingX, error) || !readInteger(*table, "keycap_font_size", &config->keycapFontSize, error) ||
@@ -258,25 +328,29 @@ namespace Hyprcast::Overlay {
                     !readInteger(*table, "keycap_inner_spacing", &config->keycapInnerSpacing, error) ||
                     !readString(*table, "keycap_text_background", &config->keycapTextBackground, error) ||
                     !readString(*table, "keycap_key_background", &config->keycapKeyBackground, error) ||
-                    !readString(*table, "keycap_border_color", &config->keycapBorderColor, error) || !readString(*table, "keycap_text_color", &config->keycapTextColor, error) ||
+                    !readString(*table, "keycap_border_color", &config->keycapBorderColor, error) ||
+                    !readInteger(*table, "keycap_border_width", &config->keycapBorderWidth, error) || !readString(*table, "keycap_text_color", &config->keycapTextColor, error) ||
                     !readInteger(*table, "held_font_size", &config->heldFontSize, error) || !readInteger(*table, "held_key_height", &config->heldKeyHeight, error) ||
                     !readInteger(*table, "held_key_padding_x", &config->heldKeyPaddingX, error) || !readInteger(*table, "held_key_radius", &config->heldKeyRadius, error) ||
                     !readInteger(*table, "held_key_spacing", &config->heldKeySpacing, error) || !readInteger(*table, "held_row_padding_x", &config->heldRowPaddingX, error) ||
                     !readInteger(*table, "held_row_padding_bottom", &config->heldRowPaddingBottom, error) ||
-                    !readString(*table, "held_key_background", &config->heldKeyBackground, error) || !readString(*table, "held_key_text_color", &config->heldKeyTextColor, error)) {
+                    !readString(*table, "held_key_background", &config->heldKeyBackground, error) || !readString(*table, "held_key_text_color", &config->heldKeyTextColor, error) ||
+                    !readInteger(*table, "held_key_border_width", &config->heldKeyBorderWidth, error) ||
+                    !readString(*table, "held_key_border_color", &config->heldKeyBorderColor, error)) {
                     return false;
                 }
             } else if (error && !error->isEmpty()) {
                 return false;
             }
 
-            if (!readTheme(root, config, error)) {
+            if (!readTheme(root, config, error) || !readSymbols(root, config, error)) {
                 return false;
             }
 
             if (const Table* table = readTable(root, "display", error)) {
-                if (!hasOnlyKeys(*table, {"presentation", "show_held_keys"}, QStringLiteral("display"), error) ||
-                    !readString(*table, "presentation", &config->presentation, error) || !readBoolean(*table, "show_held_keys", &config->showHeldKeys, error)) {
+                if (!hasOnlyKeys(*table, {"presentation", "show_held_keys", "panel_visibility"}, QStringLiteral("display"), error) ||
+                    !readString(*table, "presentation", &config->presentation, error) || !readBoolean(*table, "show_held_keys", &config->showHeldKeys, error) ||
+                    !readString(*table, "panel_visibility", &config->panelVisibility, error)) {
                     return false;
                 }
             } else if (error && !error->isEmpty()) {
@@ -300,7 +374,9 @@ namespace Hyprcast::Overlay {
             }
 
             if (const Table* table = readTable(root, "repeat", error)) {
-                if (!hasOnlyKeys(*table, {"enabled"}, QStringLiteral("repeat"), error) || !readBoolean(*table, "enabled", &config->repeatsEnabled, error)) {
+                if (!hasOnlyKeys(*table, {"enabled", "presentation", "count_threshold"}, QStringLiteral("repeat"), error) ||
+                    !readBoolean(*table, "enabled", &config->repeatsEnabled, error) || !readString(*table, "presentation", &config->repeatPresentation, error) ||
+                    !readInteger(*table, "count_threshold", &config->repeatCountThreshold, error)) {
                     return false;
                 }
             } else if (error && !error->isEmpty()) {
@@ -321,9 +397,15 @@ namespace Hyprcast::Overlay {
         QVariantMap toQmlValues(const OverlayConfig& c) {
             return {{QStringLiteral("width"), c.width},
                     {QStringLiteral("height"), c.height},
+                    {QStringLiteral("anchor"), c.anchor},
+                    {QStringLiteral("dynamicSize"), c.dynamicSize},
+                    {QStringLiteral("minWidth"), c.minWidth},
+                    {QStringLiteral("minHeight"), c.minHeight},
                     {QStringLiteral("backgroundColor"), c.backgroundColor},
                     {QStringLiteral("backgroundOpacity"), c.backgroundOpacity},
                     {QStringLiteral("cornerRadius"), c.cornerRadius},
+                    {QStringLiteral("panelBorderWidth"), c.panelBorderWidth},
+                    {QStringLiteral("panelBorderColor"), c.panelBorderColor},
                     {QStringLiteral("foregroundColor"), c.foregroundColor},
                     {QStringLiteral("fontFamily"), c.fontFamily},
                     {QStringLiteral("fontSize"), c.fontSize},
@@ -339,6 +421,7 @@ namespace Hyprcast::Overlay {
                     {QStringLiteral("keycapTextBackground"), c.keycapTextBackground},
                     {QStringLiteral("keycapKeyBackground"), c.keycapKeyBackground},
                     {QStringLiteral("keycapBorderColor"), c.keycapBorderColor},
+                    {QStringLiteral("keycapBorderWidth"), c.keycapBorderWidth},
                     {QStringLiteral("keycapTextColor"), c.keycapTextColor},
                     {QStringLiteral("heldFontSize"), c.heldFontSize},
                     {QStringLiteral("heldKeyHeight"), c.heldKeyHeight},
@@ -349,8 +432,16 @@ namespace Hyprcast::Overlay {
                     {QStringLiteral("heldRowPaddingBottom"), c.heldRowPaddingBottom},
                     {QStringLiteral("heldKeyBackground"), c.heldKeyBackground},
                     {QStringLiteral("heldKeyTextColor"), c.heldKeyTextColor},
+                    {QStringLiteral("heldKeyBorderWidth"), c.heldKeyBorderWidth},
+                    {QStringLiteral("heldKeyBorderColor"), c.heldKeyBorderColor},
+                    {QStringLiteral("symbolFontFamily"), c.symbolFontFamily},
+                    {QStringLiteral("keySymbols"), c.keySymbols},
+                    {QStringLiteral("modifierSymbols"), c.modifierSymbols},
                     {QStringLiteral("presentation"), c.presentation},
-                    {QStringLiteral("showHeldKeys"), c.showHeldKeys}};
+                    {QStringLiteral("showHeldKeys"), c.showHeldKeys},
+                    {QStringLiteral("panelVisibility"), c.panelVisibility},
+                    {QStringLiteral("repeatPresentation"), c.repeatPresentation},
+                    {QStringLiteral("repeatCountThreshold"), c.repeatCountThreshold}};
         }
     } // namespace
 
@@ -409,8 +500,12 @@ namespace Hyprcast::Overlay {
         if (!validateAnchor(&config->anchor, error)) {
             return false;
         }
-        if (!inRange(config->width, 1, 8192, QStringLiteral("window.width"), error) || !inRange(config->height, 1, 8192, QStringLiteral("window.height"), error)) {
+        if (!inRange(config->width, 1, 8192, QStringLiteral("window.width"), error) || !inRange(config->height, 1, 8192, QStringLiteral("window.height"), error) ||
+            !inRange(config->minWidth, 1, 8192, QStringLiteral("window.min_width"), error) || !inRange(config->minHeight, 1, 8192, QStringLiteral("window.min_height"), error)) {
             return false;
+        }
+        if (config->dynamicSize && (config->minWidth > config->width || config->minHeight > config->height)) {
+            return fail(error, QStringLiteral("when window.dynamic_size is enabled, min_width and min_height must not exceed width and height"));
         }
         const int margins[] = {config->margins.left(), config->margins.top(), config->margins.right(), config->margins.bottom()};
         for (const int margin : margins) {
@@ -422,6 +517,9 @@ namespace Hyprcast::Overlay {
             return fail(error, QStringLiteral("'appearance.background_opacity' must be a number from 0 to 1"));
         }
         if (!inRange(config->cornerRadius, 0, 256, QStringLiteral("appearance.corner_radius"), error) ||
+            !inRange(config->panelBorderWidth, 0, 64, QStringLiteral("appearance.panel_border_width"), error) ||
+            !inRange(config->keycapBorderWidth, 0, 64, QStringLiteral("appearance.keycap_border_width"), error) ||
+            !inRange(config->heldKeyBorderWidth, 0, 64, QStringLiteral("appearance.held_key_border_width"), error) ||
             !inRange(config->fontSize, 1, 256, QStringLiteral("appearance.font_size"), error) ||
             !inRange(config->fontWeight, 100, 900, QStringLiteral("appearance.font_weight"), error) ||
             !inRange(config->historyPaddingX, 0, 512, QStringLiteral("appearance.history_padding_x"), error) ||
@@ -445,13 +543,34 @@ namespace Hyprcast::Overlay {
             return fail(error, QStringLiteral("'appearance.font_family' must be a non-empty font family name (max 128 characters)"));
         }
         if (!validateColor(config->backgroundColor, QStringLiteral("appearance.background_color"), error) ||
+            !validateColor(config->panelBorderColor, QStringLiteral("appearance.panel_border_color"), error) ||
             !validateColor(config->foregroundColor, QStringLiteral("appearance.foreground_color"), error) ||
             !validateColor(config->keycapTextBackground, QStringLiteral("appearance.keycap_text_background"), error) ||
             !validateColor(config->keycapKeyBackground, QStringLiteral("appearance.keycap_key_background"), error) ||
             !validateColor(config->keycapBorderColor, QStringLiteral("appearance.keycap_border_color"), error) ||
             !validateColor(config->keycapTextColor, QStringLiteral("appearance.keycap_text_color"), error) ||
             !validateColor(config->heldKeyBackground, QStringLiteral("appearance.held_key_background"), error) ||
-            !validateColor(config->heldKeyTextColor, QStringLiteral("appearance.held_key_text_color"), error)) {
+            !validateColor(config->heldKeyTextColor, QStringLiteral("appearance.held_key_text_color"), error) ||
+            !validateColor(config->heldKeyBorderColor, QStringLiteral("appearance.held_key_border_color"), error)) {
+            return false;
+        }
+        if (!config->symbolFontFamily.isEmpty() &&
+            (config->symbolFontFamily.trimmed().isEmpty() || config->symbolFontFamily.size() > 128 || config->symbolFontFamily.contains(QChar::Null))) {
+            return fail(error, QStringLiteral("'symbols.font_family' must be empty or a font family name no longer than 128 characters"));
+        }
+        const auto validateSymbolMap = [error](const QVariantMap& mappings, const QString& path) {
+            if (mappings.size() > 256) {
+                return fail(error, QStringLiteral("'%1' may contain at most 256 mappings").arg(path));
+            }
+            for (auto it = mappings.cbegin(); it != mappings.cend(); ++it) {
+                const QString value = it.value().toString();
+                if (it.key().isEmpty() || it.key().size() > 64 || it.key().contains(QChar::Null) || value.isEmpty() || value.size() > 128 || value.contains(QChar::Null)) {
+                    return fail(error, QStringLiteral("'%1.%2' needs a non-empty identity (max 64 characters) and display label (max 128 characters)").arg(path, it.key()));
+                }
+            }
+            return true;
+        };
+        if (!validateSymbolMap(config->keySymbols, QStringLiteral("symbols.keys")) || !validateSymbolMap(config->modifierSymbols, QStringLiteral("symbols.modifiers"))) {
             return false;
         }
         if (config->themeId.trimmed().isEmpty() || config->themeId.size() > 128 || config->themeId.contains(QChar::Null)) {
@@ -461,9 +580,21 @@ namespace Hyprcast::Overlay {
         if (config->presentation != QStringLiteral("text") && config->presentation != QStringLiteral("keycaps")) {
             return fail(error, QStringLiteral("'display.presentation' must be 'text' or 'keycaps'"));
         }
+        config->panelVisibility = config->panelVisibility.toLower();
+        if (config->panelVisibility != QStringLiteral("always") && config->panelVisibility != QStringLiteral("with-content") &&
+            config->panelVisibility != QStringLiteral("never")) {
+            return fail(error, QStringLiteral("'display.panel_visibility' must be 'always', 'with-content', or 'never'"));
+        }
         config->backspaceMode = config->backspaceMode.toLower();
         if (config->backspaceMode != QStringLiteral("delete") && config->backspaceMode != QStringLiteral("symbol")) {
             return fail(error, QStringLiteral("'history.backspace' must be 'delete' or 'symbol'"));
+        }
+        config->repeatPresentation = config->repeatPresentation.toLower();
+        if (config->repeatPresentation != QStringLiteral("expanded") && config->repeatPresentation != QStringLiteral("counted")) {
+            return fail(error, QStringLiteral("'repeat.presentation' must be 'expanded' or 'counted'"));
+        }
+        if (!inRange(config->repeatCountThreshold, 2, 10000, QStringLiteral("repeat.count_threshold"), error)) {
+            return false;
         }
         if (config->maxRetainedUtf16CodeUnits < 1 || config->maxRetainedUtf16CodeUnits > 1'048'576) {
             return fail(error, QStringLiteral("'history.max_retained_utf16_code_units' must be in the range 1..1048576"));

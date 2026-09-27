@@ -463,20 +463,28 @@ namespace Hyprcast::Overlay {
 
         QStringList heldKeys() const {
             QStringList labels;
+            for (const HeldKey& item : heldKeyItems()) {
+                labels.push_back(item.kind == QStringLiteral("text") ? item.text : item.identity);
+            }
+            return labels;
+        }
+
+        std::vector<HeldKey> heldKeyItems() const {
+            std::vector<HeldKey> items;
             for (const auto& [keyboardId, keyboard] : keyboards) {
                 Q_UNUSED(keyboardId);
                 for (const auto& [keycode, key] : keyboard.pressed) {
                     Q_UNUSED(keycode);
                     if (key.modifier) {
-                        labels.push_back(key.modifierLabel);
+                        items.push_back({QStringLiteral("modifier"), key.modifierLabel, {}});
                     } else if (key.action.kind == InterpretedActionKind::Text) {
-                        labels.push_back(key.action.text);
+                        items.push_back({QStringLiteral("text"), {}, key.action.text});
                     } else if (!key.action.key.isEmpty()) {
-                        labels.push_back(key.action.key);
+                        items.push_back({QStringLiteral("key"), key.action.key, {}});
                     }
                 }
             }
-            return labels;
+            return items;
         }
     };
 
@@ -566,6 +574,10 @@ namespace Hyprcast::Overlay {
 
     QStringList KeyboardInterpreter::heldKeys() const {
         return m_impl ? m_impl->heldKeys() : QStringList{};
+    }
+
+    std::vector<HeldKey> KeyboardInterpreter::heldKeyItems() const {
+        return m_impl ? m_impl->heldKeyItems() : std::vector<HeldKey>{};
     }
 
     void KeyboardInterpreter::setRepeatsEnabled(bool enabled, Clock::time_point now) {

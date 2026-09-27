@@ -535,6 +535,14 @@ namespace Hyprcast::Overlay {
     ThemeApi::ThemeApi(KeyboardPresenter& presenter, const OverlayConfig& config, QString themeId, QVariantMap options, QObject* parent) :
         QObject(parent), m_presenter(presenter), m_themeId(std::move(themeId)), m_settings(overlayConfigToQmlValues(config)), m_options(std::move(options)) {
         connect(&m_presenter, &KeyboardPresenter::heldKeysChanged, this, &ThemeApi::heldKeysChanged);
+        auto notifyHistoryCount = [this] { emit historyCountChanged(); };
+        auto notifyExpiredCount = [this] { emit expiredHistoryCountChanged(); };
+        connect(&m_presenter.historyModel(), &QAbstractItemModel::rowsInserted, this, notifyHistoryCount);
+        connect(&m_presenter.historyModel(), &QAbstractItemModel::rowsRemoved, this, notifyHistoryCount);
+        connect(&m_presenter.historyModel(), &QAbstractItemModel::modelReset, this, notifyHistoryCount);
+        connect(&m_presenter.fadingHistoryModel(), &QAbstractItemModel::rowsInserted, this, notifyExpiredCount);
+        connect(&m_presenter.fadingHistoryModel(), &QAbstractItemModel::rowsRemoved, this, notifyExpiredCount);
+        connect(&m_presenter.fadingHistoryModel(), &QAbstractItemModel::modelReset, this, notifyExpiredCount);
         connect(&m_presenter, &KeyboardPresenter::fadingChanged, this, &ThemeApi::fadingChanged);
         connect(&m_presenter, &KeyboardPresenter::fadeDurationMsChanged, this, &ThemeApi::fadeDurationMsChanged);
     }
@@ -547,8 +555,28 @@ namespace Hyprcast::Overlay {
         return &m_presenter.fadingHistoryModel();
     }
 
+    HistoryProjectionModel* ThemeApi::displayHistory() const {
+        return &m_presenter.historyModel().presentationModel();
+    }
+
+    HistoryProjectionModel* ThemeApi::expiredDisplayHistory() const {
+        return &m_presenter.fadingHistoryModel().presentationModel();
+    }
+
+    int ThemeApi::historyCount() const {
+        return m_presenter.historyModel().rowCount();
+    }
+
+    int ThemeApi::expiredHistoryCount() const {
+        return m_presenter.fadingHistoryModel().rowCount();
+    }
+
     QStringList ThemeApi::heldKeys() const {
         return m_presenter.heldKeys();
+    }
+
+    QVariantList ThemeApi::heldKeyItems() const {
+        return m_presenter.heldKeyItems();
     }
 
     int ThemeApi::heldKeyCount() const {

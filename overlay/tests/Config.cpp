@@ -69,6 +69,20 @@ int main(int argc, char** argv) {
     check(config.themeId == QStringLiteral("ledger") && config.themeOptions.value(QStringLiteral("item_spacing")).toLongLong() == 7 &&
               config.themeOptions.value(QStringLiteral("accent")).toString() == QStringLiteral("#abcdef"),
           "preserve dynamic theme option values for descriptor validation");
+    check(parse("[window]\nwidth=720\nheight=140\nmin_width=180\nmin_height=70\ndynamic_size=true\n[appearance]\npanel_border_width=2\npanel_border_color='#80112233'\nkeycap_"
+                "border_width=0\nheld_key_border_width=3\n[display]\npanel_visibility='with-content'\n[repeat]\npresentation='counted'\ncount_threshold=4\n[symbols]\nfont_family='"
+                "Symbols Nerd Font'\n[symbols.keys]\nBackspace='⌫'\n[symbols.modifiers]\nCtrl='⌃'\n",
+                &config, &error),
+          "parse dynamic sizing, border, panel visibility, counted repeat, and symbol settings");
+    check(config.dynamicSize && config.width == 720 && config.minWidth == 180 && config.minHeight == 70 && config.panelBorderWidth == 2 && config.keycapBorderWidth == 0 &&
+              config.heldKeyBorderWidth == 3 && config.panelVisibility == QStringLiteral("with-content") && config.repeatPresentation == QStringLiteral("counted") &&
+              config.repeatCountThreshold == 4,
+          "retain extension settings after validation");
+    check(config.keySymbols.value(QStringLiteral("Backspace")).toString() == QStringLiteral("⌫") &&
+              config.modifierSymbols.value(QStringLiteral("Ctrl")).toString() == QStringLiteral("⌃") && config.symbolFontFamily == QStringLiteral("Symbols Nerd Font"),
+          "parse presentation-only key and modifier symbols");
+    check(overlayConfigToQmlValues(config).value(QStringLiteral("dynamicSize")).toBool() && overlayConfigToQmlValues(config).value(QStringLiteral("panelBorderWidth")).toInt() == 2,
+          "publish the new shared settings to theme QML");
     check(!parse("[theme.options]\nbad=[1,2]\n", &config, &error), "reject non-scalar theme option values");
 
     ConfigOverrides overrides;
@@ -87,6 +101,12 @@ int main(int argc, char** argv) {
     check(!parse("[window]\nmargins=[1,2,3]\n", &config, &error), "require exactly four margins");
     check(!parse("[appearance]\nbackground_opacity=2.0\n", &config, &error), "reject values outside documented ranges");
     check(!parse("[appearance]\nbackground_color='not-a-color'\n", &config, &error), "reject invalid colors");
+    check(!parse("[window]\ndynamic_size=true\nwidth=100\nmin_width=101\n", &config, &error), "reject dynamic minimum dimensions above the maximum surface");
+    check(parse("[window]\nwidth=100\n", &config, &error), "existing fixed-size surfaces may retain dimensions below the unused dynamic minimum");
+    check(!parse("[appearance]\npanel_border_width=-1\n", &config, &error), "reject negative border widths");
+    check(!parse("[display]\npanel_visibility='sometimes'\n", &config, &error), "reject unknown panel visibility policies");
+    check(!parse("[repeat]\npresentation='counted'\ncount_threshold=1\n", &config, &error), "reject counted repeat thresholds below two occurrences");
+    check(!parse("[symbols.keys]\nBackspace=12\n", &config, &error), "reject non-string symbol mappings");
     check(!parse("[history]\nbackspace='sometimes'\n", &config, &error), "reject unknown behavior enums");
     check(!parse("[other]\nvalue=1\n", &config, &error), "reject unknown top-level tables");
 

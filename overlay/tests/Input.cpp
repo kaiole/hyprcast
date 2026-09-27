@@ -289,6 +289,83 @@ namespace {
         check(!reconfiguredFade.fading(), "reconfigured fade clears at its new deadline even when expiration is disabled");
     }
 
+    void testCountedProjectionSurvivesBackspaceAndReconnect() {
+        const auto          start  = TimePoint{};
+        const auto          keymap = makeKeymap("us");
+        KeyboardPresenter   presenter;
+        InputHistoryOptions options;
+        options.presentation.countedRepeats  = true;
+        options.presentation.repeatThreshold = 3;
+        options.presentation.modifierSymbols = {{QStringLiteral("Ctrl"), QStringLiteral("⌃")}};
+        presenter.setHistoryOptions(options);
+        presenter.processMessage(snapshot(keymap, 1, 10, 100), start);
+        presenter.processMessage(key(1, 30, true), start);
+        presenter.advance(start + std::chrono::milliseconds(100));
+        presenter.advance(start + std::chrono::milliseconds(200));
+        check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("[a x3] "),
+              "presenter projects one initial press plus generated repeats as a counted group");
+
+        presenter.processMessage(key(1, 14, true, 201), start + std::chrono::milliseconds(201));
+        check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("[a x2] "), "plain Backspace deletes one underlying occurrence of a counted group");
+        presenter.resetConnection();
+        check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("[a x2] "),
+              "pause/reconnect input reset preserves counted semantic history and sticky presentation");
+
+        presenter.processMessage(snapshot(keymap, 1), start + std::chrono::milliseconds(300));
+        presenter.processMessage(key(1, 30, true, 301), start + std::chrono::milliseconds(301));
+        check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("[a x3] "), "a post-reconnect equivalent input joins the adjacent retained sequence");
+
+        presenter.processMessage(key(1, 29, true, 302), start + std::chrono::milliseconds(302));
+        const auto held       = presenter.heldKeyItems();
+        bool       mappedCtrl = false;
+        for (const QVariant& value : held) {
+            const QVariantMap item = value.toMap();
+            if (item.value(QStringLiteral("identity")).toString() == QStringLiteral("Ctrl")) {
+                mappedCtrl = item.value(QStringLiteral("label")).toString() == QStringLiteral("⌃");
+            }
+        }
+        check(mappedCtrl, "held-key feedback resolves configured modifier labels while retaining raw identity");
+
+        KeyboardPresenter expiration;
+        expiration.setHistoryOptions(options);
+        expiration.setExpiration(100, 250, start);
+        expiration.processMessage(snapshot(keymap, 4, 10, 100), start);
+        expiration.processMessage(key(4, 30, true), start);
+        expiration.advance(start + std::chrono::milliseconds(100));
+        expiration.advance(start + std::chrono::milliseconds(200));
+        expiration.processMessage(key(4, 30, false, 201), start + std::chrono::milliseconds(201));
+        expiration.advance(start + std::chrono::milliseconds(301));
+        check(expiration.fadingHistoryModel().presentationModel().displayText() == QStringLiteral("[a x3] ") && expiration.historyModel().rowCount() == 0,
+              "expiration snapshots retain counted projection while immediately clearing editable history");
+    }
+
+    void testManualTapsCountWhenAutoRepeatIsDisabled() {
+        const auto          keymap = makeKeymap("us");
+        const auto          start  = TimePoint{};
+        KeyboardPresenter   presenter;
+        InputHistoryOptions options;
+        options.presentation.countedRepeats  = true;
+        options.presentation.repeatThreshold = 4;
+        presenter.setHistoryOptions(options);
+        presenter.setRepeatsEnabled(false, start);
+        presenter.processMessage(snapshot(keymap, 1, 20, 100), start);
+
+        for (int i = 0; i < 4; ++i) {
+            const auto now = start + std::chrono::milliseconds(i * 200);
+            presenter.processMessage(key(1, 30, true, static_cast<std::uint32_t>(i * 200 + 1)), now);
+            presenter.processMessage(key(1, 30, false, static_cast<std::uint32_t>(i * 200 + 2)), now + std::chrono::milliseconds(2));
+            presenter.advance(now + std::chrono::milliseconds(150));
+            const QString expected = i < 3 ? QString(i + 1, QLatin1Char('a')) : QStringLiteral("[a x4] ");
+            check(presenter.historyModel().presentationModel().displayText() == expected, "separate same-key taps count with auto-repeat disabled");
+        }
+
+        presenter.processMessage(key(1, 14, true, 801), start + std::chrono::milliseconds(800));
+        check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("[a x3] "), "Backspace decrements a manually counted group");
+        presenter.processMessage(key(1, 14, false, 802), start + std::chrono::milliseconds(802));
+        presenter.processMessage(key(1, 30, true, 803), start + std::chrono::milliseconds(803));
+        check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("[a x4] "), "a later equivalent tap joins the decremented manual group");
+    }
+
     void testDeterministicRepeatsAndCancellation() {
         const auto          keymap = makeKeymap("us");
         KeyboardInterpreter interpreter;
@@ -296,11 +373,11 @@ namespace {
         send(interpreter, snapshot(keymap, 1, 10, 500), start);
 
         const auto initial = process(interpreter, key(1, 30, true), start);
-        check(initial.size() == 1 && !initial.front().repeated, "initial key press is not marked as repeat");
+        check(initial.size() == 1 && !initial.front().repeated && initial.front().text == QStringLiteral("a"), "initial key press is interpreted once and is not marked as repeat");
         check(interpreter.advance(start + std::chrono::milliseconds(499)).empty(), "repeat does not fire before configured delay");
         auto repeated = interpreter.advance(start + std::chrono::milliseconds(500));
-        check(repeated.size() == 1 && repeated.front().repeated && repeated.front().repeatCount == 1 && repeated.front().text == QStringLiteral("a"),
-              "first local repeat fires at the configured delay with original interpretation");
+        check(repeated.size() == 1 && repeated.front().repeated && repeated.front().repeatCount == 1 && repeated.front().text == initial.front().text,
+              "first local repeat preserves the original interpretation and increments repeat metadata");
         repeated = interpreter.advance(start + std::chrono::milliseconds(600));
         check(repeated.size() == 1 && repeated.front().repeatCount == 2, "repeat interval follows configured rate");
 
@@ -313,7 +390,9 @@ namespace {
         check(interpreter.nextRepeatDeadline() == TimePoint::max(), "no repeat remains scheduled after release");
         check(interpreter.advance(start + std::chrono::seconds(10)).empty(), "released key never repeats later");
 
-        process(interpreter, key(1, 30, true, 4), start + std::chrono::seconds(11));
+        const auto repress = process(interpreter, key(1, 30, true, 4), start + std::chrono::seconds(11));
+        check(repress.size() == 1 && !repress.front().repeated && repress.front().repeatCount == 0 && repress.front().text == initial.front().text,
+              "release and repress produce a new ordinary input while repeat scheduling restarts");
         send(interpreter, CastingStateMessage{.paused = true}, start + std::chrono::seconds(11));
         check(interpreter.heldModifiers().isEmpty(), "pause clears observed held state");
         check(interpreter.nextRepeatDeadline() == TimePoint::max(), "pause cancels active repeats");
@@ -341,6 +420,8 @@ int main(int argc, char** argv) {
     testKeymapAndKeyboardRemovalResetInputState();
     testPresenterPreservesHistoryAcrossPauseAndReset();
     testExpirationFadeSnapshotAndBackspaceLifecycle();
+    testCountedProjectionSurvivesBackspaceAndReconnect();
+    testManualTapsCountWhenAutoRepeatIsDisabled();
     testDeterministicRepeatsAndCancellation();
     std::cout << "overlay input tests passed\n";
     return 0;

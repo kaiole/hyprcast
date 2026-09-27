@@ -17,6 +17,12 @@ namespace Hyprcast::Overlay {
         Chord,
     };
 
+    struct HeldKey {
+        QString kind;
+        QString identity;
+        QString text;
+    };
+
     struct InterpretedAction {
         InterpretedActionKind                 kind        = InterpretedActionKind::Key;
         std::uint32_t                         keyboardId  = 0;
@@ -46,6 +52,7 @@ namespace Hyprcast::Overlay {
         [[nodiscard]] Clock::time_point              nextRepeatDeadline() const noexcept;
         [[nodiscard]] QString                        heldModifiers() const;
         [[nodiscard]] QStringList                    heldKeys() const;
+        [[nodiscard]] std::vector<HeldKey>           heldKeyItems() const;
         void                                         setRepeatsEnabled(bool enabled, Clock::time_point now = Clock::now());
         void                                         reset() noexcept;
 

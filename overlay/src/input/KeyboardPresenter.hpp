@@ -5,6 +5,7 @@
 
 #include <QObject>
 #include <QTimer>
+#include <QVariantList>
 
 #include <chrono>
 #include <optional>
@@ -14,6 +15,7 @@ namespace Hyprcast::Overlay {
         Q_OBJECT
         Q_PROPERTY(QString outputText READ outputText NOTIFY outputTextChanged)
         Q_PROPERTY(QStringList heldKeys READ heldKeys NOTIFY heldKeysChanged)
+        Q_PROPERTY(QVariantList heldKeyItems READ heldKeyItems NOTIFY heldKeysChanged)
         Q_PROPERTY(int heldKeyCount READ heldKeyCount NOTIFY heldKeysChanged)
         Q_PROPERTY(bool fading READ fading NOTIFY fadingChanged)
         Q_PROPERTY(int fadeDurationMs READ fadeDurationMs NOTIFY fadeDurationMsChanged)
@@ -29,7 +31,8 @@ namespace Hyprcast::Overlay {
         [[nodiscard]] QStringList heldKeys() const {
             return m_interpreter.heldKeys();
         }
-        [[nodiscard]] int heldKeyCount() const {
+        [[nodiscard]] QVariantList heldKeyItems() const;
+        [[nodiscard]] int          heldKeyCount() const {
             return static_cast<int>(m_interpreter.heldKeys().size());
         }
         [[nodiscard]] bool fading() const noexcept {

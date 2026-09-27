@@ -7,7 +7,8 @@ Item {
         anchors.fill: parent
         anchors.leftMargin: hyprcast.settings.textExtraPaddingX
         anchors.rightMargin: hyprcast.settings.textExtraPaddingX
-        text: historyModel ? historyModel.displayText : ""
+        text: historyModel ? historyModel.displayRichText : ""
+        textFormat: Text.RichText
         color: hyprcast.settings.foregroundColor
         font.family: hyprcast.settings.fontFamily
         font.pixelSize: hyprcast.settings.fontSize

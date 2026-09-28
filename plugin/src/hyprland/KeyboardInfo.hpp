@@ -9,12 +9,17 @@
 
 namespace Hyprcast {
     struct SKeyboardInfo {
-        WP<IKeyboard>       keyboard;
+        WP<IKeyboard> keyboard;
 
-        KeyboardId          id;
-        std::string         name;
-        bool                pendingRemoval = false;
-        bool                subscribed     = false;
+        KeyboardId  id;
+        std::string name;
+
+        // Hyprland can replace a keymap during config reload without notifying
+        // keymapListener. Track what we sent so layout updates can detect changes.
+        std::string lastSentKeymap;
+
+        bool pendingRemoval = false;
+        bool subscribed     = false;
 
         CHyprSignalListener keyEventListener, modifiersListener, keymapListener, repeatInfoListener, destroyListener;
     };

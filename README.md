@@ -2,6 +2,10 @@
 
 Hyprcast displays keyboard input in a customizable overlay for Hyprland. A Hyprland plugin streams keyboard events to a separate Qt Quick/LayerShellQt overlay, which renders typed text, shortcuts, and optional held-key feedback. The overlay supports TOML configuration and user-installable QML themes.
 
+<p align="center">
+  <img width="500" alt="Demo" src="https://github.com/user-attachments/assets/5fe39522-1e70-4c16-b6f0-dabea60e886a" />
+</p>
+
 ## Requirements
 
 - Hyprland with Lua plugin support; build the plugin against headers matching the running Hyprland version.

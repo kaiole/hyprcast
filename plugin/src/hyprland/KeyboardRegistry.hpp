@@ -65,6 +65,7 @@ namespace Hyprcast {
             Hyprcast::runGuarded(context, std::forward<Function>(function), m_callbacks.onException);
         }
 
+        void                                        syncKeymap(const SP<IKeyboard>& keyboard);
         void                                        scheduleRemoval(SKeyboardInfo& keyboardInfo) noexcept;
         void                                        unsubscribeListeners(SKeyboardInfo& keyboardInfo);
 
@@ -74,6 +75,7 @@ namespace Hyprcast {
         KeyboardId                                  m_nextId = 1;
         std::vector<std::unique_ptr<SKeyboardInfo>> m_keyboardRegistry;
 
+        CHyprSignalListener                         m_layoutListener;
         CWlEventSource                              m_wlIdleKeyboardRemoval;
     };
 }

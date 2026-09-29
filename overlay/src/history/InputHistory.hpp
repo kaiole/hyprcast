@@ -29,6 +29,7 @@ namespace Hyprcast::Overlay {
         bool        countedRepeats  = false;
         int         repeatThreshold = 4;
         QString     symbolFontFamily;
+        QString     spaceSymbol = QStringLiteral(" ");
         QVariantMap keySymbols;
         QVariantMap modifierSymbols;
         friend bool operator==(const HistoryPresentationOptions&, const HistoryPresentationOptions&) = default;
@@ -84,6 +85,7 @@ namespace Hyprcast::Overlay {
         };
         [[nodiscard]] QString   rawLabel(const InterpretedAction& action) const;
         [[nodiscard]] QString   displayLabel(const InterpretedAction& action) const;
+        [[nodiscard]] QString   mappedText(const QString& text) const;
         [[nodiscard]] QString   mappedKey(const QString& identity) const;
         [[nodiscard]] QString   mappedModifier(const QString& identity) const;
         [[nodiscard]] bool      sameRow(const Row& a, const Row& b) const;

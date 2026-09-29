@@ -410,6 +410,36 @@ namespace {
         check(backspaceSymbols.presentationModel().displayText() == QStringLiteral("⌫ ⌫…3x "), "symbol-mode repeated Backspace is grouped and uses its configured display glyph");
     }
 
+    void testDisplayOnlySpaces() {
+        InputHistory history({.maxRetainedUtf16CodeUnits = 64,
+                              .presentation = {.countedRepeats = true, .repeatThreshold = 2, .spaceSymbol = QStringLiteral("␣")}});
+        history.apply(text(QStringLiteral("a b")));
+        history.apply(key(QStringLiteral("Enter")));
+        history.apply(text(QStringLiteral(" "), 1, 57));
+        history.apply(text(QStringLiteral(" "), 1, 57));
+        auto& projection = history.presentationModel();
+        check(history.displayText() == QStringLiteral("a b [Enter]   ") && history.retainedUtf16CodeUnits() == 14,
+              "space substitution does not change semantic text or retention accounting");
+        check(projection.displayText() == QStringLiteral("a␣b Enter ␣…2x "),
+              "only input spaces change, not the separator before a key or counted suffix");
+        check(projection.data(projection.index(0, 0), HistoryProjectionModel::TextRole).toString() == QStringLiteral("a b") &&
+                  projection.data(projection.index(0, 0), HistoryProjectionModel::DisplayLabelRole).toString() == QStringLiteral("a␣b") &&
+                  projection.data(projection.index(2, 0), HistoryProjectionModel::DisplayLabelRole).toString() == QStringLiteral("␣"),
+              "themes can choose canonical text or mapped display labels");
+        history.apply(key(QStringLiteral("Backspace")));
+        check(history.entries().back().action.text == QStringLiteral(" "), "Backspace still deletes one actual space occurrence");
+        const qsizetype budget = history.retainedUtf16CodeUnits();
+        auto options = history.presentationOptions();
+        options.spaceSymbol = QStringLiteral("<&>");
+        history.setOptions({.maxRetainedUtf16CodeUnits = 64, .presentation = options});
+        check(history.retainedUtf16CodeUnits() == budget && projection.displayRichText().contains(QStringLiteral("&lt;&amp;&gt;")),
+              "live space-label updates preserve retention and HTML-escape rich text");
+        check(history.displayText().contains(QStringLiteral("a b")), "semantic history remains unmodified after reload");
+        HistoryListModel snapshot;
+        snapshot.setSnapshot(history.entries(), history.presentationOptions(), history.collapsedRepeatRuns());
+        check(snapshot.presentationModel().displayText() == projection.displayText(), "expiration snapshot uses the same display-only space mapping");
+    }
+
     void testProjectionPreservesStableTailIdsDuringRetention() {
         InputHistory history({.maxRetainedUtf16CodeUnits = 3});
         history.apply(text(QStringLiteral("a")));
@@ -497,6 +527,7 @@ int main() {
     testCountedRepeatProjectionAndBackspace();
     testAdjacentCountedInputsAndUnicodeEligibility();
     testSymbolProjectionAndRetentionAccounting();
+    testDisplayOnlySpaces();
     testProjectionPreservesStableTailIdsDuringRetention();
     testProjectionNotificationsAndSnapshot();
     testRetentionModelNotificationsAndSnapshot();

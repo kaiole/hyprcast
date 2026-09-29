@@ -11,6 +11,8 @@
 #include <QUrl>
 #include <QtMath>
 
+#include <xkbcommon/xkbcommon.h>
+
 #include <cstdlib>
 #include <iostream>
 
@@ -24,6 +26,21 @@ namespace {
             std::cerr << "FAIL: " << message << '\n';
             ++failures;
         }
+    }
+
+    QString testKeymap() {
+        xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+        xkb_rule_names names{};
+        names.rules = "evdev";
+        names.model = "pc105";
+        names.layout = "us";
+        xkb_keymap* map = xkb_keymap_new_from_names(context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
+        char* text = xkb_keymap_get_as_string(map, XKB_KEYMAP_FORMAT_TEXT_V1);
+        const QString result = QString::fromUtf8(text);
+        std::free(text);
+        xkb_keymap_unref(map);
+        xkb_context_unref(context);
+        return result;
     }
 
     bool hasVisualText(QQuickItem* item, const QString& text) {
@@ -143,6 +160,18 @@ namespace {
         themeDirectory(userRoot, QStringLiteral("syntax"), manifest(QByteArrayLiteral("syntax")), QByteArrayLiteral("import QtQuick\nItem { broken\n"));
         const QString bundledManifest = QDir(QStringLiteral(HYPRCAST_OVERLAY_SOURCE_DIR)).filePath(QStringLiteral("qml/themes/default/theme.toml"));
         const QString sampleThemes    = QDir(QStringLiteral(HYPRCAST_OVERLAY_SOURCE_DIR)).filePath(QStringLiteral("examples/themes"));
+        const QString heldSource = QDir(sampleThemes).filePath(QStringLiteral("text-held"));
+        const QString heldCopy = QDir(userRoot).filePath(QStringLiteral("text-held"));
+        check(QDir().mkpath(heldCopy), "create isolated held-key example package");
+        for (const QString& file : {QStringLiteral("theme.toml"), QStringLiteral("Main.qml"), QStringLiteral("TextPresentation.qml")}) {
+            check(QFile::copy(QDir(heldSource).filePath(file), QDir(heldCopy).filePath(file)), "copy standalone text-held package");
+        }
+        const QString capSource = QDir(sampleThemes).filePath(QStringLiteral("keycaps"));
+        const QString capCopy = QDir(userRoot).filePath(QStringLiteral("keycaps"));
+        check(QDir().mkpath(capCopy), "create isolated user theme package");
+        for (const QString& file : {QStringLiteral("theme.toml"), QStringLiteral("Main.qml"), QStringLiteral("KeycapEntry.qml"), QStringLiteral("KeycapPresentation.qml")}) {
+            check(QFile::copy(QDir(capSource).filePath(file), QDir(capCopy).filePath(file)), "copy self-contained keycaps package");
+        }
         ThemeCatalog  catalog({userRoot, sampleThemes}, QUrl::fromLocalFile(bundledManifest));
         QString       error;
         check(catalog.discover(nullptr, &error), "discover themes before QML loading test");
@@ -211,21 +240,47 @@ namespace {
             QCoreApplication::processEvents();
             check(!panelFill->isVisible(), "with-content hides the panel decoration after history is cleared");
 
-            config.presentation         = QStringLiteral("keycaps");
+            presenter.processMessage(KeyboardSnapshotMessage{.id = 1, .name = QStringLiteral("test"), .keymap = testKeymap()});
+            presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 1, .keycode = 42, .pressed = true});
+            QCoreApplication::processEvents();
+            check(presenter.heldKeyCount() == 1 && !panelFill->isVisible() && panelFrame->width() == emptyWidth &&
+                      !hasVisualText(view.rootObject(), QStringLiteral("Shift")),
+                  "default ignores held-only state for visibility, geometry, and content");
+            presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 2, .keycode = 42, .pressed = false});
+            presenter.historyModel().clear();
+            QCoreApplication::processEvents();
+
+            config.themeId              = QStringLiteral("keycaps");
+            config.themeOptions         = {{QStringLiteral("height"), 44}, {QStringLiteral("border_width"), 0}};
+            check(runtime.prepareSwitch(config, &error), "load keycaps through ordinary theme discovery");
             config.repeatPresentation   = QStringLiteral("counted");
             config.repeatCountThreshold = 2;
             config.symbolFontFamily     = QStringLiteral("Symbols Nerd Font");
             config.keySymbols           = {{QStringLiteral("C"), QStringLiteral("COPY")}};
             config.modifierSymbols      = {{QStringLiteral("Ctrl"), QStringLiteral("CTRL")}};
-            config.keycapBorderWidth    = 0;
             InputHistoryOptions historyOptions;
             historyOptions.presentation.countedRepeats   = true;
             historyOptions.presentation.repeatThreshold  = 2;
             historyOptions.presentation.symbolFontFamily = config.symbolFontFamily;
+            historyOptions.presentation.spaceSymbol      = QStringLiteral("␣");
             historyOptions.presentation.keySymbols       = config.keySymbols;
             historyOptions.presentation.modifierSymbols  = config.modifierSymbols;
             presenter.setHistoryOptions(historyOptions);
             runtime.applyAcceptedConfiguration(config);
+            auto* capPanel = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastKeycapsPanelFrame"), Qt::FindChildrenRecursively);
+            check(capPanel && capPanel->height() >= config.minHeight, "keycaps controls its own visible panel");
+            QVariantMap capOptions;
+            check(catalog.validateOptions(QStringLiteral("keycaps"), {{QStringLiteral("height"), 45}}, &capOptions, &error) && capOptions.value(QStringLiteral("height")).toInt() == 45,
+                  "keycaps validates declared height option");
+            check(!catalog.validateOptions(QStringLiteral("keycaps"), {{QStringLiteral("height"), -1}}, &capOptions, &error), "keycaps rejects invalid height option");
+            InterpretedAction space;
+            space.kind = InterpretedActionKind::Text;
+            space.text = QStringLiteral(" ");
+            presenter.historyModel().apply(space);
+            QCoreApplication::processEvents();
+            check(hasVisualText(view.rootObject(), QStringLiteral("␣")) && presenter.historyModel().displayText() == QStringLiteral(" "),
+                  "keycaps displays the mapped space while retaining a literal input space");
+            presenter.historyModel().clear();
 
             InterpretedAction chord;
             chord.kind       = InterpretedActionKind::Chord;
@@ -238,9 +293,13 @@ namespace {
             chord.repeatCount = 1;
             presenter.historyModel().apply(chord);
             QCoreApplication::processEvents();
-            check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("CTRL+COPY…2x ") && panelFill->isVisible(),
-                  "keycap QML consumes resolved chord labels and counted-repeat rows through the additive theme API");
+            check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("CTRL+COPY…2x ") && capPanel &&
+                      hasVisualText(view.rootObject(), QStringLiteral("CTRL")) && hasVisualText(view.rootObject(), QStringLiteral("COPY")) &&
+                      hasVisualText(view.rootObject(), QStringLiteral("…2x")),
+                  "copied keycaps QML renders resolved chords and counted-repeat badges");
             presenter.historyModel().clear();
+            config.minWidth = config.width;
+            runtime.applyAcceptedConfiguration(config);
 
             // Reproduce live symbol reload, then append fresh actions. Inspect actual
             // QML text items as well as the model: a correct projection alone is insufficient.
@@ -267,19 +326,58 @@ namespace {
             presenter.historyModel().apply(special);
             presenter.historyModel().apply(chord);
             QCoreApplication::processEvents();
+            QCoreApplication::processEvents();
             check(hasVisualText(view.rootObject(), QStringLiteral("↵")), "new special-key keycaps use the reloaded symbol mapping");
             check(hasVisualText(view.rootObject(), QStringLiteral("⌃")), "new chord keycaps use the reloaded modifier mapping");
             special.key = QStringLiteral("Shift");
             presenter.historyModel().apply(special);
             QCoreApplication::processEvents();
+            QCoreApplication::processEvents();
             check(hasVisualText(view.rootObject(), QStringLiteral("⇧")), "new standalone modifier keycaps use the reloaded modifier mapping");
             check(presenter.historyModel().presentationModel().displayText().endsWith(QStringLiteral("⇧ ")) &&
                       presenter.historyModel().entries().back().action.key == QStringLiteral("Shift"),
                   "standalone modifier projection resolves glyphs without changing canonical identity");
-            presenter.historyModel().clear();
+            const auto expirationStart = KeyboardPresenter::Clock::now();
+            presenter.setExpiration(1, 250, expirationStart);
+            presenter.advance(expirationStart + std::chrono::milliseconds(2));
+            QCoreApplication::processEvents();
+            check(presenter.fading() && presenter.historyModel().rowCount() == 0 && hasVisualText(view.rootObject(), QStringLiteral("⌫")),
+                  "keycaps renders the fading snapshot after editable history expires");
+            presenter.setExpiration(0, 0);
+            presenter.clearHistory();
             historyOptions.backspaceMode = BackspaceMode::Delete;
             presenter.setHistoryOptions(historyOptions);
         }
+
+        config.minWidth = 160;
+        config.themeId = QStringLiteral("text-held");
+        config.themeOptions.clear();
+        check(runtime.prepareSwitch(config, &error), "load standalone held-key example through normal theme discovery");
+        runtime.applyAcceptedConfiguration(config);
+        auto* heldPanel = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastPanelFrame"), Qt::FindChildrenRecursively);
+        auto* heldFill = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastPanelBackground"), Qt::FindChildrenRecursively);
+        const int historyBeforeHeld = presenter.historyModel().rowCount();
+        presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 3, .keycode = 42, .pressed = true});
+        QCoreApplication::processEvents();
+        check(heldPanel && heldFill && heldFill->isVisible() && hasVisualText(view.rootObject(), presenter.heldKeyItems().front().toMap().value(QStringLiteral("label")).toString()) &&
+                  presenter.historyModel().rowCount() == historyBeforeHeld,
+              "held example reacts to modifier press without adding history");
+        QVariantMap heldOptions;
+        check(catalog.validateOptions(QStringLiteral("text-held"), {{QStringLiteral("held_key_height"), 31}}, &heldOptions, &error) &&
+                  heldOptions.value(QStringLiteral("held_key_height")).toInt() == 31,
+              "held example declares its own style options");
+        check(!catalog.validateOptions(QStringLiteral("text-held"), {{QStringLiteral("held_key_height"), -1}}, &heldOptions, &error) &&
+                  !catalog.validateOptions(QStringLiteral("text-held"), {{QStringLiteral("show_held_keys"), QStringLiteral("true")}}, &heldOptions, &error),
+              "held example rejects invalid theme-local options");
+        const QString heldLabel = presenter.heldKeyItems().front().toMap().value(QStringLiteral("label")).toString();
+        presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 4, .keycode = 42, .pressed = false});
+        QCoreApplication::processEvents();
+        check(presenter.heldKeyCount() == 0 && presenter.historyModel().rowCount() == historyBeforeHeld + 1,
+              "modifier release removes held state and records standalone modifier history");
+        presenter.clearHistory();
+        QCoreApplication::processEvents();
+        check(!hasVisualText(view.rootObject(), heldLabel) && heldFill && !heldFill->isVisible(),
+              "held example removes feedback and decoration after history clears");
 
         config.themeId      = QStringLiteral("ledger");
         config.themeOptions = {{QStringLiteral("item_spacing"), 8}, {QStringLiteral("accent"), QStringLiteral("#40ccaa")}};
@@ -339,6 +437,35 @@ namespace {
         check(manager.initialize(&error), "initialize config manager with the active bundled theme");
         QObject::connect(&manager, &OverlayConfigManager::configurationChanged, &view, [&manager, &runtime] { runtime.applyAcceptedConfiguration(manager.config()); });
 
+        check(writeFile(configPath, QByteArrayLiteral("[theme]\nid='text-held'\n[theme.options]\nheld_key_height=30\n")),
+              "select standalone held feedback via live config");
+        manager.reloadNow();
+        check(runtime.activeThemeId() == QStringLiteral("text-held") && manager.config().themeOptions.value(QStringLiteral("held_key_height")).toLongLong() == 30,
+              "live config accepts declared held style");
+        check(writeFile(configPath, QByteArrayLiteral("[theme]\nid='text-held'\n[theme.options]\nheld_key_height=32\n")),
+              "update held style without switching themes");
+        manager.reloadNow();
+        auto* heldRow = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastHeldRow"), Qt::FindChildrenRecursively);
+        presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 5, .keycode = 42, .pressed = true});
+        QCoreApplication::processEvents();
+        check(manager.config().themeOptions.value(QStringLiteral("held_key_height")).toLongLong() == 32 && heldRow && heldRow->isVisible() && heldRow->height() == 32,
+              "accepted held style change reaches visible example geometry");
+        check(writeFile(configPath, QByteArrayLiteral("[theme]\nid='text-held'\n[theme.options]\nheld_key_height=32\nshow_held_keys=false\n")),
+              "hide example held feedback via live theme option");
+        manager.reloadNow();
+        QCoreApplication::processEvents();
+        check(heldRow && !heldRow->isVisible() && presenter.heldKeyCount() == 1,
+              "example option hides the row without changing backend held state");
+        presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 6, .keycode = 42, .pressed = false});
+        presenter.clearHistory();
+        presenter.historyModel().apply(typed);
+        check(writeFile(configPath, QByteArrayLiteral("[theme]\nid='text-held'\n[theme.options]\nheld_key_height=0\n")),
+              "write invalid held style for live reload");
+        manager.reloadNow();
+        check(manager.config().themeOptions.value(QStringLiteral("held_key_height")).toLongLong() == 32 &&
+                  !manager.config().themeOptions.value(QStringLiteral("show_held_keys")).toBool() && runtime.activeThemeId() == QStringLiteral("text-held"),
+              "invalid held style keeps last accepted theme and options");
+
         check(writeFile(configPath, QByteArrayLiteral("[theme]\nid='good'\n[theme.options]\ngap=12\n")), "write config selecting a valid external theme and option");
         manager.reloadNow();
         check(manager.config().themeId == QStringLiteral("good") && runtime.activeThemeId() == QStringLiteral("good"),
@@ -381,6 +508,15 @@ namespace {
                   view.rootObject()->findChild<QQuickItem*>(QStringLiteral("ledger-8"), Qt::FindChildrenRecursively) != nullptr,
               "a later valid theme config recovers normally after rejected attempts");
         check(presenter.outputText() == QStringLiteral("kept"), "theme switching and recovery preserve input history");
+        check(writeFile(configPath, QByteArrayLiteral("[theme]\nid='keycaps'\n[theme.options]\nheight=44\n")), "select copied keycaps package through live config");
+        manager.reloadNow();
+        check(runtime.activeThemeId() == QStringLiteral("keycaps") && presenter.outputText() == QStringLiteral("kept"),
+              "switching to standalone keycaps keeps history");
+        check(writeFile(configPath, QByteArrayLiteral("[theme]\nid='keycaps'\n[theme.options]\nheight=60\n")), "change live keycaps height");
+        manager.reloadNow();
+        auto* capFrame = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastKeycapsPanelFrame"), Qt::FindChildrenRecursively);
+        check(capFrame && capFrame->height() >= 68 && presenter.outputText() == QStringLiteral("kept"),
+              "live keycaps option affects panel geometry without clearing history");
     }
 } // namespace
 

@@ -60,7 +60,7 @@ add_executable(hyprcast-overlay src/main.cpp)
 qt_add_resources(
   hyprcast-overlay overlay_qml
   PREFIX "/hyprcast/overlay"
-  FILES qml/ThemeHost.qml qml/TextPresentation.qml qml/KeycapPresentation.qml qml/KeycapEntry.qml
+  FILES qml/ThemeHost.qml qml/TextPresentation.qml
         qml/themes/default/theme.toml qml/themes/default/Main.qml)
 
 target_link_libraries(
@@ -95,6 +95,8 @@ if(BUILD_TESTING)
   target_link_libraries(overlay_theme_tests PRIVATE hyprcast_overlay_theme)
   add_test(NAME overlay-theme COMMAND overlay_theme_tests)
   set_tests_properties(overlay-theme PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+  add_test(NAME overlay-removed-cli COMMAND ${CMAKE_COMMAND} -DOVERLAY=$<TARGET_FILE:hyprcast-overlay> -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/RemovedCli.cmake)
 endif()
 
 install(TARGETS hyprcast-overlay RUNTIME DESTINATION bin)

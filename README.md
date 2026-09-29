@@ -1,6 +1,6 @@
 # Hyprcast
 
-Hyprcast displays keyboard input in a customizable overlay for Hyprland. A Hyprland plugin streams keyboard events to a separate Qt Quick/LayerShellQt overlay, which renders typed text, shortcuts, and optional held-key feedback. The overlay supports TOML configuration and user-installable QML themes.
+Hyprcast displays keyboard input in a customizable overlay for Hyprland. A Hyprland plugin streams keyboard events to a separate Qt Quick/LayerShellQt overlay, which renders typed text and shortcuts. An installable example theme can also show held keys. The overlay supports TOML configuration and user-installable QML themes.
 
 <p align="center">
   <img width="500" alt="Demo" src="https://github.com/user-attachments/assets/5fe39522-1e70-4c16-b6f0-dabea60e886a" />
@@ -39,7 +39,7 @@ To run from a source checkout instead, use absolute paths to `build/release/plug
 
 ## Configuration and themes
 
-The overlay reads `${XDG_CONFIG_HOME:-~/.config}/hyprcast/overlay.toml` if present. CLI options can override settings; see `hyprcast-overlay --help`. For a complete configuration example, live-reload behavior, theme installation, and the theme API, see [overlay configuration and themes](docs/overlay.md). An example theme is included in [`overlay/examples/themes/ledger/`](overlay/examples/themes/ledger/).
+The overlay reads `${XDG_CONFIG_HOME:-~/.config}/hyprcast/overlay.toml` if present. CLI options can override settings; see `hyprcast-overlay --help`. For a complete configuration example, live-reload behavior, theme installation, and the theme API, see [overlay configuration and themes](docs/overlay.md). Optional example themes include [`ledger`](overlay/examples/themes/ledger/), [`keycaps`](overlay/examples/themes/keycaps/), and [`text-held`](overlay/examples/themes/text-held/) for held-key feedback; the bundled default displays text without configuration.
 
 ## Tests
 

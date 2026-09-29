@@ -1,0 +1,69 @@
+[theme]
+id = "text-held"
+name = "Text with held keys"
+api_version = 1
+entry = "Main.qml"
+
+[options.show_held_keys]
+type = "boolean"
+default = true
+
+[options.held_font_size]
+type = "integer"
+default = 14
+minimum = 1
+maximum = 256
+
+[options.held_key_height]
+type = "integer"
+default = 22
+minimum = 1
+maximum = 512
+
+[options.held_key_padding_x]
+type = "integer"
+default = 7
+minimum = 0
+maximum = 512
+
+[options.held_key_radius]
+type = "integer"
+default = 5
+minimum = 0
+maximum = 256
+
+[options.held_key_spacing]
+type = "integer"
+default = 5
+minimum = 0
+maximum = 128
+
+[options.held_row_padding_x]
+type = "integer"
+default = 16
+minimum = 0
+maximum = 512
+
+[options.held_row_padding_bottom]
+type = "integer"
+default = 10
+minimum = 0
+maximum = 512
+
+[options.held_key_background]
+type = "color"
+default = "#46536a"
+
+[options.held_key_text_color]
+type = "color"
+default = "#ffffff"
+
+[options.held_key_border_width]
+type = "integer"
+default = 0
+minimum = 0
+maximum = 64
+
+[options.held_key_border_color]
+type = "color"
+default = "#66758c"

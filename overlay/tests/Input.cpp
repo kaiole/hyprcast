@@ -322,18 +322,18 @@ namespace {
         presenter.processMessage(key(1, 30, true), start);
         presenter.advance(start + std::chrono::milliseconds(100));
         presenter.advance(start + std::chrono::milliseconds(200));
-        check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("[a x3] "),
+        check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("aa…3x "),
               "presenter projects one initial press plus generated repeats as a counted group");
 
         presenter.processMessage(key(1, 14, true, 201), start + std::chrono::milliseconds(201));
-        check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("[a x2] "), "plain Backspace deletes one underlying occurrence of a counted group");
+        check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("aa…2x "), "plain Backspace deletes one underlying occurrence of a counted group");
         presenter.resetConnection();
-        check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("[a x2] "),
+        check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("aa…2x "),
               "pause/reconnect input reset preserves counted semantic history and sticky presentation");
 
         presenter.processMessage(snapshot(keymap, 1), start + std::chrono::milliseconds(300));
         presenter.processMessage(key(1, 30, true, 301), start + std::chrono::milliseconds(301));
-        check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("[a x3] "), "a post-reconnect equivalent input joins the adjacent retained sequence");
+        check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("aa…3x "), "a post-reconnect equivalent input joins the adjacent retained sequence");
 
         presenter.processMessage(key(1, 29, true, 302), start + std::chrono::milliseconds(302));
         const auto held       = presenter.heldKeyItems();
@@ -355,7 +355,7 @@ namespace {
         expiration.advance(start + std::chrono::milliseconds(200));
         expiration.processMessage(key(4, 30, false, 201), start + std::chrono::milliseconds(201));
         expiration.advance(start + std::chrono::milliseconds(301));
-        check(expiration.fadingHistoryModel().presentationModel().displayText() == QStringLiteral("[a x3] ") && expiration.historyModel().rowCount() == 0,
+        check(expiration.fadingHistoryModel().presentationModel().displayText() == QStringLiteral("aa…3x ") && expiration.historyModel().rowCount() == 0,
               "expiration snapshots retain counted projection while immediately clearing editable history");
     }
 
@@ -375,15 +375,15 @@ namespace {
             presenter.processMessage(key(1, 30, true, static_cast<std::uint32_t>(i * 200 + 1)), now);
             presenter.processMessage(key(1, 30, false, static_cast<std::uint32_t>(i * 200 + 2)), now + std::chrono::milliseconds(2));
             presenter.advance(now + std::chrono::milliseconds(150));
-            const QString expected = i < 3 ? QString(i + 1, QLatin1Char('a')) : QStringLiteral("[a x4] ");
+            const QString expected = i < 3 ? QString(i + 1, QLatin1Char('a')) : QStringLiteral("aaa…4x ");
             check(presenter.historyModel().presentationModel().displayText() == expected, "separate same-key taps count with auto-repeat disabled");
         }
 
         presenter.processMessage(key(1, 14, true, 801), start + std::chrono::milliseconds(800));
-        check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("[a x3] "), "Backspace decrements a manually counted group");
+        check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("aaa…3x "), "Backspace decrements a manually counted group");
         presenter.processMessage(key(1, 14, false, 802), start + std::chrono::milliseconds(802));
         presenter.processMessage(key(1, 30, true, 803), start + std::chrono::milliseconds(803));
-        check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("[a x4] "), "a later equivalent tap joins the decremented manual group");
+        check(presenter.historyModel().presentationModel().displayText() == QStringLiteral("aaa…4x "), "a later equivalent tap joins the decremented manual group");
     }
 
     void testDeterministicRepeatsAndCancellation() {

@@ -57,7 +57,8 @@ int main(int argc, char** argv) {
     OverlayConfig defaults;
     check(defaults.width == 600 && defaults.height == 88 && defaults.anchor == QStringLiteral("bottom-right"), "use built-in window defaults");
     check(defaults.maxRetainedUtf16CodeUnits == 4096 && defaults.backspaceMode == QStringLiteral("delete"), "preserve documented history defaults");
-    check(defaults.themeId == QStringLiteral("builtin:default"), "select the bundled theme for legacy and absent configurations");
+    check(defaults.themeId == QStringLiteral("builtin:default") && defaults.spaceSymbol == QStringLiteral(" "),
+          "select the bundled text theme and preserve literal spaces by default");
     check(defaults.dynamicSize && defaults.minWidth == 240 && defaults.minHeight == 64 && defaults.width == 600 && defaults.height == 88,
           "default panel grows up to the unchanged maximum surface size");
     check(defaults.panelVisibility == QStringLiteral("with-content") && defaults.expireAfterMs == 3000 && defaults.fadeDurationMs == 250,
@@ -68,21 +69,20 @@ int main(int argc, char** argv) {
 
     OverlayConfig config;
     QString       error;
-    check(parse("[appearance]\nfont_size = 36\nbackground_color = '#112233'\n[display]\npresentation = 'keycaps'\n", &config, &error), "load a valid partial TOML file");
+    check(parse("[appearance]\nfont_size = 36\nbackground_color = '#112233'\n", &config, &error), "load a valid partial TOML file");
     check(config.fontSize == 36 && config.backgroundColor == QStringLiteral("#112233"), "read appearance overrides");
-    check(config.presentation == QStringLiteral("keycaps") && config.width == 600 && config.themeId == QStringLiteral("builtin:default"),
-          "legacy partial files keep their presentation and inherit the bundled theme");
+    check(config.width == 600 && config.themeId == QStringLiteral("builtin:default"),
+          "partial files inherit the bundled text theme");
     check(parse("[theme]\nid='ledger'\n[theme.options]\nitem_spacing=7\naccent='#abcdef'\n", &config, &error), "parse theme selection and scalar options");
     check(config.themeId == QStringLiteral("ledger") && config.themeOptions.value(QStringLiteral("item_spacing")).toLongLong() == 7 &&
               config.themeOptions.value(QStringLiteral("accent")).toString() == QStringLiteral("#abcdef"),
           "preserve dynamic theme option values for descriptor validation");
-    check(parse("[window]\nwidth=720\nheight=140\nmin_width=180\nmin_height=70\ndynamic_size=true\n[appearance]\npanel_border_width=2\npanel_border_color='#80112233'\nkeycap_"
-                "border_width=0\nheld_key_border_width=3\n[display]\npanel_visibility='with-content'\n[repeat]\npresentation='counted'\ncount_threshold=4\n[symbols]\nfont_family='"
+    check(parse("[window]\nwidth=720\nheight=140\nmin_width=180\nmin_height=70\ndynamic_size=true\n[appearance]\npanel_border_width=2\npanel_border_color='#80112233'\n[display]\npanel_visibility='with-content'\n[repeat]\npresentation='counted'\ncount_threshold=4\n[symbols]\nfont_family='"
                 "Symbols Nerd Font'\n[symbols.keys]\nBackspace='⌫'\n[symbols.modifiers]\nCtrl='⌃'\n",
                 &config, &error),
           "parse dynamic sizing, border, panel visibility, counted repeat, and symbol settings");
-    check(config.dynamicSize && config.width == 720 && config.minWidth == 180 && config.minHeight == 70 && config.panelBorderWidth == 2 && config.keycapBorderWidth == 0 &&
-              config.heldKeyBorderWidth == 3 && config.panelVisibility == QStringLiteral("with-content") && config.repeatPresentation == QStringLiteral("counted") &&
+    check(config.dynamicSize && config.width == 720 && config.minWidth == 180 && config.minHeight == 70 && config.panelBorderWidth == 2 &&
+              config.panelVisibility == QStringLiteral("with-content") && config.repeatPresentation == QStringLiteral("counted") &&
               config.repeatCountThreshold == 4,
           "retain extension settings after validation");
     check(config.keySymbols.value(QStringLiteral("Backspace")).toString() == QStringLiteral("⌫") &&
@@ -94,15 +94,19 @@ int main(int argc, char** argv) {
 
     ConfigOverrides overrides;
     overrides.width          = 600;
-    overrides.showHeldKeys   = false;
-    overrides.presentation   = QStringLiteral("text");
     overrides.repeatsEnabled = false;
     const auto effective     = applyOverrides(config, overrides);
-    check(effective.width == 600 && effective.presentation == QStringLiteral("text") && !effective.showHeldKeys && !effective.repeatsEnabled,
+    check(effective.width == 600 && !effective.repeatsEnabled,
           "explicit CLI values override file settings even when equal to defaults");
 
     check(!parse("[display\npresentation='text'\n", &config, &error), "reject malformed TOML");
-    check(!parse("[display]\npresentaton='text'\n", &config, &error) && error.contains(QStringLiteral("unknown configuration key")), "reject unknown keys with diagnostics");
+    check(!parse("[display]\npresentation='keycaps'\n", &config, &error) && error.contains(QStringLiteral("unknown configuration key")), "reject removed display mode");
+    check(!parse("[appearance]\nkeycap_height=40\n", &config, &error) && error.contains(QStringLiteral("unknown configuration key")), "reject removed global cap settings");
+    check(!parse("[appearance]\nheld_key_height=22\n", &config, &error) && error.contains(QStringLiteral("unknown configuration key")), "reject global held style settings");
+    check(!parse("[display]\nshow_held_keys=true\n", &config, &error) && error.contains(QStringLiteral("unknown configuration key")), "reject global held visibility");
+    check(!overlayConfigToQmlValues(config).contains(QStringLiteral("presentation")) && !overlayConfigToQmlValues(config).contains(QStringLiteral("keycapHeight")) &&
+              !overlayConfigToQmlValues(config).contains(QStringLiteral("showHeldKeys")) && !overlayConfigToQmlValues(config).contains(QStringLiteral("heldKeyHeight")),
+          "do not publish removed mode and cap settings to QML");
     check(!parse("[window]\nwidth='600'\n", &config, &error) && error.contains(QStringLiteral("must be an integer")), "reject wrong TOML types");
     check(!parse("[window]\nwidth=600.0\n", &config, &error), "reject numeric conversions between TOML integer and float types");
     check(!parse("[window]\nmargins=[1,2,3]\n", &config, &error), "require exactly four margins");
@@ -113,6 +117,11 @@ int main(int argc, char** argv) {
     check(!parse("[appearance]\npanel_border_width=-1\n", &config, &error), "reject negative border widths");
     check(!parse("[display]\npanel_visibility='sometimes'\n", &config, &error), "reject unknown panel visibility policies");
     check(!parse("[repeat]\npresentation='counted'\ncount_threshold=1\n", &config, &error), "reject counted repeat thresholds below two occurrences");
+    check(parse("[symbols]\nspace='␣'\n", &config, &error) && config.spaceSymbol == QStringLiteral("␣") &&
+              overlayConfigToQmlValues(config).value(QStringLiteral("spaceSymbol")).toString() == QStringLiteral("␣"),
+          "read and publish the display-only space label");
+    check(!parse("[symbols]\nspace=''\n", &config, &error), "reject an empty space label");
+    check(!parse("[symbols]\nspace=123\n", &config, &error), "reject a non-string space label");
     check(!parse("[symbols.keys]\nBackspace=12\n", &config, &error), "reject non-string symbol mappings");
     check(!parse("[history]\nbackspace='sometimes'\n", &config, &error), "reject unknown behavior enums");
     check(!parse("[other]\nvalue=1\n", &config, &error), "reject unknown top-level tables");

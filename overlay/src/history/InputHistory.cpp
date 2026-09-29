@@ -52,6 +52,12 @@ namespace Hyprcast::Overlay {
         return parent.isValid() ? 0 : static_cast<int>(m_rows.size());
     }
 
+    QString HistoryProjectionModel::mappedText(const QString& text) const {
+        QString result = text;
+        result.replace(QLatin1Char(' '), m_source->presentationOptions().spaceSymbol);
+        return result;
+    }
+
     QString HistoryProjectionModel::mappedKey(const QString& identity) const {
         // Unused modifiers enter history as Key actions on release. Resolve them
         // through the same mapping used by chord modifiers and live held feedback.
@@ -82,7 +88,7 @@ namespace Hyprcast::Overlay {
 
     QString HistoryProjectionModel::displayLabel(const InterpretedAction& action) const {
         if (action.kind == InterpretedActionKind::Text) {
-            return action.text;
+            return mappedText(action.text);
         }
         if (action.kind == InterpretedActionKind::Chord) {
             QStringList parts;
@@ -162,7 +168,7 @@ namespace Hyprcast::Overlay {
                 if (row.counted && !result.isEmpty() && !result.endsWith(QLatin1Char(' '))) {
                     result.append(QLatin1Char(' '));
                 }
-                const QString label = rich ? action.text.toHtmlEscaped() : action.text;
+                const QString label = rich ? row.displayLabel.toHtmlEscaped() : row.displayLabel;
                 for (std::uint32_t i = 0; i < visibleCount; ++i) {
                     result.append(label);
                 }

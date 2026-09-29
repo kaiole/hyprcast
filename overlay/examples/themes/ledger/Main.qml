@@ -7,13 +7,11 @@ Item {
     clip: true
 
     property real fadingOpacity: 1
-    readonly property bool heldVisible: hyprcast.settings.showHeldKeys && hyprcast.heldKeyCount > 0
-    readonly property bool hasPanelContent: hyprcast.historyCount > 0 || hyprcast.fading || heldVisible
+    readonly property bool hasPanelContent: hyprcast.historyCount > 0 || hyprcast.fading
     readonly property bool panelDecorationVisible: hyprcast.settings.panelVisibility === "always" ||
                                                    (hyprcast.settings.panelVisibility === "with-content" && hasPanelContent)
     readonly property real naturalHistoryHeight: Math.max(activeHistory.contentHeight, expiredHistory.contentHeight)
-    readonly property real naturalPanelHeight: naturalHistoryHeight + 24 + hyprcast.settings.panelBorderWidth * 2 +
-                                               (heldVisible ? hyprcast.settings.heldKeyHeight + hyprcast.settings.heldRowPaddingBottom + hyprcast.options.item_spacing : 0)
+    readonly property real naturalPanelHeight: naturalHistoryHeight + 24 + hyprcast.settings.panelBorderWidth * 2
 
     Item {
         id: panelFrame
@@ -48,55 +46,10 @@ Item {
         Column {
             anchors.fill: parent
             anchors.margins: 12 + hyprcast.settings.panelBorderWidth
-            spacing: heldRow.visible ? hyprcast.options.item_spacing : 0
-
-            Row {
-                id: heldRow
-                width: parent.width
-                height: visible ? hyprcast.settings.heldKeyHeight : 0
-                spacing: hyprcast.settings.heldKeySpacing
-                visible: root.heldVisible
-
-                Text {
-                    text: "HELD"
-                    color: hyprcast.options.accent
-                    font.family: hyprcast.settings.fontFamily
-                    font.pixelSize: hyprcast.settings.heldFontSize
-                    font.weight: hyprcast.settings.fontWeight
-                    height: heldRow.height
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                Repeater {
-                    model: hyprcast.heldKeyItems
-
-                    delegate: Rectangle {
-                        required property var modelData
-                        width: heldLabel.implicitWidth + hyprcast.settings.heldKeyPaddingX * 2
-                        height: heldRow.height
-                        radius: hyprcast.settings.heldKeyRadius
-                        color: hyprcast.settings.heldKeyBackground
-                        border.width: hyprcast.settings.heldKeyBorderWidth
-                        border.color: hyprcast.settings.heldKeyBorderColor
-
-                        Text {
-                            id: heldLabel
-                            anchors.centerIn: parent
-                            text: modelData.label
-                            color: hyprcast.settings.heldKeyTextColor
-                            font.family: modelData.kind === "text" || hyprcast.settings.symbolFontFamily.length === 0 ?
-                                         hyprcast.settings.fontFamily : hyprcast.settings.symbolFontFamily
-                            font.pixelSize: hyprcast.settings.heldFontSize
-                            font.weight: hyprcast.settings.fontWeight
-                        }
-                    }
-                }
-            }
-
             Item {
                 id: historyArea
                 width: parent.width
-                height: Math.max(0, parent.height - heldRow.height - (heldRow.visible ? parent.spacing : 0))
+                height: parent.height
 
                 ListView {
                     id: activeHistory

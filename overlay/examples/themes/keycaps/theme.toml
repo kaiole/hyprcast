@@ -1,0 +1,63 @@
+[theme]
+id = "keycaps"
+name = "Keycaps"
+api_version = 1
+entry = "Main.qml"
+
+[options.font_size]
+type = "integer"
+default = 19
+minimum = 1
+maximum = 256
+
+[options.height]
+type = "integer"
+default = 40
+minimum = 1
+maximum = 512
+
+[options.padding_x]
+type = "integer"
+default = 9
+minimum = 0
+maximum = 512
+
+[options.radius]
+type = "integer"
+default = 7
+minimum = 0
+maximum = 256
+
+[options.spacing]
+type = "integer"
+default = 6
+minimum = 0
+maximum = 128
+
+[options.inner_spacing]
+type = "integer"
+default = 3
+minimum = 0
+maximum = 128
+
+[options.text_background]
+type = "color"
+default = "#2b3546"
+
+[options.key_background]
+type = "color"
+default = "#39475c"
+
+[options.border_color]
+type = "color"
+default = "#66758c"
+
+[options.border_width]
+type = "integer"
+default = 1
+minimum = 0
+maximum = 64
+
+[options.text_color]
+type = "color"
+default = "#ffffff"

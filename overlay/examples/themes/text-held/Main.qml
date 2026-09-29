@@ -2,10 +2,12 @@ import QtQuick
 
 Item {
     id: root
+    objectName: "hyprcastTextHeldRoot"
     anchors.fill: parent
     clip: true
 
-    readonly property bool hasPanelContent: hyprcast.historyCount > 0 || hyprcast.fading
+    readonly property bool heldVisible: hyprcast.options.show_held_keys && hyprcast.heldKeyCount > 0
+    readonly property bool hasPanelContent: hyprcast.historyCount > 0 || hyprcast.fading || heldVisible
     readonly property bool panelDecorationVisible: hyprcast.settings.panelVisibility === "always" ||
                                                    (hyprcast.settings.panelVisibility === "with-content" && hasPanelContent)
     readonly property real measuredHistoryWidth: Math.max(naturalActiveText.implicitWidth, naturalExpiredText.implicitWidth)
@@ -13,11 +15,13 @@ Item {
         const border = hyprcast.settings.panelBorderWidth * 2
         const historyExtra = hyprcast.settings.textExtraPaddingX * 2
         const historyWidth = measuredHistoryWidth + historyExtra + hyprcast.settings.historyPaddingX * 2 + border
-        return Math.max(hyprcast.settings.minWidth, historyWidth)
+        const heldWidth = heldVisible ? heldRow.implicitWidth + hyprcast.options.held_row_padding_x * 2 + border : 0
+        return Math.max(hyprcast.settings.minWidth, historyWidth, heldWidth)
     }
     readonly property real requiredPanelHeight: {
         const historyHeight = hyprcast.settings.fontSize * 1.45
-        return Math.max(hyprcast.settings.minHeight, historyHeight + hyprcast.settings.panelBorderWidth * 2)
+        const heldExtra = heldVisible ? hyprcast.options.held_key_height + hyprcast.options.held_row_padding_bottom + 8 : 0
+        return Math.max(hyprcast.settings.minHeight, historyHeight + hyprcast.settings.panelBorderWidth * 2 + heldExtra)
     }
 
     Item {
@@ -36,7 +40,7 @@ Item {
             anchors.fill: parent
             radius: hyprcast.settings.cornerRadius
             visible: root.panelDecorationVisible
-            opacity: hyprcast.fading && hyprcast.historyCount === 0 ? fadingPresentation.snapshotOpacity : 1
+            opacity: hyprcast.fading && hyprcast.historyCount === 0 && !root.heldVisible ? fadingPresentation.snapshotOpacity : 1
             color: {
                 const base = Qt.color(hyprcast.settings.backgroundColor)
                 return Qt.rgba(base.r, base.g, base.b, base.a * hyprcast.settings.backgroundOpacity)
@@ -49,7 +53,7 @@ Item {
             radius: hyprcast.settings.cornerRadius
             color: "transparent"
             visible: root.panelDecorationVisible && hyprcast.settings.panelBorderWidth > 0
-            opacity: hyprcast.fading && hyprcast.historyCount === 0 ? fadingPresentation.snapshotOpacity : 1
+            opacity: hyprcast.fading && hyprcast.historyCount === 0 && !root.heldVisible ? fadingPresentation.snapshotOpacity : 1
             border.width: hyprcast.settings.panelBorderWidth
             border.color: hyprcast.settings.panelBorderColor
         }
@@ -59,17 +63,17 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            anchors.bottom: parent.bottom
+            anchors.bottom: heldRow.visible ? heldRow.top : parent.bottom
             anchors.leftMargin: hyprcast.settings.historyPaddingX + hyprcast.settings.panelBorderWidth
             anchors.rightMargin: hyprcast.settings.historyPaddingX + hyprcast.settings.panelBorderWidth
-            anchors.topMargin: hyprcast.settings.panelBorderWidth
-            anchors.bottomMargin: hyprcast.settings.panelBorderWidth
+            anchors.topMargin: hyprcast.settings.panelBorderWidth + (heldRow.visible ? 8 : 0)
+            anchors.bottomMargin: heldRow.visible ? 4 : hyprcast.settings.panelBorderWidth
 
             Loader {
                 id: activePresentation
                 anchors.fill: parent
                 property var historyModel: hyprcast.displayHistory
-                source: Qt.resolvedUrl("../../TextPresentation.qml")
+                source: Qt.resolvedUrl("TextPresentation.qml")
                 onLoaded: item.historyModel = activePresentation.historyModel
             }
 
@@ -80,7 +84,7 @@ Item {
                 property real snapshotOpacity: 1
                 opacity: snapshotOpacity
                 visible: hyprcast.fading
-                source: Qt.resolvedUrl("../../TextPresentation.qml")
+                source: Qt.resolvedUrl("TextPresentation.qml")
                 onLoaded: item.historyModel = fadingPresentation.historyModel
 
                 NumberAnimation {
@@ -95,6 +99,45 @@ Item {
             }
         }
 
+        Row {
+            id: heldRow
+            objectName: "hyprcastHeldRow"
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.leftMargin: hyprcast.options.held_row_padding_x + hyprcast.settings.panelBorderWidth
+            anchors.rightMargin: hyprcast.options.held_row_padding_x + hyprcast.settings.panelBorderWidth
+            anchors.bottomMargin: hyprcast.options.held_row_padding_bottom + hyprcast.settings.panelBorderWidth
+            height: visible ? hyprcast.options.held_key_height : 0
+            spacing: hyprcast.options.held_key_spacing
+            visible: root.heldVisible
+
+            Repeater {
+                model: hyprcast.heldKeyItems
+
+                delegate: Rectangle {
+                    required property var modelData
+
+                    implicitWidth: label.implicitWidth + hyprcast.options.held_key_padding_x * 2
+                    implicitHeight: hyprcast.options.held_key_height
+                    radius: hyprcast.options.held_key_radius
+                    color: hyprcast.options.held_key_background
+                    border.width: hyprcast.options.held_key_border_width
+                    border.color: hyprcast.options.held_key_border_color
+
+                    Text {
+                        id: label
+                        anchors.centerIn: parent
+                        text: modelData.label
+                        color: hyprcast.options.held_key_text_color
+                        font.family: modelData.kind === "text" || hyprcast.settings.symbolFontFamily.length === 0 ?
+                                     hyprcast.settings.fontFamily : hyprcast.settings.symbolFontFamily
+                        font.pixelSize: hyprcast.options.held_font_size
+                        font.weight: hyprcast.settings.fontWeight
+                    }
+                }
+            }
+        }
     }
 
     Text {

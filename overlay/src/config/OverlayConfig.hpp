@@ -34,38 +34,14 @@ namespace Hyprcast::Overlay {
         int         historyPaddingX   = 16;
         int         textExtraPaddingX = 4;
 
-        int         keycapFontSize       = 19;
-        int         keycapHeight         = 40;
-        int         keycapPaddingX       = 9;
-        int         keycapRadius         = 7;
-        int         keycapSpacing        = 6;
-        int         keycapInnerSpacing   = 3;
-        QString     keycapTextBackground = QStringLiteral("#2b3546");
-        QString     keycapKeyBackground  = QStringLiteral("#39475c");
-        QString     keycapBorderColor    = QStringLiteral("#66758c");
-        int         keycapBorderWidth    = 1;
-        QString     keycapTextColor      = QStringLiteral("#ffffff");
-
-        int         heldFontSize         = 14;
-        int         heldKeyHeight        = 22;
-        int         heldKeyPaddingX      = 7;
-        int         heldKeyRadius        = 5;
-        int         heldKeySpacing       = 5;
-        int         heldRowPaddingX      = 16;
-        int         heldRowPaddingBottom = 10;
-        QString     heldKeyBackground    = QStringLiteral("#46536a");
-        QString     heldKeyTextColor     = QStringLiteral("#ffffff");
-        int         heldKeyBorderWidth   = 0;
-        QString     heldKeyBorderColor   = QStringLiteral("#66758c");
 
         QString     symbolFontFamily;
+        QString     spaceSymbol = QStringLiteral(" ");
         QVariantMap keySymbols;
         QVariantMap modifierSymbols;
 
-        QString     presentation = QStringLiteral("text");
         QString     themeId      = QStringLiteral("builtin:default");
         QVariantMap themeOptions;
-        bool        showHeldKeys              = false;
         QString     panelVisibility           = QStringLiteral("with-content");
         QString     backspaceMode             = QStringLiteral("delete");
         qsizetype   maxRetainedUtf16CodeUnits = 4096;
@@ -85,8 +61,6 @@ namespace Hyprcast::Overlay {
         std::optional<int>       width;
         std::optional<int>       height;
         std::optional<double>    backgroundOpacity;
-        std::optional<QString>   presentation;
-        std::optional<bool>      showHeldKeys;
         std::optional<QString>   backspaceMode;
         std::optional<qsizetype> maxRetainedUtf16CodeUnits;
         std::optional<bool>      repeatsEnabled;

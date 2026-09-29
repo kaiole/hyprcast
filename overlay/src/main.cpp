@@ -158,7 +158,6 @@ namespace {
 
     bool parseOverrides(const QCommandLineParser& parser, const QCommandLineOption& monitorOption, const QCommandLineOption& anchorOption, const QCommandLineOption& marginsOption,
                         const QCommandLineOption& widthOption, const QCommandLineOption& heightOption, const QCommandLineOption& opacityOption,
-                        const QCommandLineOption& presentationOption, const QCommandLineOption& showHeldKeysOption, const QCommandLineOption& hideHeldKeysOption,
                         const QCommandLineOption& expireAfterOption, const QCommandLineOption& fadeDurationOption, const QCommandLineOption& backspaceOption,
                         const QCommandLineOption& retentionOption, const QCommandLineOption& repeatEnabledOption, ConfigOverrides* overrides) {
         if (parser.isSet(monitorOption))
@@ -198,16 +197,6 @@ namespace {
             }
             overrides->backgroundOpacity = opacity;
         }
-        if (parser.isSet(presentationOption))
-            overrides->presentation = parser.value(presentationOption);
-        if (parser.isSet(showHeldKeysOption) && parser.isSet(hideHeldKeysOption)) {
-            writeError(QStringLiteral("--show-held-keys and --hide-held-keys cannot be used together"));
-            return false;
-        }
-        if (parser.isSet(showHeldKeysOption))
-            overrides->showHeldKeys = true;
-        if (parser.isSet(hideHeldKeysOption))
-            overrides->showHeldKeys = false;
         if (parser.isSet(expireAfterOption)) {
             int duration = 0;
             if (!parseInteger(parser.value(expireAfterOption), 0, 86'400'000, &duration)) {
@@ -267,9 +256,6 @@ int main(int argc, char* argv[]) {
     const QCommandLineOption heightOption(QStringLiteral("height"), QStringLiteral("Maximum surface/panel height in logical pixels."), QStringLiteral("pixels"));
     const QCommandLineOption opacityOption(QStringLiteral("background-opacity"), QStringLiteral("Panel fill opacity from 0 (transparent) to 1 (opaque); borders are independent."),
                                            QStringLiteral("alpha"));
-    const QCommandLineOption presentationOption(QStringLiteral("presentation"), QStringLiteral("Bundled presentation: text or keycaps."), QStringLiteral("mode"));
-    const QCommandLineOption showHeldKeysOption(QStringLiteral("show-held-keys"), QStringLiteral("Show currently held keys below the history."));
-    const QCommandLineOption hideHeldKeysOption(QStringLiteral("hide-held-keys"), QStringLiteral("Hide held-key feedback, overriding the TOML setting."));
     const QCommandLineOption expireAfterOption(QStringLiteral("expire-after-ms"), QStringLiteral("Remove history after this much inactivity; 0 disables expiration."),
                                                QStringLiteral("ms"));
     const QCommandLineOption fadeDurationOption(QStringLiteral("fade-duration-ms"), QStringLiteral("Fade expired history over this duration; 0 disables fading."),
@@ -284,8 +270,7 @@ int main(int argc, char* argv[]) {
     const QCommandLineOption instanceOption(QStringLiteral("instance-signature"), QStringLiteral("Hyprland instance signature (defaults to HYPRLAND_INSTANCE_SIGNATURE)."),
                                             QStringLiteral("signature"));
     const QCommandLineOption quitAfterOption(QStringLiteral("quit-after-ms"), QStringLiteral("Exit after this many milliseconds (useful for smoke tests)."), QStringLiteral("ms"));
-    parser.addOptions({configOption, monitorOption, anchorOption, marginsOption, widthOption, heightOption, opacityOption, presentationOption, showHeldKeysOption,
-                       hideHeldKeysOption, expireAfterOption, fadeDurationOption, backspaceOption, retentionOption, repeatEnabledOption, socketOption, instanceOption,
+    parser.addOptions({configOption, monitorOption, anchorOption, marginsOption, widthOption, heightOption, opacityOption, expireAfterOption, fadeDurationOption, backspaceOption, retentionOption, repeatEnabledOption, socketOption, instanceOption,
                        quitAfterOption});
     parser.process(application);
     const QStringList commands = parser.positionalArguments();
@@ -311,7 +296,7 @@ int main(int argc, char* argv[]) {
     }
 
     ConfigOverrides overrides;
-    if (!parseOverrides(parser, monitorOption, anchorOption, marginsOption, widthOption, heightOption, opacityOption, presentationOption, showHeldKeysOption, hideHeldKeysOption,
+    if (!parseOverrides(parser, monitorOption, anchorOption, marginsOption, widthOption, heightOption, opacityOption,
                         expireAfterOption, fadeDurationOption, backspaceOption, retentionOption, repeatEnabledOption, &overrides)) {
         return 2;
     }
@@ -406,6 +391,7 @@ int main(int argc, char* argv[]) {
                     .countedRepeats   = config.repeatPresentation == QStringLiteral("counted"),
                     .repeatThreshold  = config.repeatCountThreshold,
                     .symbolFontFamily = config.symbolFontFamily,
+                    .spaceSymbol      = config.spaceSymbol,
                     .keySymbols       = config.keySymbols,
                     .modifierSymbols  = config.modifierSymbols,
                 },

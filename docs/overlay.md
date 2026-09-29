@@ -1,6 +1,6 @@
 # Overlay configuration and themes
 
-The separate Qt Quick + LayerShellQt executable displays interpreted keyboard input. Its bundled default theme shows typed characters, special-key labels, and shortcut chords using one editable history; users may select text or keycap rendering. User-loadable QML themes can change the composition while the C++ backend retains ownership of input interpretation, history, and window lifecycle. Held-key feedback is optional. Connection and protocol diagnostics stay in logs.
+The separate Qt Quick + LayerShellQt executable displays interpreted keyboard input. Its text-only bundled default shows typed characters, special-key labels, and shortcut chords using one editable history without requiring configuration. Keycaps is an optional example theme. User-loadable QML themes can change the composition while the C++ backend retains ownership of input interpretation, history, and window lifecycle. Held-key feedback is optional. Connection and protocol diagnostics stay in logs.
 
 For build and installation instructions, see the [project README](../README.md).
 
@@ -36,18 +36,17 @@ The overlay discovers the socket using `XDG_RUNTIME_DIR` and `HYPRLAND_INSTANCE_
 $XDG_RUNTIME_DIR/hyprcast/$HYPRLAND_INSTANCE_SIGNATURE/events.sock
 ```
 
-Use `hyprctl monitors` to find an output name. Defaults are the primary output, bottom-right anchoring, 24-pixel margins, and a 600x88 logical-pixel surface. That surface remains at the configured maximum size; the visible panel grows with content from 240x64 up to 600x88. It hides when empty, and history expires after three seconds of inactivity with a 250 ms fade shared by the input and panel decoration. Adjacent equivalent inputs show up to three presses followed by a small, lowered total-count suffix (for example `aaa…4x`) from the fourth occurrence. Existing command-line options remain available:
+Use `hyprctl monitors` to find an output name. Defaults are the primary output, bottom-right anchoring, 24-pixel margins, and a 600x88 logical-pixel surface. That surface remains at the configured maximum size; the visible panel grows with content from 240x64 up to 600x88. It hides when empty, and history expires after three seconds of inactivity with a 250 ms fade shared by the input and panel decoration. Adjacent equivalent inputs show up to three presses followed by a small, lowered total-count suffix (for example `aaa…4x`) from the fourth occurrence. For example:
 
 ```sh
 ./build/debug/overlay/hyprcast-overlay \
   --monitor eDP-1 \
   --anchor bottom-right \
   --margins 24,24,24,24 \
-  --background-opacity 0.55 \
-  --presentation keycaps --show-held-keys
+  --background-opacity 0.55
 ```
 
-The default TOML file is `${XDG_CONFIG_HOME:-~/.config}/hyprcast/overlay.toml`. An absent default file is optional; its parent directory is created so it can be watched. `--config PATH` selects a custom file and requires that file to exist at startup. CLI settings explicitly supplied override TOML, which overrides built-in defaults. CLI options include `--monitor`, `--anchor`, `--margins`, `--width`, `--height`, `--background-opacity`, `--presentation`, `--show-held-keys` / `--hide-held-keys`, `--backspace-mode`, `--max-retained-utf16-code-units`, `--repeat-enabled true|false`, `--expire-after-ms`, and `--fade-duration-ms`.
+The default TOML file is `${XDG_CONFIG_HOME:-~/.config}/hyprcast/overlay.toml`. An absent default file is optional; its parent directory is created so it can be watched. `--config PATH` selects a custom file and requires that file to exist at startup. CLI settings explicitly supplied override TOML, which overrides built-in defaults. CLI options include `--monitor`, `--anchor`, `--margins`, `--width`, `--height`, `--background-opacity`, `--backspace-mode`, `--max-retained-utf16-code-units`, `--repeat-enabled true|false`, `--expire-after-ms`, and `--fade-duration-ms`.
 
 The watcher observes both the file and its parent directory, so atomic-save editors are supported. Saves are debounced. A valid candidate is parsed, validated, and checked against current runtime constraints before any settings are accepted. Invalid saves keep the previous working configuration and report the error; a later valid save recovers normally. At startup, a missing default config means defaults, while a missing `--config` file or invalid initial file is fatal. Deleting the optional default file during a run attempts to restore defaults, subject to restart-only settings; deleting an explicitly selected file keeps the last accepted configuration and reports an error.
 
@@ -76,16 +75,8 @@ foreground_color = "#f4f6fa"
 font_family = "Sans Serif"
 font_size = 28
 font_weight = "medium" # normal, medium, demibold, bold
-keycap_key_background = "#394b66"
-keycap_text_background = "#28384f"
-keycap_border_color = "#7185a3"
-keycap_border_width = 1
-held_key_border_color = "#7185a3"
-held_key_border_width = 1
 
 [display]
-presentation = "keycaps" # text or keycaps
-show_held_keys = true
 panel_visibility = "with-content" # always, with-content, or never
 
 [history]
@@ -99,6 +90,7 @@ count_threshold = 4 # total occurrences, including the initial press
 
 [symbols]
 font_family = "Symbols Nerd Font" # empty inherits the regular font
+space = "␣" # display-only label for input spaces; default is " "
 
 [symbols.keys]
 Backspace = "⌫"
@@ -116,20 +108,20 @@ fade_duration_ms = 250
 All sizes and margins are logical pixels. Colors accept Qt color names or color strings such as `#RRGGBB` and alpha-bearing `#AARRGGBB`. Unknown keys, wrong TOML types, unsupported enum values, and out-of-range values are rejected rather than ignored.
 
 - `[window]`: `monitor` (empty means primary output), `anchor` (`top`, `bottom`, `left`, `right`, or a corner), `margins` (four integers in left/top/right/bottom order), maximum `width` and `height` (1–8192), `dynamic_size` (default `true`), `min_width` and `min_height` (1–8192; defaults 240 and 64), and `click_through` (default `true`). With dynamic sizing enabled, the visible panel grows and shrinks between the minimum and maximum dimensions; the transparent Wayland surface remains at the maximum dimensions. Edge anchoring keeps the panel against the chosen edge as it changes size. Minimums must not exceed maximums when dynamic sizing is enabled. Anchor, margins, and size can be changed live. The target output must exist at startup. Changing `monitor` or `click_through` requires restart; LayerShellQt binds the output when creating the layer surface, so a live reload containing either transition is rejected as a whole.
-- `[appearance]`: `background_color`, `background_opacity` (0–1; affects fill only), `corner_radius`, `panel_border_width`/`panel_border_color`, `foreground_color`, `font_family`, `font_size`, `font_weight`; `history_padding_x` and `text_extra_padding_x`; keycap `keycap_font_size`, `keycap_height`, `keycap_padding_x`, `keycap_radius`, `keycap_spacing`, `keycap_inner_spacing`, `keycap_text_background`, `keycap_key_background`, `keycap_border_color`, `keycap_border_width`, `keycap_text_color`; held-key `held_font_size`, `held_key_height`, `held_key_padding_x`, `held_key_radius`, `held_key_spacing`, `held_row_padding_x`, `held_row_padding_bottom`, `held_key_background`, `held_key_text_color`, `held_key_border_width`, and `held_key_border_color`. Border widths are 0–64 logical pixels; zero disables that border. Panel and held-key borders default to zero width; keycap borders default to one pixel to preserve current rendering. Colors accept Qt color names and strings including `#RRGGBB` and alpha-bearing `#AARRGGBB`; border alpha is independent of panel fill opacity. Font weight is one of `normal`, `medium`, `demibold`, or `bold`.
-- `[display]`: `presentation` (`text` or `keycaps`), `show_held_keys` (boolean), and `panel_visibility` (`always`, `with-content`, or `never`). `with-content` shows the panel while editable history, an expiration snapshot, or enabled held-key feedback is visible. `never` hides only the outer panel fill/border; input visuals remain. The default is `with-content`; the panel decoration is hidden when there is no content. Existing files continue to select the bundled default theme when no `[theme]` table is present.
+- `[appearance]`: `background_color`, `background_opacity` (0–1; affects fill only), `corner_radius`, `panel_border_width`/`panel_border_color`, `foreground_color`, `font_family`, `font_size`, `font_weight`; `history_padding_x` and `text_extra_padding_x`. Border widths are 0–64 logical pixels; zero disables that border. The panel border defaults to one pixel. Colors accept Qt color names and strings including `#RRGGBB` and alpha-bearing `#AARRGGBB`; border alpha is independent of panel fill opacity. Font weight is one of `normal`, `medium`, `demibold`, or `bold`.
+- `[display]`: `panel_visibility` (`always`, `with-content`, or `never`). In the bundled theme, `with-content` shows the panel while editable history or an expiration snapshot is visible; external themes may include their own content (such as held keys). `never` hides only the outer panel fill/border; input visuals remain. The default is `with-content`; the panel decoration is hidden when there is no content. Without `[theme]`, the bundled text theme is selected.
 - `[history]`: `backspace` (`delete` or `symbol`) and `max_retained_utf16_code_units` (1–1,048,576). The budget counts the expanded canonical formatted history in UTF-16 code units, including raw labels and separators, before symbol substitution or repeat counting; it is independent of font, presentation, and viewport. Compressing repeats or choosing shorter symbols never lets history exceed the budget. Reducing it trims old history immediately; surviving entries keep their IDs.
-- `[repeat]`: `enabled` (boolean) controls local auto-repeat generation; Hyprland still supplies each keyboard's repeat rate and delay. Disabling repeat cancels current repeat timers; enabling it for an already-held key restarts that key's configured delay. `presentation` is `expanded` or `counted` (the default), and `count_threshold` is 2–10,000 (default 4) total retained occurrences including the initial press. Counted mode groups adjacent equivalent inputs—including separate taps—whether or not auto-repeat is enabled; it changes presentation only, not repeat timing. From the threshold onward, the built-in presentations show up to `count_threshold - 1` copies and a lowered `…Nx` suffix, where N counts total retained occurrences. Plain `displayText` includes the suffix without font styling; `displayRichText` styles it as subscript. Keycap mode draws repeated keycaps and a smaller lowered badge.
-- `[symbols]`: `font_family` (empty inherits the regular font), plus `[symbols.keys]` and `[symbols.modifiers]` tables mapping canonical key/modifier labels to display strings. Keys such as `Backspace` and modifiers such as `Ctrl` are mapped by exact canonical identity. Mappings never replace identity used for XKB interpretation, chords, or Backspace. The selected font must contain the glyphs; Qt/system font fallback applies, so arbitrary Nerd Font glyphs are not guaranteed on systems without that font.
+- `[repeat]`: `enabled` (boolean) controls local auto-repeat generation; Hyprland still supplies each keyboard's repeat rate and delay. Disabling repeat cancels current repeat timers; enabling it for an already-held key restarts that key's configured delay. `presentation` is `expanded` or `counted` (the default), and `count_threshold` is 2–10,000 (default 4) total retained occurrences including the initial press. Counted mode groups adjacent equivalent inputs—including separate taps—whether or not auto-repeat is enabled; it changes presentation only, not repeat timing. From the threshold onward, the default text theme shows up to `count_threshold - 1` copies and a lowered `…Nx` suffix, where N counts total retained occurrences. Plain `displayText` includes the suffix without font styling; `displayRichText` styles it as subscript. The optional keycaps theme draws repeated caps and a lowered badge.
+- `[symbols]`: `font_family` (empty inherits the regular font), `space` (non-empty text, default `" "`) for display-only substitution of literal U+0020 spaces in interpreted text, plus `[symbols.keys]` and `[symbols.modifiers]` tables mapping canonical key/modifier labels to display strings. Separators inserted between key labels remain ordinary spaces; other whitespace is unchanged. Themes using `displayHistory.displayLabel` or `displayRichText` see the substitution, while raw `text` and semantic `history` remain unchanged. Keys such as `Backspace` and modifiers such as `Ctrl` are mapped by exact canonical identity. Mappings never replace identity used for XKB interpretation, chords, or Backspace. The selected font must contain the glyphs; Qt/system font fallback applies, so arbitrary Nerd Font glyphs are not guaranteed on systems without that font.
 - `[expiration]`: `after_ms` (0–86,400,000; zero disables future expiration) and `fade_duration_ms` (0–60,000; zero removes expired history without fading). Changing the inactivity interval restarts the current history's idle deadline. Changing fade duration during an active fade restarts that visual fade at full opacity. Expiration removes entries from editable history immediately; its separate visual snapshot cannot consume Backspace. New history cancels an old snapshot.
 
-In text presentation, special keys and chords appear as plain labels separated by spaces (for example `a Ctrl+C Enter b`); brackets are not added automatically. To display a particular key with brackets, set a label such as `Enter = "[Enter]"` under `[symbols.keys]`. Symbol mappings also affect keycap presentation. The raw semantic history and retention budget retain their original canonical labels and accounting.
+In the default text theme, special keys and chords appear as plain labels separated by spaces (for example `a Ctrl+C Enter b`); brackets are not added automatically. To display a particular key with brackets, set a label such as `Enter = "[Enter]"` under `[symbols.keys]`. Symbol mappings also affect the keycaps example. The raw semantic history and retention budget retain their original canonical labels and accounting.
 
 Appearance, layout, presentation, and behavior changes preserve existing history; behavior options apply prospectively, except that reducing the retention budget necessarily trims old content. Plugin Lua configuration continues to control capture filtering and controls.
 
 ## QML themes
 
-The default remains the bundled theme (`builtin:default`), so existing TOML files work unchanged. Theme discovery occurs at startup in deterministic order: user data, system data directories in XDG order, then the bundled theme. A higher-precedence installation claims an ID even if its manifest is invalid; selecting it reports that error rather than silently falling through to a different lower-precedence theme. The bundled default is always available as `builtin:default`, even if an installed theme uses the ordinary ID `default`.
+The text-only bundled theme (`builtin:default`) needs no config or theme installation. Theme discovery occurs at startup in deterministic order: user data, system data directories in XDG order, then the bundled theme. A higher-precedence installation claims an ID even if its manifest is invalid; selecting it reports that error rather than silently falling through to a different lower-precedence theme. The bundled default is always available as `builtin:default`, even if an installed theme uses the ordinary ID `default`.
 
 Install a theme by copying a directory containing `theme.toml` and its QML/assets into one of these locations:
 
@@ -173,7 +165,18 @@ accent = "#50c9aa"
 item_spacing = 8
 ```
 
-The installed example is `overlay/examples/themes/ledger/`. For an uninstalled source checkout, copy it to `${XDG_DATA_HOME:-~/.local/share}/hyprcast/themes/ledger/`, then select `ledger` as above. The example uses a vertically stacked action timeline and a separate held-key row; it is a different composition, not just a palette variant. It declares `accent` and `item_spacing` without requiring an application rebuild.
+The example themes are `overlay/examples/themes/ledger/`, `overlay/examples/themes/keycaps/`, and `overlay/examples/themes/text-held/`. For an uninstalled source checkout, copy the chosen package directory to `${XDG_DATA_HOME:-~/.local/share}/hyprcast/themes/<id>/`, then select its ID. `ledger` uses a vertically stacked action timeline and declares `accent` and `item_spacing`. `keycaps` uses a horizontal row of labeled caps with cap-specific options. `text-held` is a self-contained text history with a held-key row; its `show_held_keys` and chip/row styling are declared theme options, not shared settings. All work without an application rebuild. For example, after installing `text-held`:
+
+```toml
+[theme]
+id = "text-held"
+[theme.options]
+show_held_keys = true
+held_key_border_width = 1
+held_key_border_color = "#7185a3"
+```
+
+The held row follows presses and releases independently of history; a standalone modifier release may still create a normal history entry. `heldKeyItems` supplies canonical identity, kind, and symbol-resolved labels; text-kind labels do not use `[symbols].space` substitution.
 
 ### Presentation API version 1
 
@@ -185,12 +188,24 @@ A theme's `Main.qml` must create a `QQuickItem` visual root (for example QML `It
 - `historyCount`, `expiredHistoryCount`: current semantic row counts, suitable for panel-visibility decisions.
 - `heldKeys`, `heldKeyCount`, `heldKeyItems`: the original string list/count plus structured items (`kind`, canonical `identity`, resolved `label`) for themes that want shared symbol substitution.
 - `fading`, `fadeDurationMs`: C++ removes expired history immediately and owns snapshot cleanup; a theme may animate the snapshot but must not use animation completion to control history lifetime.
-- `settings`: read-only presentation values including `width`, `height`, `anchor`, `dynamicSize`, `minWidth`, `minHeight`, `panelBorderWidth`, `panelBorderColor`, `panelVisibility`, all existing appearance properties, `keycapBorderWidth`, `heldKeyBorderWidth`, `heldKeyBorderColor`, `symbolFontFamily`, `keySymbols`, `modifierSymbols`, `presentation`, `showHeldKeys`, `repeatPresentation`, and `repeatCountThreshold`. Names map to TOML settings (for example `keycapFontSize` maps to `keycap_font_size`).
+- `settings`: read-only presentation values including `width`, `height`, `anchor`, `dynamicSize`, `minWidth`, `minHeight`, `panelBorderWidth`, `panelBorderColor`, `panelVisibility`, shared appearance properties, `symbolFontFamily`, `keySymbols`, `modifierSymbols`, `repeatPresentation`, and `repeatCountThreshold`. Names map to TOML settings.
 - `options`: effective theme options after declared defaults and TOML overrides.
 
 `ThemeApi` sends `heldKeysChanged`, history-count notifications, `fadingChanged`, `fadeDurationMsChanged`, `settingsChanged`, and `optionsChanged`; both semantic and projected models use standard `QAbstractItemModel` notifications. Additions are backward-compatible API-v1 properties/roles. Existing custom themes that keep using only raw `history`/`heldKeys` continue to work but must opt into `displayHistory`, `displayRichText`, and `heldKeyItems` to show shared substitutions and counted-repeat presentation. The theme API version is intentionally narrower than the underlying C++ implementation; undocumented properties and roles may change.
 
-The bundled theme honors the shared appearance/layout settings, dynamic visible-panel width and height bounds, panel visibility, symbol substitutions, counted repeats, and `display.presentation` (`text` or `keycaps`). The `ledger` example honors the panel and held-key borders, panel visibility, symbol substitutions, counted repeats, and dynamic height for its vertical timeline; its width remains fixed at the configured maximum, and it deliberately ignores `presentation`. Themes need not implement every shared setting or reproduce the bundled text/keycap modes. Prefer declared options for a theme's own layout behavior, and document which shared settings your theme honors. Relative QML imports and assets resolve from the theme files.
+The app owns interpretation, editable history, repeat/expiration lifetime, window lifecycle, and the maximum Wayland surface. Themes own their visual layout, panel/background/borders, typography, visible-panel sizing, and animations; the API does not impose a panel wrapper. The bundled text theme honors shared appearance, sizing, panel visibility, symbol and repeat settings without held-key visuals. `ledger` honors panel borders, panel visibility, font/colors, symbols, counted repeats, and dynamic height (not dynamic width). `keycaps` honors the shared panel, font-family/weight, foreground, symbol, repeat, and visible-panel sizing settings. `text-held` uses shared text appearance and its own declared held-row options. Keycaps' cap-specific colors, font size, height, padding, radius, spacing, and border are declared options, not global settings. For example:
+
+```toml
+[theme]
+id = "keycaps"
+[theme.options]
+height = 44
+spacing = 8
+border_width = 0
+key_background = "#394b66"
+```
+
+Themes may use only the shared settings relevant to their composition. Package-local QML helpers and assets resolve relative to the theme files; examples do not depend on private bundled QML.
 
 **Trust warning:** themes are executable QML running in the overlay process with the capabilities of the Qt modules they import. They are not sandboxed. The read-only presentation API and package-relative entry-point rule are interface/organization boundaries, not security isolation; install only themes from authors you trust.
 
@@ -204,13 +219,13 @@ The client applies each valid protocol transition before synchronously deliverin
 
 Modifier changes from Hyprland are authoritative: key events update local XKB pressed-key state, then modifier messages reconcile the XKB masks. Pause, keymap replacement, keyboard removal, disconnect, and key release clear affected held/repeat state. Reconnect snapshots do not include held keys, so the overlay does not infer or repeat keys it did not observe pressed.
 
-Interpreted actions are stored in a semantic `QAbstractListModel` with stable entry IDs and roles for kind, text, key, modifiers, keyboard/key identity, event time, and repeat metadata. Model updates use row insertions/removals and `dataChanged` for partial text edits and retention trimming rather than resetting the list on each key. A separate C++ presentation projection supplies shared symbol-resolved labels and optional counted groups; both bundled presentations consume that projection while custom API-v1 themes may continue using the original semantic model.
+Interpreted actions are stored in a semantic `QAbstractListModel` with stable entry IDs and roles for kind, text, key, modifiers, keyboard/key identity, event time, and repeat metadata. Model updates use row insertions/removals and `dataChanged` for partial text edits and retention trimming rather than resetting the list on each key. A separate C++ presentation projection supplies shared symbol-resolved labels and optional counted groups; the bundled text theme and example themes consume that projection while custom API-v1 themes may continue using the original semantic model.
 
-Old text is trimmed at grapheme boundaries and special keys/chords at entry boundaries. The text viewport uses measured `Text.ElideLeft`; the keycap viewport tail-follows retained entries and hides a clipped leading cap whole. Neither viewport discards off-screen content, so older retained content reappears as newer content is erased.
+Old text is trimmed at grapheme boundaries and special keys/chords at entry boundaries. The text viewport uses measured `Text.ElideLeft`; the optional keycaps theme tail-follows retained entries and hides a clipped leading cap whole. Neither viewport discards off-screen content, so older retained content reappears as newer content is erased.
 
 Plain Backspace defaults to deletion: it removes one Unicode grapheme from text, or one whole special-key/chord entry. Generated Backspace repeats apply that deletion repeatedly. In `symbol` mode Backspace is recorded as a visible key. Modified shortcuts such as Ctrl+Backspace remain visible chords and do not emulate word deletion. In counted mode, adjacent equivalent inputs collapse after the configured threshold; separate taps and generated repeats of the same input count together, and the initial press/tap counts as occurrence one. Key identity, interpreted text/chord/modifiers, and keyboard identity determine equivalence; display-symbol substitutions and event timing do not. There is no tap-timeout. A different intervening input or interpretation starts a new group; deleting that intervening input does not retroactively join the groups. Once collapsed, a group stays collapsed while Backspace decrements its underlying retained occurrences, returning to a plain action at one; another equivalent input can extend the same group. Deletion still follows the existing grapheme/atomic-key semantics. Multi-grapheme actions and text whose grapheme boundaries cross action edges remain expanded. Storage, expiration, and retention operate on individual semantic actions, never on the shortened counter. The input presenter itself preserves history on pause/reset, but the application lifecycle clears active and fading history whenever capture pauses or the connection resets; old input does not reappear when casting resumes. XKB translation is not a reconstruction of application- or IME-committed text.
 
-Held-key feedback reports keys observed as currently pressed, including modifiers. It clears on pause, disconnect, keymap replacement, and keyboard removal; reconnect snapshots do not contain held keys, so unknown held state is not inferred.
+Themes may opt into held-key feedback through the read-only API; the bundled theme does not render it. The `text-held` example reports keys observed as currently pressed, including modifiers. It clears on pause, disconnect, keymap replacement, and keyboard removal; reconnect snapshots do not contain held keys, so unknown held state is not inferred.
 
 ## Validation
 

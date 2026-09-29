@@ -8,21 +8,21 @@ Item {
     readonly property bool hasPanelContent: hyprcast.historyCount > 0 || hyprcast.fading
     readonly property bool panelDecorationVisible: hyprcast.settings.panelVisibility === "always" ||
                                                    (hyprcast.settings.panelVisibility === "with-content" && hasPanelContent)
-    readonly property real measuredHistoryWidth: Math.max(naturalActiveText.implicitWidth, naturalExpiredText.implicitWidth)
+    readonly property real measuredHistoryWidth: Math.max(activePresentation.item ? activePresentation.item.naturalWidth : 0,
+                                                          fadingPresentation.item ? fadingPresentation.item.naturalWidth : 0)
     readonly property real requiredPanelWidth: {
         const border = hyprcast.settings.panelBorderWidth * 2
-        const historyExtra = hyprcast.settings.textExtraPaddingX * 2
-        const historyWidth = measuredHistoryWidth + historyExtra + hyprcast.settings.historyPaddingX * 2 + border
+        const historyWidth = measuredHistoryWidth + hyprcast.settings.historyPaddingX * 2 + border
         return Math.max(hyprcast.settings.minWidth, historyWidth)
     }
     readonly property real requiredPanelHeight: {
-        const historyHeight = hyprcast.settings.fontSize * 1.45
+        const historyHeight = hyprcast.options.height + 8
         return Math.max(hyprcast.settings.minHeight, historyHeight + hyprcast.settings.panelBorderWidth * 2)
     }
 
     Item {
         id: panelFrame
-        objectName: "hyprcastPanelFrame"
+        objectName: "hyprcastKeycapsPanelFrame"
         x: hyprcast.settings.anchor.indexOf("right") >= 0 ? parent.width - width :
            (hyprcast.settings.anchor.indexOf("left") >= 0 ? 0 : (parent.width - width) / 2)
         y: hyprcast.settings.anchor.indexOf("bottom") >= 0 ? parent.height - height :
@@ -69,7 +69,7 @@ Item {
                 id: activePresentation
                 anchors.fill: parent
                 property var historyModel: hyprcast.displayHistory
-                source: Qt.resolvedUrl("../../TextPresentation.qml")
+                source: Qt.resolvedUrl("KeycapPresentation.qml")
                 onLoaded: item.historyModel = activePresentation.historyModel
             }
 
@@ -80,7 +80,7 @@ Item {
                 property real snapshotOpacity: 1
                 opacity: snapshotOpacity
                 visible: hyprcast.fading
-                source: Qt.resolvedUrl("../../TextPresentation.qml")
+                source: Qt.resolvedUrl("KeycapPresentation.qml")
                 onLoaded: item.historyModel = fadingPresentation.historyModel
 
                 NumberAnimation {
@@ -95,32 +95,6 @@ Item {
             }
         }
 
-    }
-
-    Text {
-        id: naturalActiveText
-        x: -10000
-        y: -10000
-        text: hyprcast.displayHistory.displayRichText
-        textFormat: Text.RichText
-        font.family: hyprcast.settings.fontFamily
-        font.pixelSize: hyprcast.settings.fontSize
-        font.weight: hyprcast.settings.fontWeight
-        wrapMode: Text.NoWrap
-        visible: false
-    }
-
-    Text {
-        id: naturalExpiredText
-        x: -10000
-        y: -10000
-        text: hyprcast.expiredDisplayHistory.displayRichText
-        textFormat: Text.RichText
-        font.family: hyprcast.settings.fontFamily
-        font.pixelSize: hyprcast.settings.fontSize
-        font.weight: hyprcast.settings.fontWeight
-        wrapMode: Text.NoWrap
-        visible: false
     }
 
     Connections {

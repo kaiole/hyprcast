@@ -7,7 +7,7 @@ entry = "Main.qml"
 [options.accent]
 type = "color"
 default = "#72d6b0"
-description = "Accent used for the active-history rail and held-key markers."
+description = "Accent used for the history rail."
 
 [options.item_spacing]
 type = "integer"

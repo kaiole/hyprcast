@@ -4,9 +4,30 @@ name = "Ledger timeline"
 api_version = 1
 entry = "Main.qml"
 
+[options.rail_width]
+type = "integer"
+default = 3
+minimum = 0
+maximum = 16
+description = "History rail thickness in logical pixels; zero hides it."
+
+[options.inner_padding]
+type = "integer"
+default = 12
+minimum = 0
+maximum = 64
+description = "Inset from the panel border on all sides, in logical pixels."
+
+[options.text_scale]
+type = "number"
+default = 1.0
+minimum = 0.5
+maximum = 2.0
+description = "Multiplier for timeline labels and repeat counts relative to their default shared-font proportions."
+
 [options.accent]
 type = "color"
-default = "#72d6b0"
+default = "#7a7a7a"
 description = "Accent used for the history rail."
 
 [options.item_spacing]

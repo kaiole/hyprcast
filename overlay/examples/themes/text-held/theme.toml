@@ -4,66 +4,102 @@ name = "Text with held keys"
 api_version = 1
 entry = "Main.qml"
 
+[options.held_side]
+type = "enum"
+default = "left"
+values = ["left", "right"]
+description = "Held-area side in compact layout; also aligns the stacked row."
+
+[options.layout]
+type = "enum"
+default = "auto"
+values = ["auto", "compact", "stacked"]
+description = "Auto stacks on tall surfaces. Forced stacked shrinks held chips on short surfaces to protect history."
+
+[options.compact_held_fraction]
+type = "number"
+default = 0.4
+minimum = 0.2
+maximum = 0.6
+description = "Fraction of compact panel width reserved for held keys, even when none are pressed."
+
 [options.show_held_keys]
+description = "Show held keys and reserve their layout area."
 type = "boolean"
 default = true
 
 [options.held_font_size]
+description = "Held label size in logical pixels; shrinks to fit short chips."
 type = "integer"
-default = 14
+default = 19
 minimum = 1
 maximum = 256
 
 [options.held_key_height]
+description = "Preferred held chip height in logical pixels."
 type = "integer"
-default = 22
+default = 40
 minimum = 1
 maximum = 512
 
 [options.held_key_padding_x]
+description = "Horizontal padding inside held chips, in logical pixels."
 type = "integer"
-default = 7
+default = 12
 minimum = 0
 maximum = 512
 
 [options.held_key_radius]
+description = "Held chip corner radius in logical pixels."
 type = "integer"
-default = 5
+default = 7
 minimum = 0
 maximum = 256
 
 [options.held_key_spacing]
+description = "Gap between held chips, in logical pixels."
 type = "integer"
-default = 5
+default = 6
 minimum = 0
 maximum = 128
 
 [options.held_row_padding_x]
+description = "Held-area horizontal inset from the panel border, in logical pixels."
 type = "integer"
 default = 16
 minimum = 0
 maximum = 512
 
 [options.held_row_padding_bottom]
+description = "Stacked held row bottom inset in logical pixels."
 type = "integer"
 default = 10
 minimum = 0
 maximum = 512
 
 [options.held_key_background]
+description = "Fill for held special-key and modifier chips."
 type = "color"
-default = "#46536a"
+default = "#2a2a2a"
+
+[options.held_text_background]
+description = "Fill for held printable-text chips."
+type = "color"
+default = "#191919"
 
 [options.held_key_text_color]
+description = "Held chip label color."
 type = "color"
-default = "#ffffff"
+default = "#cccccc"
 
 [options.held_key_border_width]
+description = "Held chip outline thickness in logical pixels; zero hides it."
 type = "integer"
-default = 0
+default = 1
 minimum = 0
 maximum = 64
 
 [options.held_key_border_color]
+description = "Held chip outline color."
 type = "color"
-default = "#66758c"
+default = "#444444"

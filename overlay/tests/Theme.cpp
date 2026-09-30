@@ -356,12 +356,21 @@ namespace {
         runtime.applyAcceptedConfiguration(config);
         auto* heldPanel = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastPanelFrame"), Qt::FindChildrenRecursively);
         auto* heldFill = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastPanelBackground"), Qt::FindChildrenRecursively);
+        QCoreApplication::processEvents();
+        auto* heldHistoryArea = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastHistoryArea"), Qt::FindChildrenRecursively);
+        check(heldHistoryArea != nullptr, "held example exposes its reserved history area");
+        const qreal historyYBeforeHeld = heldHistoryArea ? heldHistoryArea->y() : 0;
+        const qreal historyHeightBeforeHeld = heldHistoryArea ? heldHistoryArea->height() : 0;
+        const qreal panelHeightBeforeHeld = heldPanel ? heldPanel->height() : 0;
         const int historyBeforeHeld = presenter.historyModel().rowCount();
         presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 3, .keycode = 42, .pressed = true});
         QCoreApplication::processEvents();
         check(heldPanel && heldFill && heldFill->isVisible() && hasVisualText(view.rootObject(), presenter.heldKeyItems().front().toMap().value(QStringLiteral("label")).toString()) &&
                   presenter.historyModel().rowCount() == historyBeforeHeld,
               "held example reacts to modifier press without adding history");
+        check(heldHistoryArea && heldHistoryArea->y() == historyYBeforeHeld && heldHistoryArea->height() == historyHeightBeforeHeld &&
+                  heldPanel && heldPanel->height() == panelHeightBeforeHeld,
+              "held press preserves history geometry and panel height");
         QVariantMap heldOptions;
         check(catalog.validateOptions(QStringLiteral("text-held"), {{QStringLiteral("held_key_height"), 31}}, &heldOptions, &error) &&
                   heldOptions.value(QStringLiteral("held_key_height")).toInt() == 31,
@@ -374,11 +383,53 @@ namespace {
         QCoreApplication::processEvents();
         check(presenter.heldKeyCount() == 0 && presenter.historyModel().rowCount() == historyBeforeHeld + 1,
               "modifier release removes held state and records standalone modifier history");
+        check(heldHistoryArea && heldHistoryArea->y() == historyYBeforeHeld && heldHistoryArea->height() == historyHeightBeforeHeld,
+              "held release preserves the reserved history geometry");
         presenter.clearHistory();
         QCoreApplication::processEvents();
         check(!hasVisualText(view.rootObject(), heldLabel) && heldFill && !heldFill->isVisible(),
               "held example removes feedback and decoration after history clears");
 
+        config.dynamicSize = false;
+        config.height = 60;
+        for (const auto& layout : {QStringLiteral("auto"), QStringLiteral("compact"), QStringLiteral("stacked")}) {
+            for (const auto& side : {QStringLiteral("left"), QStringLiteral("right")}) {
+                config.themeOptions = {{QStringLiteral("layout"), layout}, {QStringLiteral("held_side"), side},
+                                       {QStringLiteral("compact_held_fraction"), 0.3}};
+                check(runtime.prepareSwitch(config, &error), "prepare held composition options");
+                runtime.applyAcceptedConfiguration(config);
+                QCoreApplication::processEvents();
+                auto* history = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastHistoryArea"));
+                auto* held = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastHeldViewport"));
+                check(history && held && history->height() > 0, "short surfaces retain history for every held layout");
+                if (!history || !held)
+                    continue;
+                if (layout != QStringLiteral("stacked")) {
+                    check(side == QStringLiteral("left") ? held->x() + held->width() < history->x() :
+                          history->x() + history->width() < held->x(), "compact held side leaves a nonoverlapping history area");
+                } else {
+                    check(history->y() + history->height() <= held->y(), "forced stacked keeps history above held keys");
+                }
+                const QRectF before(history->x(), history->y(), history->width(), history->height());
+                presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 5, .keycode = 42, .pressed = true});
+                QCoreApplication::processEvents();
+                check(before == QRectF(history->x(), history->y(), history->width(), history->height()), "compact/forced press preserves history geometry");
+                presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 6, .keycode = 42, .pressed = false});
+                QCoreApplication::processEvents();
+                check(before == QRectF(history->x(), history->y(), history->width(), history->height()), "compact/forced release preserves history geometry");
+                presenter.clearHistory();
+            }
+        }
+        check(!catalog.validateOptions(QStringLiteral("text-held"), {{QStringLiteral("layout"), QStringLiteral("floating")}}, &heldOptions, &error) &&
+              !catalog.validateOptions(QStringLiteral("text-held"), {{QStringLiteral("compact_held_fraction"), 0.9}}, &heldOptions, &error),
+              "held layout enums and proportions reject invalid values");
+        QVariantMap ledgerOptions;
+        check(catalog.validateOptions(QStringLiteral("ledger"), {{QStringLiteral("rail_width"), 0}, {QStringLiteral("inner_padding"), 8},
+              {QStringLiteral("text_scale"), 1.5}}, &ledgerOptions, &error), "ledger validates curated layout options");
+        check(!catalog.validateOptions(QStringLiteral("ledger"), {{QStringLiteral("text_scale"), 0.0}}, &ledgerOptions, &error),
+              "ledger rejects unreadable text scales");
+        config.dynamicSize = true;
+        config.height = 120;
         config.themeId      = QStringLiteral("ledger");
         config.themeOptions = {{QStringLiteral("item_spacing"), 8}, {QStringLiteral("accent"), QStringLiteral("#40ccaa")}};
         check(runtime.prepareSwitch(config, &error), "load the shipped, distinctly composed QML example");

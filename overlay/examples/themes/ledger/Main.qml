@@ -11,7 +11,7 @@ Item {
     readonly property bool panelDecorationVisible: hyprcast.settings.panelVisibility === "always" ||
                                                    (hyprcast.settings.panelVisibility === "with-content" && hasPanelContent)
     readonly property real naturalHistoryHeight: Math.max(activeHistory.contentHeight, expiredHistory.contentHeight)
-    readonly property real naturalPanelHeight: naturalHistoryHeight + 24 + hyprcast.settings.panelBorderWidth * 2
+    readonly property real naturalPanelHeight: naturalHistoryHeight + hyprcast.options.inner_padding * 2 + hyprcast.settings.panelBorderWidth * 2
 
     Item {
         id: panelFrame
@@ -45,7 +45,7 @@ Item {
 
         Column {
             anchors.fill: parent
-            anchors.margins: 12 + hyprcast.settings.panelBorderWidth
+            anchors.margins: hyprcast.options.inner_padding + hyprcast.settings.panelBorderWidth
             Item {
                 id: historyArea
                 width: parent.width
@@ -97,20 +97,21 @@ Item {
             required property bool counted
             required property int repeatCount
             width: ListView.view.width
-            height: Math.max(20, hyprcast.settings.fontSize * 0.7)
+            height: Math.max(label.implicitHeight, countLabel.implicitHeight) + 4
 
             Rectangle {
-                width: 3
+                width: hyprcast.options.rail_width
                 height: parent.height - 4
                 anchors.verticalCenter: parent.verticalCenter
-                radius: 1.5
+                radius: width / 2
                 color: hyprcast.options.accent
                 opacity: kind === "text" ? 0.55 : 1
             }
 
             Text {
+                id: label
                 anchors.left: parent.left
-                anchors.leftMargin: 10
+                anchors.leftMargin: hyprcast.options.rail_width + 7
                 anchors.right: countLabel.left
                 anchors.rightMargin: counted ? 8 : 0
                 anchors.verticalCenter: parent.verticalCenter
@@ -118,7 +119,7 @@ Item {
                 color: hyprcast.settings.foregroundColor
                 font.family: kind === "text" || hyprcast.settings.symbolFontFamily.length === 0 ?
                              hyprcast.settings.fontFamily : hyprcast.settings.symbolFontFamily
-                font.pixelSize: hyprcast.settings.fontSize * 0.7
+                font.pixelSize: hyprcast.settings.fontSize * 0.7 * hyprcast.options.text_scale
                 font.weight: kind === "text" ? Font.Normal : Font.DemiBold
                 elide: Text.ElideLeft
             }
@@ -131,7 +132,7 @@ Item {
                 text: "x" + repeatCount
                 color: hyprcast.settings.foregroundColor
                 font.family: hyprcast.settings.fontFamily
-                font.pixelSize: hyprcast.settings.fontSize * 0.55
+                font.pixelSize: hyprcast.settings.fontSize * 0.55 * hyprcast.options.text_scale
                 font.weight: Font.DemiBold
             }
         }

@@ -12,11 +12,23 @@ minimum = 1
 maximum = 256
 
 [options.height]
-description = "Cap height in logical pixels."
+description = "Total cap height including the lower edge, in logical pixels."
 type = "integer"
 default = 40
 minimum = 1
 maximum = 512
+
+[options.edge_depth]
+description = "Raised lower edge depth in logical pixels, limited to half the cap height; zero makes caps flat."
+type = "integer"
+default = 3
+minimum = 0
+maximum = 24
+
+[options.edge_color]
+description = "Dark lower edge color."
+type = "color"
+default = "#101010"
 
 [options.padding_x]
 description = "Horizontal padding inside each cap, in logical pixels."

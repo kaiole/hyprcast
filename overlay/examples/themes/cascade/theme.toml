@@ -1,0 +1,127 @@
+[theme]
+id = "cascade"
+name = "Cascade"
+api_version = 1
+entry = "Main.qml"
+
+[options.visible_groups]
+description = "Maximum visible groups; short surfaces reduce this automatically."
+type = "integer"
+default = 6
+minimum = 1
+maximum = 12
+
+[options.row_spacing]
+description = "Vertical gap between scaled groups in logical pixels."
+type = "integer"
+default = 8
+minimum = 0
+maximum = 48
+
+[options.depth_scale]
+description = "Scale multiplier beyond the newest two groups; floor is 0.65."
+type = "number"
+default = 0.9
+minimum = 0.75
+maximum = 1.0
+
+[options.depth_opacity]
+description = "Opacity multiplier beyond the newest two groups."
+type = "number"
+default = 0.7
+minimum = 0.3
+maximum = 1.0
+
+[options.transition_ms]
+description = "Arrival duration; movement and removal use shorter derived durations."
+type = "integer"
+default = 180
+minimum = 0
+maximum = 600
+
+[options.edge_depth]
+description = "Dark lower lip height, included in cap height and limited to half of it."
+type = "integer"
+default = 3
+minimum = 0
+maximum = 24
+
+[options.edge_color]
+description = "Dark lower edge color."
+type = "color"
+default = "#101010"
+
+[options.group_alignment]
+description = "Shared edge toward which groups recede."
+type = "enum"
+default = "right"
+values = ['left', 'center', 'right']
+
+[options.motion]
+description = "Reduced disables arrival, displacement and removal motion; expiration still fades."
+type = "enum"
+default = "full"
+values = ['full', 'reduced']
+
+[options.font_size]
+description = "Label size in logical pixels."
+type = "integer"
+default = 24
+minimum = 1
+maximum = 256
+
+[options.height]
+description = "Cap height in logical pixels."
+type = "integer"
+default = 48
+minimum = 1
+maximum = 512
+
+[options.padding_x]
+description = "Horizontal padding inside each cap, in logical pixels."
+type = "integer"
+default = 16
+minimum = 0
+maximum = 512
+
+[options.radius]
+description = "Cap corner radius in logical pixels."
+type = "integer"
+default = 7
+minimum = 0
+maximum = 256
+
+[options.inner_spacing]
+description = "Gap between caps within a shortcut chord, in logical pixels."
+type = "integer"
+default = 3
+minimum = 0
+maximum = 128
+
+[options.text_background]
+description = "Fill for printable-text caps."
+type = "color"
+default = "#191919"
+
+[options.key_background]
+description = "Fill for special-key and modifier caps."
+type = "color"
+default = "#2a2a2a"
+
+[options.border_color]
+description = "Cap outline color."
+type = "color"
+default = "#444444"
+
+[options.border_width]
+description = "Cap outline thickness in logical pixels; zero hides it."
+type = "integer"
+default = 1
+minimum = 0
+maximum = 64
+
+[options.text_color]
+description = "Cap label color."
+type = "color"
+default = "#cccccc"
+

@@ -5,102 +5,79 @@ Item {
     objectName: "hyprcastTextHeldRoot"
     anchors.fill: parent
     clip: true
-
-    // Choose composition from the maximum surface, not transient content.
-    readonly property real historyLineHeight: Math.max(naturalActiveText.implicitHeight, naturalExpiredText.implicitHeight, hyprcast.settings.fontSize * 1.45)
-    readonly property real stackedHeight: historyLineHeight + hyprcast.options.held_key_height +
-                                         hyprcast.options.held_row_padding_bottom + hyprcast.settings.panelBorderWidth * 2 + 12
-    readonly property bool stacked: hyprcast.options.layout === "stacked" ||
-                                    (hyprcast.options.layout === "auto" && hyprcast.settings.height >= stackedHeight)
-    readonly property bool heldLeft: hyprcast.options.held_side === "left"
-    readonly property real compactFraction: hyprcast.options.compact_held_fraction
-    readonly property bool reserveHeld: hyprcast.options.show_held_keys
-    readonly property bool heldVisible: hyprcast.options.show_held_keys && hyprcast.heldKeyCount > 0
-    readonly property bool hasPanelContent: hyprcast.historyCount > 0 || hyprcast.fading || heldVisible
-    readonly property bool panelDecorationVisible: hyprcast.settings.panelVisibility === "always" ||
-                                                   (hyprcast.settings.panelVisibility === "with-content" && hasPanelContent)
-    readonly property real measuredHistoryWidth: Math.max(naturalActiveText.implicitWidth, naturalExpiredText.implicitWidth)
-    readonly property real requiredPanelWidth: {
-        const border = hyprcast.settings.panelBorderWidth * 2
-        const historyExtra = hyprcast.settings.textExtraPaddingX * 2
-        const historyWidth = measuredHistoryWidth + historyExtra + hyprcast.settings.historyPaddingX * 2 + border
-        // In compact mode reserve a stable fraction even when no keys are down.
-        const compactWidth = reserveHeld && !stacked ? historyWidth / (1 - compactFraction) : historyWidth
-        const heldWidth = reserveHeld && stacked ? heldRow.implicitWidth + hyprcast.options.held_row_padding_x * 2 + border : 0
-        return Math.max(hyprcast.settings.minWidth, compactWidth, heldWidth)
+    readonly property var slots: hyprcast.options.show_altgr ? ["Ctrl", "Shift", "Alt", "Super", "AltGr"] : ["Ctrl", "Shift", "Alt", "Super"]
+    readonly property var observed: {
+        const result = {}
+        for (const item of hyprcast.heldKeyItems)
+            if (item.kind === "modifier") result[item.identity] = true
+        return result
     }
-    readonly property real requiredPanelHeight: {
-        const contentHeight = reserveHeld && stacked ? stackedHeight :
-                              Math.max(historyLineHeight, reserveHeld ? hyprcast.options.held_key_height : 0) + hyprcast.settings.panelBorderWidth * 2 + 8
-        return Math.max(hyprcast.settings.minHeight, contentHeight)
-    }
-
+    readonly property bool heldVisible: hyprcast.options.show_held_keys && slots.some(function(identity) { return root.observed[identity] === true })
+    readonly property bool hasContent: hyprcast.historyCount > 0 || hyprcast.fading || heldVisible
+    readonly property bool contentVisible: hasContent || hyprcast.settings.panelVisibility === "always"
+    readonly property bool decorated: hyprcast.settings.panelVisibility === "always" ||
+                                      (hyprcast.settings.panelVisibility === "with-content" && hasContent)
+    readonly property real contentOpacity: hyprcast.settings.panelVisibility !== "always" &&
+                                           hyprcast.historyCount === 0 && hyprcast.fading && !heldVisible ? snapshot.opacity : 1
+    readonly property real insetX: hyprcast.settings.historyPaddingX + hyprcast.settings.panelBorderWidth
+    readonly property real insetY: hyprcast.options.inner_padding + hyprcast.settings.panelBorderWidth
+    readonly property real preferredHeight: insetY * 2 + hyprcast.options.height * 2 + hyprcast.options.row_gap
     Item {
-        id: panelFrame
+        id: panel
         objectName: "hyprcastPanelFrame"
-        x: hyprcast.settings.anchor.indexOf("right") >= 0 ? parent.width - width :
-           (hyprcast.settings.anchor.indexOf("left") >= 0 ? 0 : (parent.width - width) / 2)
-        y: hyprcast.settings.anchor.indexOf("bottom") >= 0 ? parent.height - height :
-           (hyprcast.settings.anchor.indexOf("top") >= 0 ? 0 : (parent.height - height) / 2)
-        width: hyprcast.settings.dynamicSize ? Math.min(hyprcast.settings.width, root.requiredPanelWidth) : hyprcast.settings.width
-        height: hyprcast.settings.dynamicSize ? Math.min(hyprcast.settings.height, root.requiredPanelHeight) : hyprcast.settings.height
+        width: Math.max(0, Math.min(root.width, hyprcast.settings.width,
+               hyprcast.settings.dynamicSize ? Math.max(hyprcast.settings.minWidth, 600) : hyprcast.settings.width))
+        height: Math.max(0, Math.min(root.height, hyprcast.settings.height,
+                hyprcast.settings.dynamicSize ? Math.max(hyprcast.settings.minHeight, root.preferredHeight) : hyprcast.settings.height))
+        x: hyprcast.settings.anchor.indexOf("right") >= 0 ? root.width - width :
+           (hyprcast.settings.anchor.indexOf("left") >= 0 ? 0 : (root.width - width) / 2)
+        y: hyprcast.settings.anchor.indexOf("bottom") >= 0 ? root.height - height :
+           (hyprcast.settings.anchor.indexOf("top") >= 0 ? 0 : (root.height - height) / 2)
+        readonly property real bandHeight: Math.max(0, Math.min(hyprcast.options.height,
+                (height - root.insetY * 2 - hyprcast.options.row_gap) / 2))
         clip: true
-
         Rectangle {
+            id: background
             objectName: "hyprcastPanelBackground"
             anchors.fill: parent
+            visible: root.decorated
             radius: hyprcast.settings.cornerRadius
-            visible: root.panelDecorationVisible
-            opacity: hyprcast.fading && hyprcast.historyCount === 0 && !root.heldVisible ? fadingPresentation.snapshotOpacity : 1
+            opacity: root.contentOpacity
             color: {
-                const base = Qt.color(hyprcast.settings.backgroundColor)
-                return Qt.rgba(base.r, base.g, base.b, base.a * hyprcast.settings.backgroundOpacity)
+                const c = Qt.color(hyprcast.settings.backgroundColor)
+                return Qt.rgba(c.r, c.g, c.b, c.a * hyprcast.settings.backgroundOpacity)
             }
-        }
-
-        Rectangle {
-            objectName: "hyprcastPanelBorder"
-            anchors.fill: parent
-            radius: hyprcast.settings.cornerRadius
-            color: "transparent"
-            visible: root.panelDecorationVisible && hyprcast.settings.panelBorderWidth > 0
-            opacity: hyprcast.fading && hyprcast.historyCount === 0 && !root.heldVisible ? fadingPresentation.snapshotOpacity : 1
             border.width: hyprcast.settings.panelBorderWidth
             border.color: hyprcast.settings.panelBorderColor
         }
-
         Item {
             id: historyArea
             objectName: "hyprcastHistoryArea"
-            x: root.reserveHeld && !root.stacked && root.heldLeft ? heldViewport.x + heldViewport.width + 8 :
-               hyprcast.settings.historyPaddingX + hyprcast.settings.panelBorderWidth
-            y: hyprcast.settings.panelBorderWidth + 4
-            width: Math.max(0, (root.reserveHeld && !root.stacked && !root.heldLeft ? heldViewport.x - 8 :
-                               parent.width - hyprcast.settings.historyPaddingX - hyprcast.settings.panelBorderWidth) - x)
-            height: Math.max(0, (root.reserveHeld && root.stacked ? heldViewport.y - 4 : parent.height - hyprcast.settings.panelBorderWidth - 4) - y)
-
-            Loader {
-                id: activePresentation
+            x: Math.min(root.insetX, panel.width / 2)
+            y: Math.min(root.insetY, panel.height / 2)
+            width: Math.max(0, panel.width - root.insetX * 2)
+            height: panel.bandHeight
+            clip: true
+            RibbonStage {
+                id: active
+                objectName: "textHeldActiveStage"
                 anchors.fill: parent
-                property var historyModel: hyprcast.displayHistory
-                source: Qt.resolvedUrl("TextPresentation.qml")
-                onLoaded: item.historyModel = activePresentation.historyModel
+                capHeight: panel.bandHeight
+                historyModel: hyprcast.displayHistory
+                visible: hyprcast.historyCount > 0
             }
-
-            Loader {
-                id: fadingPresentation
+            RibbonStage {
+                id: snapshot
+                objectName: "textHeldExpiredStage"
                 anchors.fill: parent
-                property var historyModel: hyprcast.expiredDisplayHistory
-                property real snapshotOpacity: 1
-                opacity: snapshotOpacity
-                visible: hyprcast.fading
-                source: Qt.resolvedUrl("TextPresentation.qml")
-                onLoaded: item.historyModel = fadingPresentation.historyModel
-
+                capHeight: panel.bandHeight
+                historyModel: hyprcast.expiredDisplayHistory
+                animateAdds: false
+                visible: hyprcast.fading && hyprcast.historyCount === 0
                 NumberAnimation {
-                    id: snapshotFade
-                    target: fadingPresentation
-                    property: "snapshotOpacity"
+                    id: fade
+                    target: snapshot
+                    property: "opacity"
                     from: 1
                     to: 0
                     duration: hyprcast.fadeDurationMs
@@ -108,107 +85,52 @@ Item {
                 }
             }
         }
-
         Item {
-            id: heldViewport
+            id: dock
             objectName: "hyprcastHeldViewport"
-            readonly property real inset: hyprcast.options.held_row_padding_x + hyprcast.settings.panelBorderWidth
-            x: root.stacked || root.heldLeft ? inset : parent.width * (1 - root.compactFraction)
-            width: Math.max(0, (root.stacked ? parent.width : parent.width * root.compactFraction) -
-                              (root.stacked ? inset * 2 : inset))
-            // On short forced-stacked surfaces shrink chips before sacrificing history.
-            height: Math.max(0, Math.min(hyprcast.options.held_key_height,
-                                        parent.height - hyprcast.settings.panelBorderWidth * 2 - 8 -
-                                        (root.stacked ? root.historyLineHeight + hyprcast.options.held_row_padding_bottom + 4 : 0)))
-            y: root.stacked ? parent.height - hyprcast.settings.panelBorderWidth - hyprcast.options.held_row_padding_bottom - height : (parent.height - height) / 2
+            x: historyArea.x
+            y: Math.min(panel.height, historyArea.y + historyArea.height + hyprcast.options.row_gap)
+            width: historyArea.width
+            height: panel.bandHeight
+            visible: root.contentVisible && hyprcast.options.show_held_keys
+            opacity: root.contentOpacity
             clip: true
-            visible: root.reserveHeld
-
-        Row {
-            id: heldRow
-            objectName: "hyprcastHeldRow"
-            x: root.heldLeft ? 0 : Math.max(0, parent.width - implicitWidth)
-            height: parent.height
-            spacing: hyprcast.options.held_key_spacing
-            visible: root.heldVisible
-
-            Repeater {
-                model: hyprcast.heldKeyItems
-
-                delegate: Rectangle {
-                    required property var modelData
-
-                    implicitWidth: label.implicitWidth + hyprcast.options.held_key_padding_x * 2
-                    implicitHeight: heldViewport.height
-                    radius: hyprcast.options.held_key_radius
-                    color: modelData.kind === "text" ? hyprcast.options.held_text_background : hyprcast.options.held_key_background
-                    border.width: hyprcast.options.held_key_border_width
-                    border.color: hyprcast.options.held_key_border_color
-
-                    Text {
-                        id: label
-                        anchors.centerIn: parent
-                        text: modelData.label
-                        color: hyprcast.options.held_key_text_color
-                        font.family: modelData.kind === "text" || hyprcast.settings.symbolFontFamily.length === 0 ?
-                                     hyprcast.settings.fontFamily : hyprcast.settings.symbolFontFamily
-                        font.pixelSize: Math.min(hyprcast.options.held_font_size, Math.max(1, heldViewport.height - hyprcast.options.held_key_border_width * 2 - 4))
-                        font.weight: hyprcast.settings.fontWeight
+            readonly property real spacing: Math.min(hyprcast.options.dock_spacing, width / Math.max(1, root.slots.length * 2))
+            readonly property real slotWidth: Math.max(0, Math.min(panel.bandHeight * 2.4, (width - (root.slots.length - 1) * spacing) / root.slots.length))
+            Item {
+                id: dockRow
+                objectName: "hyprcastHeldRow"
+                width: root.slots.length * dock.slotWidth + (root.slots.length - 1) * dock.spacing
+                height: dock.height
+                x: hyprcast.options.dock_alignment === "right" ? dock.width - width :
+                   (hyprcast.options.dock_alignment === "left" ? 0 : (dock.width - width) / 2)
+                Repeater {
+                    model: root.slots
+                    delegate: Keycap {
+                        required property string modelData
+                        required property int index
+                        x: index * (dock.slotWidth + dock.spacing)
+                        objectName: "modifierSlot" + modelData
+                        property string identity: modelData
+                        width: dock.slotWidth
+                        capHeight: panel.bandHeight
+                        label: hyprcast.settings.modifierSymbols[identity] === undefined ? identity : hyprcast.settings.modifierSymbols[identity]
+                        live: true
+                        pressed: root.observed[identity] === true
                     }
                 }
             }
         }
     }
-
+    function updateFade() {
+        fade.stop()
+        snapshot.opacity = 1
+        if (hyprcast.fading) fade.start()
     }
-
-    Text {
-        id: naturalActiveText
-        x: -10000
-        y: -10000
-        text: hyprcast.displayHistory.displayRichText
-        textFormat: Text.RichText
-        font.family: hyprcast.settings.fontFamily
-        font.pixelSize: hyprcast.settings.fontSize
-        font.weight: hyprcast.settings.fontWeight
-        wrapMode: Text.NoWrap
-        visible: false
-    }
-
-    Text {
-        id: naturalExpiredText
-        x: -10000
-        y: -10000
-        text: hyprcast.expiredDisplayHistory.displayRichText
-        textFormat: Text.RichText
-        font.family: hyprcast.settings.fontFamily
-        font.pixelSize: hyprcast.settings.fontSize
-        font.weight: hyprcast.settings.fontWeight
-        wrapMode: Text.NoWrap
-        visible: false
-    }
-
     Connections {
         target: hyprcast
-
-        function onFadingChanged() {
-            snapshotFade.stop()
-            fadingPresentation.snapshotOpacity = 1
-            if (hyprcast.fading)
-                snapshotFade.start()
-        }
-
-        function onFadeDurationMsChanged() {
-            if (hyprcast.fading) {
-                snapshotFade.stop()
-                fadingPresentation.snapshotOpacity = 1
-                snapshotFade.start()
-            }
-        }
+        function onFadingChanged() { root.updateFade() }
+        function onFadeDurationMsChanged() { root.updateFade() }
     }
-
-    Component.onCompleted: {
-        if (hyprcast.fading)
-            snapshotFade.start()
-    }
+    Component.onCompleted: updateFade()
 }

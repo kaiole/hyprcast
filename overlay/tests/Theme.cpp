@@ -5,6 +5,8 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QEventLoop>
+#include <QTimer>
 #include <QGuiApplication>
 #include <QQuickView>
 #include <QTemporaryDir>
@@ -53,6 +55,18 @@ namespace {
             }
         }
         return false;
+    }
+
+    QQuickItem* findVisualItem(QQuickItem* item, const QString& name) {
+        if (item->objectName() == name) return item;
+        for (auto* child : item->childItems())
+            if (auto* result = findVisualItem(child, name)) return result;
+        return nullptr;
+    }
+
+    void polishVisualTree(QQuickItem* item) {
+        for (auto* child : item->childItems()) polishVisualTree(child);
+        item->ensurePolished();
     }
 
     bool writeFile(const QString& path, const QByteArray& contents) {
@@ -163,7 +177,7 @@ namespace {
         const QString heldSource = QDir(sampleThemes).filePath(QStringLiteral("text-held"));
         const QString heldCopy = QDir(userRoot).filePath(QStringLiteral("text-held"));
         check(QDir().mkpath(heldCopy), "create isolated held-key example package");
-        for (const QString& file : {QStringLiteral("theme.toml"), QStringLiteral("Main.qml"), QStringLiteral("TextPresentation.qml")}) {
+        for (const QString& file : {QStringLiteral("theme.toml"), QStringLiteral("Main.qml"), QStringLiteral("Keycap.qml"), QStringLiteral("RibbonGroup.qml"), QStringLiteral("RibbonStage.qml")}) {
             check(QFile::copy(QDir(heldSource).filePath(file), QDir(heldCopy).filePath(file)), "copy standalone text-held package");
         }
         const QString capSource = QDir(sampleThemes).filePath(QStringLiteral("keycaps"));
@@ -251,6 +265,7 @@ namespace {
             QCoreApplication::processEvents();
 
             config.themeId              = QStringLiteral("keycaps");
+            config.height               = 60;
             config.themeOptions         = {{QStringLiteral("height"), 44}, {QStringLiteral("border_width"), 0}};
             check(runtime.prepareSwitch(config, &error), "load keycaps through ordinary theme discovery");
             config.repeatPresentation   = QStringLiteral("counted");
@@ -273,6 +288,8 @@ namespace {
             check(catalog.validateOptions(QStringLiteral("keycaps"), {{QStringLiteral("height"), 45}}, &capOptions, &error) && capOptions.value(QStringLiteral("height")).toInt() == 45,
                   "keycaps validates declared height option");
             check(!catalog.validateOptions(QStringLiteral("keycaps"), {{QStringLiteral("height"), -1}}, &capOptions, &error), "keycaps rejects invalid height option");
+            check(!catalog.validateOptions(QStringLiteral("keycaps"), {{QStringLiteral("edge_depth"), -1}}, &capOptions, &error), "keycaps rejects negative edge depth");
+            check(!catalog.validateOptions(QStringLiteral("keycaps"), {{QStringLiteral("edge_depth"), 25}}, &capOptions, &error), "keycaps rejects excessive edge depth");
             InterpretedAction space;
             space.kind = InterpretedActionKind::Text;
             space.text = QStringLiteral(" ");
@@ -297,6 +314,59 @@ namespace {
                       hasVisualText(view.rootObject(), QStringLiteral("CTRL")) && hasVisualText(view.rootObject(), QStringLiteral("COPY")) &&
                       hasVisualText(view.rootObject(), QStringLiteral("…2x")),
                   "copied keycaps QML renders resolved chords and counted-repeat badges");
+            auto checkCapGeometry = [&](qreal expectedHeight, qreal expectedDepth) {
+                // Positioners polish asynchronously; flush nested rows explicitly
+                // instead of relying on a render frame or an incidental event delay.
+                polishVisualTree(view.rootObject());
+                polishVisualTree(view.rootObject());
+                QList<QQuickItem*> caps;
+                QList<QQuickItem*> pending{view.rootObject()};
+                while (!pending.isEmpty()) {
+                    auto* item = pending.takeLast();
+                    if (item->objectName() == QStringLiteral("hyprcastKeycap")) caps.append(item);
+                    pending.append(item->childItems());
+                }
+                check(caps.size() == 2, "counted chord retains separate modifier and key caps");
+                for (auto* cap : caps) {
+                    auto* face = cap->findChild<QQuickItem*>(QStringLiteral("hyprcastKeycapFace"));
+                    if (capPanel) {
+                        const auto bounds = cap->mapRectToItem(capPanel, QRectF(0, 0, cap->width(), cap->height()));
+                        check(bounds.top() >= 0 && bounds.bottom() <= capPanel->height() && capPanel->height() <= 60,
+                              "raised caps fit vertically inside a tight 60-pixel panel");
+                    }
+                    check(face && qFuzzyCompare(cap->height(), expectedHeight) &&
+                              qFuzzyCompare(face->height(), expectedHeight - expectedDepth) &&
+                              face->y() == 0 && face->width() == cap->width(),
+                          "raised cap face and lower edge stay inside declared geometry");
+                    if (face) {
+                        auto* border = face->property("border").value<QObject*>();
+                        check(face->property("radius").toReal() <= face->height() / 2 && border &&
+                                  border->property("width").toReal() <= face->height() / 2,
+                              "cap radius and border are bounded by face geometry");
+                    }
+                }
+            };
+            checkCapGeometry(44, 3);
+            const QString keycapsCapture = qEnvironmentVariable("HYPRCAST_KEYCAPS_SCREENSHOT");
+            if (!keycapsCapture.isEmpty()) {
+                QEventLoop captureLoop;
+                QTimer::singleShot(100, &captureLoop, &QEventLoop::quit);
+                captureLoop.exec();
+                check(view.grabWindow().save(keycapsCapture), "save optional keycaps rendering artifact");
+            }
+            config.themeOptions.insert(QStringLiteral("edge_depth"), 0);
+            runtime.applyAcceptedConfiguration(config);
+            QCoreApplication::processEvents();
+            checkCapGeometry(44, 0);
+            config.themeOptions = {{QStringLiteral("height"), 1}, {QStringLiteral("edge_depth"), 24},
+                                   {QStringLiteral("radius"), 256}, {QStringLiteral("border_width"), 64}};
+            runtime.applyAcceptedConfiguration(config);
+            QCoreApplication::processEvents();
+            checkCapGeometry(1, 0.5);
+            config.themeOptions = {{QStringLiteral("height"), 44}, {QStringLiteral("border_width"), 0}};
+            runtime.applyAcceptedConfiguration(config);
+            QCoreApplication::processEvents();
+            checkCapGeometry(44, 3);
             presenter.historyModel().clear();
             config.minWidth = config.width;
             runtime.applyAcceptedConfiguration(config);
@@ -349,6 +419,158 @@ namespace {
             presenter.setHistoryOptions(historyOptions);
         }
 
+        // Cascade uses a virtualized model view but repositions its visual groups
+        // independently. Assert final geometry with motion disabled, not timers.
+        config.themeId = QStringLiteral("cascade");
+        config.width = 420;
+        config.height = 320;
+        config.dynamicSize = false;
+        config.themeOptions = {{QStringLiteral("motion"), QStringLiteral("reduced")}};
+        view.resize(420, 320);
+        check(runtime.prepareSwitch(config, &error), "load Cascade through the normal catalog");
+        runtime.applyAcceptedConfiguration(config);
+        auto settle = [&]() {
+            for (int i = 0; i < 5; ++i) {
+                QCoreApplication::processEvents();
+                QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+                for (const auto& name : {QStringLiteral("cascadeModelView"), QStringLiteral("ribbonModelView")})
+                    for (auto* modelView : view.rootObject()->findChildren<QQuickItem*>(name))
+                        QMetaObject::invokeMethod(modelView, "forceLayout");
+            }
+        };
+        settle();
+        auto* cascade = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("cascadeActiveStage"));
+        check(cascade && cascade->property("capacity").toInt() == 6, "Cascade fits six groups in the demo surface");
+        InterpretedAction cascadeText;
+        cascadeText.kind = InterpretedActionKind::Text;
+        cascadeText.text = QStringLiteral("<b>🙂</b>");
+        presenter.historyModel().apply(cascadeText);
+        InterpretedAction cascadeChord;
+        cascadeChord.kind = InterpretedActionKind::Chord;
+        cascadeChord.key = QStringLiteral("C");
+        cascadeChord.modifiers = {QStringLiteral("Ctrl")};
+        presenter.historyModel().apply(cascadeChord);
+        settle();
+        check(hasVisualText(view.rootObject(), cascadeText.text) && hasVisualText(view.rootObject(), QStringLiteral("C")),
+              "Cascade preserves Unicode text and separate chord labels");
+        if (cascade) {
+            int shown = 0;
+            for (auto* child : cascade->childItems()) {
+                if (child->objectName() != QStringLiteral("cascadeGroup") || !child->property("inStack").toBool()) continue;
+                ++shown;
+                check(child->y() >= 0 && child->y() + child->height() <= cascade->height(), "Cascade group stays within stage bounds");
+                const QRectF visual = child->mapRectToItem(cascade, QRectF(0, 0, child->width(), child->height()));
+                check(visual.left() >= -0.5 && visual.right() <= cascade->width() + 0.5,
+                      "Cascade transformed chord fits the available width");
+                if (child->property("depth").toInt() == 0)
+                    check(qFuzzyCompare(child->y() + child->height(), cascade->height()), "Cascade newest group is bottom anchored");
+            }
+            check(shown == 2, "Cascade displays one group per projected action");
+        }
+        // Optional software-rendered inspection artifact; ordinary assertions
+        // above do not wait for animation or depend on a screenshot.
+        const QString cascadeCapture = qEnvironmentVariable("HYPRCAST_CASCADE_SCREENSHOT");
+        if (!cascadeCapture.isEmpty()) {
+            for (const QString& key : {QStringLiteral("Enter"), QStringLiteral("Tab"), QStringLiteral("Escape"), QStringLiteral("Space")}) {
+                InterpretedAction cap;
+                cap.kind = InterpretedActionKind::Key;
+                cap.key = key;
+                presenter.historyModel().apply(cap);
+            }
+            settle();
+            QEventLoop captureLoop;
+            QTimer::singleShot(200, &captureLoop, &QEventLoop::quit);
+            captureLoop.exec();
+            check(view.grabWindow().save(cascadeCapture), "save optional Cascade rendering artifact");
+        }
+        for (int i = 0; i < 200; ++i) presenter.historyModel().apply(cascadeChord);
+        settle();
+        if (cascade) {
+            int instantiated = 0;
+            for (auto* child : cascade->childItems())
+                if (child->objectName() == QStringLiteral("cascadeGroup")) ++instantiated;
+            check(instantiated <= 10, "Cascade rendering stays bounded with large history");
+        }
+        config.themeOptions = {{QStringLiteral("motion"), QStringLiteral("reduced")}, {QStringLiteral("visible_groups"), 3},
+                               {QStringLiteral("group_alignment"), QStringLiteral("left")}};
+        runtime.applyAcceptedConfiguration(config);
+        settle();
+        check(cascade && cascade->property("capacity").toInt() == 3, "Cascade live depth settings update capacity");
+        InputHistoryOptions trimmedCascade;
+        trimmedCascade.maxRetainedUtf16CodeUnits = 48;
+        presenter.setHistoryOptions(trimmedCascade);
+        settle();
+        if (cascade) {
+            for (auto* child : cascade->childItems()) {
+                if (child->objectName() == QStringLiteral("cascadeGroup") && child->property("depth").toInt() == 0)
+                    check(qFuzzyCompare(child->y() + child->height(), cascade->height()), "Cascade retention trimming preserves newest anchor");
+            }
+        }
+        presenter.setHistoryOptions(InputHistoryOptions{});
+        config.themeOptions = {{QStringLiteral("motion"), QStringLiteral("full")}};
+        runtime.applyAcceptedConfiguration(config);
+        for (int i = 0; i < 80; ++i) {
+            presenter.historyModel().apply(cascadeChord);
+            settle();
+        }
+        if (cascade) {
+            int animatedDelegates = 0;
+            for (auto* child : cascade->childItems())
+                if (child->objectName() == QStringLiteral("cascadeGroup")) ++animatedDelegates;
+            if (animatedDelegates > 12) std::cerr << "Cascade animated delegates: " << animatedDelegates << '\n';
+            check(animatedDelegates <= 12, "Cascade full-motion bursts do not retain an unbounded transition queue");
+        }
+        config.themeOptions = {{QStringLiteral("motion"), QStringLiteral("reduced")}};
+        runtime.applyAcceptedConfiguration(config);
+        presenter.clearHistory();
+        InputHistoryOptions cascadeOptions;
+        cascadeOptions.presentation.countedRepeats = true;
+        cascadeOptions.presentation.repeatThreshold = 3;
+        presenter.setHistoryOptions(cascadeOptions);
+        for (int i = 0; i < 5; ++i) presenter.historyModel().apply(cascadeChord);
+        settle();
+        check(hasVisualText(view.rootObject(), QStringLiteral("×5")), "Cascade counted repeats use one updating badge");
+        InterpretedAction cascadeBackspace;
+        cascadeBackspace.kind = InterpretedActionKind::Key;
+        cascadeBackspace.key = QStringLiteral("Backspace");
+        presenter.historyModel().apply(cascadeBackspace);
+        settle();
+        check(hasVisualText(view.rootObject(), QStringLiteral("×4")), "Cascade Backspace updates the projected repeat group");
+        const auto cascadeExpiration = KeyboardPresenter::Clock::now();
+        presenter.setExpiration(1, 250, cascadeExpiration);
+        presenter.advance(cascadeExpiration + std::chrono::milliseconds(2));
+        settle();
+        auto* expiredCascade = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("cascadeExpiredStage"));
+        check(cascade && !cascade->isVisible() && expiredCascade && expiredCascade->isVisible() &&
+                  hasVisualText(expiredCascade, QStringLiteral("×4")), "Cascade transfers expiration to the supplied snapshot");
+        presenter.historyModel().apply(cascadeText);
+        settle();
+        check(cascade && cascade->isVisible() && expiredCascade && !expiredCascade->isVisible(),
+              "Cascade never layers active and expired stacks on fresh input");
+        presenter.clearHistory();
+        presenter.setExpiration(1, 0, cascadeExpiration);
+        presenter.historyModel().apply(cascadeText);
+        presenter.advance(cascadeExpiration + std::chrono::milliseconds(3));
+        settle();
+        check(!presenter.fading() && expiredCascade && !expiredCascade->isVisible(), "zero-duration Cascade expiration leaves no snapshot");
+        presenter.setExpiration(0, 0);
+        presenter.setHistoryOptions(InputHistoryOptions{});
+        config.height = 70;
+        view.resize(420, 70);
+        runtime.applyAcceptedConfiguration(config);
+        settle();
+        check(cascade && cascade->property("capacity").toInt() == 1, "short Cascade surface prioritizes one readable group");
+        config.height = 10;
+        view.resize(420, 10);
+        runtime.applyAcceptedConfiguration(config);
+        settle();
+        check(cascade && cascade->height() == 0 && cascade->property("capacity").toInt() == 0,
+              "too-small Cascade surface safely zero-sizes the stage");
+        presenter.clearHistory();
+        config.width = 600;
+        config.height = 120;
+        config.dynamicSize = true;
+        view.resize(600, 120);
         config.minWidth = 160;
         config.themeId = QStringLiteral("text-held");
         config.themeOptions.clear();
@@ -372,13 +594,12 @@ namespace {
                   heldPanel && heldPanel->height() == panelHeightBeforeHeld,
               "held press preserves history geometry and panel height");
         QVariantMap heldOptions;
-        check(catalog.validateOptions(QStringLiteral("text-held"), {{QStringLiteral("held_key_height"), 31}}, &heldOptions, &error) &&
-                  heldOptions.value(QStringLiteral("held_key_height")).toInt() == 31,
+        check(catalog.validateOptions(QStringLiteral("text-held"), {{QStringLiteral("height"), 31}}, &heldOptions, &error) &&
+                  heldOptions.value(QStringLiteral("height")).toInt() == 31,
               "held example declares its own style options");
-        check(!catalog.validateOptions(QStringLiteral("text-held"), {{QStringLiteral("held_key_height"), -1}}, &heldOptions, &error) &&
+        check(!catalog.validateOptions(QStringLiteral("text-held"), {{QStringLiteral("height"), -1}}, &heldOptions, &error) &&
                   !catalog.validateOptions(QStringLiteral("text-held"), {{QStringLiteral("show_held_keys"), QStringLiteral("true")}}, &heldOptions, &error),
               "held example rejects invalid theme-local options");
-        const QString heldLabel = presenter.heldKeyItems().front().toMap().value(QStringLiteral("label")).toString();
         presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 4, .keycode = 42, .pressed = false});
         QCoreApplication::processEvents();
         check(presenter.heldKeyCount() == 0 && presenter.historyModel().rowCount() == historyBeforeHeld + 1,
@@ -387,42 +608,267 @@ namespace {
               "held release preserves the reserved history geometry");
         presenter.clearHistory();
         QCoreApplication::processEvents();
-        check(!hasVisualText(view.rootObject(), heldLabel) && heldFill && !heldFill->isVisible(),
-              "held example removes feedback and decoration after history clears");
+        auto* idleDock = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastHeldViewport"));
+        auto* idleShift = findVisualItem(view.rootObject(), QStringLiteral("modifierSlotShift"));
+        check(idleDock && !idleDock->isVisible() && idleShift && !idleShift->property("pressed").toBool() && heldFill && !heldFill->isVisible(),
+              "held example hides idle placeholders and decoration after history clears");
 
         config.dynamicSize = false;
         config.height = 60;
-        for (const auto& layout : {QStringLiteral("auto"), QStringLiteral("compact"), QStringLiteral("stacked")}) {
-            for (const auto& side : {QStringLiteral("left"), QStringLiteral("right")}) {
-                config.themeOptions = {{QStringLiteral("layout"), layout}, {QStringLiteral("held_side"), side},
-                                       {QStringLiteral("compact_held_fraction"), 0.3}};
-                check(runtime.prepareSwitch(config, &error), "prepare held composition options");
-                runtime.applyAcceptedConfiguration(config);
-                QCoreApplication::processEvents();
-                auto* history = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastHistoryArea"));
-                auto* held = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastHeldViewport"));
-                check(history && held && history->height() > 0, "short surfaces retain history for every held layout");
-                if (!history || !held)
-                    continue;
-                if (layout != QStringLiteral("stacked")) {
-                    check(side == QStringLiteral("left") ? held->x() + held->width() < history->x() :
-                          history->x() + history->width() < held->x(), "compact held side leaves a nonoverlapping history area");
-                } else {
-                    check(history->y() + history->height() <= held->y(), "forced stacked keeps history above held keys");
-                }
-                const QRectF before(history->x(), history->y(), history->width(), history->height());
-                presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 5, .keycode = 42, .pressed = true});
-                QCoreApplication::processEvents();
-                check(before == QRectF(history->x(), history->y(), history->width(), history->height()), "compact/forced press preserves history geometry");
-                presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 6, .keycode = 42, .pressed = false});
-                QCoreApplication::processEvents();
-                check(before == QRectF(history->x(), history->y(), history->width(), history->height()), "compact/forced release preserves history geometry");
-                presenter.clearHistory();
-            }
+        for (const auto& alignment : {QStringLiteral("left"), QStringLiteral("center"), QStringLiteral("right")}) {
+            config.themeOptions = {{QStringLiteral("dock_alignment"), alignment}, {QStringLiteral("motion"), QStringLiteral("reduced")}};
+            check(runtime.prepareSwitch(config, &error), "prepare fixed dock alignment");
+            runtime.applyAcceptedConfiguration(config);
+            settle();
+            auto* history = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastHistoryArea"));
+            auto* held = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastHeldViewport"));
+            auto* shift = findVisualItem(view.rootObject(), QStringLiteral("modifierSlotShift"));
+            check(history && held && history->height() > 0 && history->y() + history->height() <= held->y(),
+                  "short surface retains separate stacked bands");
+            if (!history || !held || !shift) continue;
+            const QRectF before(history->x(), history->y(), history->width(), history->height());
+            const qreal slotX = shift->x();
+            presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 5, .keycode = 42, .pressed = true});
+            settle();
+            check(shift->property("pressed").toBool() && shift->x() == slotX &&
+                  before == QRectF(history->x(), history->y(), history->width(), history->height()),
+                  "canonical modifier activates fixed slot without moving history");
+            presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 6, .keycode = 42, .pressed = false});
+            settle();
+            check(!shift->property("pressed").toBool() && shift->x() == slotX,
+                  "release clears live state while historical modifier remains");
+            presenter.clearHistory();
         }
         check(!catalog.validateOptions(QStringLiteral("text-held"), {{QStringLiteral("layout"), QStringLiteral("floating")}}, &heldOptions, &error) &&
               !catalog.validateOptions(QStringLiteral("text-held"), {{QStringLiteral("compact_held_fraction"), 0.9}}, &heldOptions, &error),
               "held layout enums and proportions reject invalid values");
+        config.height = 140;
+        config.width = 600;
+        view.resize(600, 140);
+        config.themeOptions = {{QStringLiteral("motion"), QStringLiteral("reduced")}, {QStringLiteral("show_altgr"), true}};
+        runtime.applyAcceptedConfiguration(config);
+        settle();
+        auto* ribbon = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("textHeldActiveStage"));
+        auto* expiredRibbon = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("textHeldExpiredStage"));
+        check(findVisualItem(view.rootObject(), QStringLiteral("modifierSlotAltGr")) != nullptr, "optional canonical AltGr has its own slot");
+        presenter.historyModel().apply(cascadeText);
+        presenter.historyModel().apply(cascadeChord);
+        settle();
+        check(ribbon && hasVisualText(ribbon, cascadeText.text) && hasVisualText(ribbon, QStringLiteral("Ctrl")) && hasVisualText(ribbon, QStringLiteral("C")),
+              "ribbon preserves Unicode and distinct chord caps");
+        auto checkRibbon = [&]() {
+            if (!ribbon) return;
+            int instantiated = 0;
+            int newest = 0;
+            QList<QRectF> rectangles;
+            for (auto* group : ribbon->childItems()) {
+                if (group->objectName() != QStringLiteral("ribbonGroup")) continue;
+                ++instantiated;
+                const QRectF visual = group->mapRectToItem(ribbon, QRectF(0, 0, group->width(), group->height()));
+                if (group->property("depth").toInt() == 0) {
+                    ++newest;
+                    check(qAbs(visual.right() - ribbon->width()) < 0.5, "newest ribbon group stays right anchored");
+                    check(visual.left() >= -0.5, "newest long chord fits bounded viewport");
+                }
+                if (group->width() <= ribbon->width())
+                    check(qFuzzyCompare(group->scale(), 1.0), "ribbon age never shrinks a fitting group");
+                if (group->opacity() > 0) {
+                    const qreal fadeWidth = ribbon->property("edgeFadeWidth").toReal();
+                    if (group->x() >= fadeWidth)
+                        check(qFuzzyCompare(group->opacity(), 1.0), "ribbon remains fully opaque away from the far left edge");
+                    check(visual.left() >= -0.5 && visual.right() <= ribbon->width() + 0.5 && visual.top() >= -0.5,
+                          "visible ribbon geometry stays inside the reserved band");
+                    for (const auto& other : rectangles)
+                        check(!visual.intersects(other), "variable-width fitted groups never collide in final state");
+                    rectangles.push_back(visual);
+                }
+            }
+            check(newest == 1, "nonempty ribbon realizes exactly one newest projected group");
+            check(instantiated <= 16, "ribbon delegates remain bounded independently of retention");
+        };
+        checkRibbon();
+        check(!catalog.validateOptions(QStringLiteral("text-held"), {{QStringLiteral("depth_scale"), 0.9}}, &heldOptions, &error) &&
+              !catalog.validateOptions(QStringLiteral("text-held"), {{QStringLiteral("depth_opacity"), 0.7}}, &heldOptions, &error),
+              "removed receding controls are rejected rather than ignored");
+        presenter.clearHistory();
+        InterpretedAction edgeText;
+        edgeText.kind = InterpretedActionKind::Text;
+        edgeText.text = QStringLiteral("a");
+        for (int i = 0; i < 3; ++i) presenter.historyModel().apply(edgeText);
+        settle();
+        QQuickItem* edgeGroup = nullptr;
+        if (ribbon) for (auto* group : ribbon->childItems())
+            if (group->objectName() == QStringLiteral("ribbonGroup") && group->property("depth").toInt() == 2) edgeGroup = group;
+        check(edgeGroup != nullptr, "edge-fade fixture realizes the oldest of three groups");
+        if (edgeGroup) {
+            config.width = qRound(config.width - edgeGroup->x() + 5);
+            view.resize(config.width, config.height);
+            runtime.applyAcceptedConfiguration(config);
+            settle();
+            const qreal fadeWidth = ribbon->property("edgeFadeWidth").toReal();
+            check(edgeGroup->x() > 0 && edgeGroup->x() < fadeWidth && fadeWidth <= 12 &&
+                  qAbs(edgeGroup->opacity() - edgeGroup->x() / fadeWidth) < 0.01 && qFuzzyCompare(edgeGroup->scale(), 1.0),
+                  "only the far-left group fades in a narrow edge zone, without shrinking");
+            checkRibbon();
+        }
+        config.width = 600;
+        view.resize(600, 140);
+        runtime.applyAcceptedConfiguration(config);
+        presenter.clearHistory();
+        for (int i = 0; i < 200; ++i) presenter.historyModel().apply(i % 2 ? cascadeChord : cascadeText);
+        settle();
+        checkRibbon();
+        presenter.historyModel().apply(cascadeBackspace);
+        settle();
+        checkRibbon();
+        InputHistoryOptions ribbonOptions;
+        ribbonOptions.presentation.countedRepeats = true;
+        ribbonOptions.presentation.repeatThreshold = 3;
+        ribbonOptions.presentation.modifierSymbols = {{QStringLiteral("Ctrl"), QStringLiteral("same")}, {QStringLiteral("Shift"), QStringLiteral("same")}};
+        presenter.clearHistory();
+        presenter.setHistoryOptions(ribbonOptions);
+        config.modifierSymbols = ribbonOptions.presentation.modifierSymbols;
+        runtime.applyAcceptedConfiguration(config);
+        for (int i = 0; i < 5; ++i) presenter.historyModel().apply(cascadeChord);
+        settle();
+        check(ribbon && hasVisualText(ribbon, QStringLiteral("×5")), "ribbon updates counted repeat badge in place");
+        presenter.historyModel().apply(cascadeBackspace);
+        settle();
+        check(ribbon && hasVisualText(ribbon, QStringLiteral("×4")), "ribbon Backspace decrements counted group");
+        auto* ctrlSlot = findVisualItem(view.rootObject(), QStringLiteral("modifierSlotCtrl"));
+        auto* shiftSlot = findVisualItem(view.rootObject(), QStringLiteral("modifierSlotShift"));
+        presenter.processMessage(KeyboardSnapshotMessage{.id = 2, .name = QStringLiteral("second"), .keymap = testKeymap()});
+        presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 10, .keycode = 42, .pressed = true});
+        presenter.processMessage(KeyMessage{.keyboardId = 2, .timeMs = 10, .keycode = 42, .pressed = true});
+        settle();
+        check(shiftSlot && shiftSlot->property("pressed").toBool() && ctrlSlot && !ctrlSlot->property("pressed").toBool() &&
+              shiftSlot->property("label").toString() == ctrlSlot->property("label").toString(),
+              "duplicate display symbols do not conflate canonical modifiers");
+        presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 11, .keycode = 42, .pressed = false});
+        settle();
+        check(shiftSlot && shiftSlot->property("pressed").toBool(), "slot stays held while another keyboard observes the modifier");
+        const auto ribbonExpiration = KeyboardPresenter::Clock::now();
+        presenter.setExpiration(1, 250, ribbonExpiration);
+        presenter.advance(ribbonExpiration + std::chrono::milliseconds(2));
+        settle();
+        check(ribbon && !ribbon->isVisible() && expiredRibbon && expiredRibbon->isVisible() && shiftSlot && shiftSlot->property("pressed").toBool(),
+              "expiration transfers ribbon while preserving independently held dock");
+        presenter.historyModel().apply(cascadeText);
+        settle();
+        check(ribbon && ribbon->isVisible() && expiredRibbon && !expiredRibbon->isVisible(), "fresh input never layers both ribbons");
+        presenter.processMessage(KeyMessage{.keyboardId = 2, .timeMs = 12, .keycode = 42, .pressed = false});
+        settle();
+        check(shiftSlot && !shiftSlot->property("pressed").toBool(), "final observed release immediately clears slot state");
+        const auto idleExpiration = KeyboardPresenter::Clock::now();
+        presenter.setExpiration(1, 10000, idleExpiration);
+        presenter.advance(idleExpiration + std::chrono::milliseconds(2));
+        settle();
+        auto* fadingDock = findVisualItem(view.rootObject(), QStringLiteral("hyprcastHeldViewport"));
+        for (const QString& visibility : {QStringLiteral("with-content"), QStringLiteral("never"), QStringLiteral("always")}) {
+            config.panelVisibility = visibility;
+            runtime.applyAcceptedConfiguration(config);
+            settle();
+            // Set a deterministic intermediate fade value rather than waiting on animation timing.
+            if (expiredRibbon) expiredRibbon->setOpacity(0.4);
+            const qreal expectedOpacity = visibility == QStringLiteral("always") ? 1.0 : 0.4;
+            check(heldFill && fadingDock && qAbs(heldFill->opacity() - expectedOpacity) < 0.001 &&
+                      qAbs(fadingDock->opacity() - expectedOpacity) < 0.001,
+                  "panel and idle dock fade together unless panel visibility is always");
+            check(heldFill && heldFill->isVisible() == (visibility != QStringLiteral("never")),
+                  "never hides decoration while preserving dock fade behavior");
+        }
+        config.panelVisibility = QStringLiteral("with-content");
+        runtime.applyAcceptedConfiguration(config);
+        presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 13, .keycode = 42, .pressed = true});
+        settle();
+        if (expiredRibbon) expiredRibbon->setOpacity(0.4);
+        check(heldFill && fadingDock && qFuzzyCompare(heldFill->opacity(), 1.0) && qFuzzyCompare(fadingDock->opacity(), 1.0),
+              "observed held modifier keeps panel and dock opaque during history fade");
+        presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 14, .keycode = 42, .pressed = false});
+        presenter.clearHistory();
+        presenter.setExpiration(0, 0);
+        presenter.setHistoryOptions(InputHistoryOptions{});
+        config.modifierSymbols.clear();
+        runtime.applyAcceptedConfiguration(config);
+        InterpretedAction longChord = cascadeChord;
+        longChord.key = QString(300, QLatin1Char('W'));
+        longChord.modifiers = {QStringLiteral("Ctrl"), QStringLiteral("Shift"), QStringLiteral("Alt"), QStringLiteral("Super")};
+        presenter.historyModel().apply(longChord);
+        config.width = 100;
+        config.height = 60;
+        view.resize(100, 60);
+        runtime.applyAcceptedConfiguration(config);
+        settle();
+        checkRibbon();
+        if (shiftSlot) {
+            const QRectF slotRect = shiftSlot->mapRectToItem(view.rootObject(), QRectF(0, 0, shiftSlot->width(), shiftSlot->height()));
+            check(slotRect.left() >= 0 && slotRect.right() <= 100, "narrow dock bounds every fixed slot rather than clipping arbitrary caps");
+        }
+        config.width = 600;
+        config.height = 140;
+        view.resize(600, 140);
+        runtime.applyAcceptedConfiguration(config);
+        presenter.clearHistory();
+        presenter.historyModel().apply(cascadeText);
+        presenter.historyModel().apply(cascadeChord);
+        settle();
+        const QString ribbonCapture = qEnvironmentVariable("HYPRCAST_TEXT_HELD_SCREENSHOT");
+        if (!ribbonCapture.isEmpty()) {
+            for (const QString& key : {QStringLiteral("Tab"), QStringLiteral("Enter"), QStringLiteral("Escape"), QStringLiteral("Space")}) {
+                InterpretedAction cap;
+                cap.kind = InterpretedActionKind::Key;
+                cap.key = key;
+                presenter.historyModel().apply(cap);
+            }
+            presenter.historyModel().apply(cascadeChord);
+            presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 13, .keycode = 29, .pressed = true});
+            settle();
+            QEventLoop captureLoop;
+            QTimer::singleShot(200, &captureLoop, &QEventLoop::quit);
+            captureLoop.exec();
+            check(view.grabWindow().save(ribbonCapture), "save optional text-held rendering artifact");
+            presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 14, .keycode = 29, .pressed = false});
+        }
+        config.themeOptions = {{QStringLiteral("motion"), QStringLiteral("full")}};
+        runtime.applyAcceptedConfiguration(config);
+        for (int i = 0; i < 40; ++i) {
+            presenter.historyModel().apply(cascadeChord);
+            settle();
+        }
+        int movingGroups = 0;
+        if (ribbon) for (auto* group : ribbon->childItems())
+            if (group->objectName() == QStringLiteral("ribbonGroup")) ++movingGroups;
+        check(movingGroups > 0 && movingGroups <= 16, "full-motion input burst keeps delegates bounded without a removal queue");
+        config.themeOptions = {{QStringLiteral("motion"), QStringLiteral("reduced")}, {QStringLiteral("edge_depth"), 0}};
+        runtime.applyAcceptedConfiguration(config);
+        InputHistoryOptions ribbonTrim;
+        ribbonTrim.maxRetainedUtf16CodeUnits = 48;
+        presenter.setHistoryOptions(ribbonTrim);
+        settle();
+        checkRibbon();
+        presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 15, .keycode = 42, .pressed = true});
+        presenter.resetConnection();
+        settle();
+        shiftSlot = findVisualItem(view.rootObject(), QStringLiteral("modifierSlotShift"));
+        check(shiftSlot && !shiftSlot->property("pressed").toBool(), "held-list reset immediately clears pressed visuals");
+        presenter.processMessage(KeyboardSnapshotMessage{.id = 1, .name = QStringLiteral("test"), .keymap = testKeymap()});
+        presenter.clearHistory();
+        presenter.setHistoryOptions(InputHistoryOptions{});
+        const auto immediateRibbonExpiration = KeyboardPresenter::Clock::now();
+        presenter.historyModel().apply(cascadeText);
+        presenter.setExpiration(1, 0, immediateRibbonExpiration);
+        presenter.advance(immediateRibbonExpiration + std::chrono::milliseconds(3));
+        settle();
+        check(presenter.historyModel().rowCount() == 0 && !presenter.fading() && expiredRibbon && !expiredRibbon->isVisible(), "zero-duration ribbon expiration is immediate");
+        presenter.setExpiration(0, 0);
+        presenter.clearHistory();
+        config.height = 10;
+        view.resize(600, 10);
+        runtime.applyAcceptedConfiguration(config);
+        settle();
+        check(ribbon && ribbon->height() == 0 && ribbon->property("capacity").toInt() == 0, "impossible short surface safely zero-sizes both bands");
+        config.height = 120;
+        view.resize(600, 120);
         QVariantMap ledgerOptions;
         check(catalog.validateOptions(QStringLiteral("ledger"), {{QStringLiteral("rail_width"), 0}, {QStringLiteral("inner_padding"), 8},
               {QStringLiteral("text_scale"), 1.5}}, &ledgerOptions, &error), "ledger validates curated layout options");
@@ -488,34 +934,34 @@ namespace {
         check(manager.initialize(&error), "initialize config manager with the active bundled theme");
         QObject::connect(&manager, &OverlayConfigManager::configurationChanged, &view, [&manager, &runtime] { runtime.applyAcceptedConfiguration(manager.config()); });
 
-        check(writeFile(configPath, QByteArrayLiteral("[theme]\nid='text-held'\n[theme.options]\nheld_key_height=30\n")),
+        check(writeFile(configPath, QByteArrayLiteral("[theme]\nid='text-held'\n[theme.options]\nheight=30\n")),
               "select standalone held feedback via live config");
         manager.reloadNow();
-        check(runtime.activeThemeId() == QStringLiteral("text-held") && manager.config().themeOptions.value(QStringLiteral("held_key_height")).toLongLong() == 30,
-              "live config accepts declared held style");
-        check(writeFile(configPath, QByteArrayLiteral("[theme]\nid='text-held'\n[theme.options]\nheld_key_height=32\n")),
-              "update held style without switching themes");
+        check(runtime.activeThemeId() == QStringLiteral("text-held") && manager.config().themeOptions.value(QStringLiteral("height")).toLongLong() == 30,
+              "live config accepts declared cap style");
+        check(writeFile(configPath, QByteArrayLiteral("[theme]\nid='text-held'\n[theme.options]\nheight=32\n")),
+              "update cap style without switching themes");
         manager.reloadNow();
-        auto* heldRow = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastHeldRow"), Qt::FindChildrenRecursively);
+        auto* heldRow = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastHeldViewport"), Qt::FindChildrenRecursively);
         presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 5, .keycode = 42, .pressed = true});
         QCoreApplication::processEvents();
-        check(manager.config().themeOptions.value(QStringLiteral("held_key_height")).toLongLong() == 32 && heldRow && heldRow->isVisible() && heldRow->height() == 32,
-              "accepted held style change reaches visible example geometry");
-        check(writeFile(configPath, QByteArrayLiteral("[theme]\nid='text-held'\n[theme.options]\nheld_key_height=32\nshow_held_keys=false\n")),
+        check(manager.config().themeOptions.value(QStringLiteral("height")).toLongLong() == 32 && heldRow && heldRow->isVisible() && heldRow->height() > 0 && heldRow->height() <= 32,
+              "accepted cap style reaches bounded two-band geometry");
+        check(writeFile(configPath, QByteArrayLiteral("[theme]\nid='text-held'\n[theme.options]\nheight=32\nshow_held_keys=false\n")),
               "hide example held feedback via live theme option");
         manager.reloadNow();
         QCoreApplication::processEvents();
         check(heldRow && !heldRow->isVisible() && presenter.heldKeyCount() == 1,
-              "example option hides the row without changing backend held state");
+              "example option hides the dock without changing backend held state");
         presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 6, .keycode = 42, .pressed = false});
         presenter.clearHistory();
         presenter.historyModel().apply(typed);
-        check(writeFile(configPath, QByteArrayLiteral("[theme]\nid='text-held'\n[theme.options]\nheld_key_height=0\n")),
-              "write invalid held style for live reload");
+        check(writeFile(configPath, QByteArrayLiteral("[theme]\nid='text-held'\n[theme.options]\nheight=0\n")),
+              "write invalid cap style for live reload");
         manager.reloadNow();
-        check(manager.config().themeOptions.value(QStringLiteral("held_key_height")).toLongLong() == 32 &&
+        check(manager.config().themeOptions.value(QStringLiteral("height")).toLongLong() == 32 &&
                   !manager.config().themeOptions.value(QStringLiteral("show_held_keys")).toBool() && runtime.activeThemeId() == QStringLiteral("text-held"),
-              "invalid held style keeps last accepted theme and options");
+              "invalid cap style keeps last accepted theme and options");
 
         check(writeFile(configPath, QByteArrayLiteral("[theme]\nid='good'\n[theme.options]\ngap=12\n")), "write config selecting a valid external theme and option");
         manager.reloadNow();

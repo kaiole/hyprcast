@@ -35,24 +35,44 @@ Item {
                 Repeater {
                     model: root.labels
 
-                    delegate: Rectangle {
+                    delegate: Item {
+                        id: cap
+                        objectName: "hyprcastKeycap"
                         required property string modelData
-
+                        // Depth lives inside the declared height; even tiny caps
+                        // retain a face rather than letting the edge consume it.
+                        readonly property real edgeDepth: Math.min(hyprcast.options.edge_depth, height / 2)
                         implicitWidth: label.implicitWidth + hyprcast.options.padding_x * 2
                         implicitHeight: hyprcast.options.height
-                        radius: hyprcast.options.radius
-                        color: root.kind === "text" ? hyprcast.options.text_background : hyprcast.options.key_background
-                        border.width: hyprcast.options.border_width
-                        border.color: hyprcast.options.border_color
 
-                        Text {
-                            id: label
-                            anchors.centerIn: parent
-                            text: modelData
-                            color: hyprcast.options.text_color
-                            font.family: root.kind === "text" || hyprcast.settings.symbolFontFamily.length === 0 ? hyprcast.settings.fontFamily : hyprcast.settings.symbolFontFamily
-                            font.pixelSize: hyprcast.options.font_size
-                            font.weight: hyprcast.settings.fontWeight
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: Math.min(hyprcast.options.radius, height / 2, width / 2)
+                            color: hyprcast.options.edge_color
+                            visible: cap.edgeDepth > 0
+                        }
+
+                        Rectangle {
+                            id: face
+                            objectName: "hyprcastKeycapFace"
+                            width: parent.width
+                            height: parent.height - cap.edgeDepth
+                            radius: Math.min(hyprcast.options.radius, height / 2, width / 2)
+                            color: root.kind === "text" ? hyprcast.options.text_background : hyprcast.options.key_background
+                            border.width: Math.min(hyprcast.options.border_width, height / 2, width / 2)
+                            border.color: hyprcast.options.border_color
+                            clip: true
+
+                            Text {
+                                id: label
+                                anchors.centerIn: parent
+                                text: cap.modelData
+                                textFormat: Text.PlainText
+                                color: hyprcast.options.text_color
+                                font.family: root.kind === "text" || hyprcast.settings.symbolFontFamily.length === 0 ? hyprcast.settings.fontFamily : hyprcast.settings.symbolFontFamily
+                                font.pixelSize: hyprcast.options.font_size
+                                font.weight: hyprcast.settings.fontWeight
+                            }
                         }
                     }
                 }

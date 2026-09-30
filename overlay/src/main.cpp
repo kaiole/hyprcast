@@ -3,6 +3,7 @@
 #include "ipc/IpcClient.hpp"
 #include "ipc/OverlayInstance.hpp"
 #include "ipc/CaptureController.hpp"
+#include "ipc/Restart.hpp"
 #include "theme/Theme.hpp"
 
 #include <LayerShellQt/Window>
@@ -236,6 +237,13 @@ namespace {
 } // namespace
 
 int main(int argc, char* argv[]) {
+    Hyprcast::Overlay::RestartHandoff handoff;
+    QString bootstrapError;
+    if (!handoff.adopt(&bootstrapError)) {
+        writeError(bootstrapError);
+        return 1;
+    }
+    const auto bootstrap = handoff.pending() ? std::optional(handoff.context()) : std::nullopt;
     QGuiApplication application(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("hyprcast-overlay"));
     QCoreApplication::setApplicationVersion(QStringLiteral("0.1.0"));
@@ -244,7 +252,7 @@ int main(int argc, char* argv[]) {
     parser.setApplicationDescription(QStringLiteral("A lightweight Hyprland keyboard overlay."));
     parser.addHelpOption();
     parser.addVersionOption();
-    parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("toggle: launch and enable, or toggle the resident overlay."), QStringLiteral("[toggle]"));
+    parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("toggle: launch/enable or toggle capture; restart: replace this session's overlay and restore capture (selectors only)."), QStringLiteral("[toggle|restart]"));
 
     const QCommandLineOption configOption(QStringLiteral("config"), QStringLiteral("Load this TOML configuration file (must exist)."), QStringLiteral("path"));
     const QCommandLineOption monitorOption({QStringLiteral("m"), QStringLiteral("monitor")}, QStringLiteral("Output name (defaults to the primary output)."),
@@ -272,13 +280,26 @@ int main(int argc, char* argv[]) {
     const QCommandLineOption quitAfterOption(QStringLiteral("quit-after-ms"), QStringLiteral("Exit after this many milliseconds (useful for smoke tests)."), QStringLiteral("ms"));
     parser.addOptions({configOption, monitorOption, anchorOption, marginsOption, widthOption, heightOption, opacityOption, expireAfterOption, fadeDurationOption, backspaceOption, retentionOption, repeatEnabledOption, socketOption, instanceOption,
                        quitAfterOption});
-    parser.process(application);
-    const QStringList commands = parser.positionalArguments();
-    if (commands.size() > 1 || (!commands.isEmpty() && commands.front() != QStringLiteral("toggle"))) {
-        writeError(QStringLiteral("Expected no command or 'toggle'"));
+    if (!parser.parse(application.arguments())) {
+        writeError(parser.errorText());
         return 2;
     }
-    const bool toggle = !commands.isEmpty();
+    parser.process(application);
+    const QStringList commands = parser.positionalArguments();
+    if (commands.size() > 1 || (!commands.isEmpty() && commands.front() != QStringLiteral("toggle") && commands.front() != QStringLiteral("restart"))) {
+        writeError(QStringLiteral("Expected no command, 'toggle', or 'restart'"));
+        return 2;
+    }
+    const bool restart = commands == QStringList{QStringLiteral("restart")};
+    const bool toggle = commands == QStringList{QStringLiteral("toggle")};
+    if (restart) {
+        for (const auto& name : parser.optionNames()) {
+            if (name != QStringLiteral("socket") && name != QStringLiteral("instance-signature")) {
+                writeError(QStringLiteral("restart accepts only --socket and --instance-signature; resident startup overrides are preserved"));
+                return 2;
+            }
+        }
+    }
     QString    socketPath;
     if (!resolveSocketPath(parser, socketOption, instanceOption, &socketPath)) {
         return 2;
@@ -286,7 +307,9 @@ int main(int argc, char* argv[]) {
     socketPath = QFileInfo(socketPath).absoluteFilePath();
     Hyprcast::Overlay::OverlayInstance instance(socketPath);
     QString                            instanceError;
-    const auto                         ownership = instance.acquire(toggle, &instanceError);
+    using Instance = Hyprcast::Overlay::OverlayInstance;
+    const auto ownership = instance.acquire(restart ? Instance::Command::Restart : toggle ? Instance::Command::Toggle : Instance::Command::Start,
+                                            &instanceError, bootstrap ? bootstrap->lockFd : -1);
     if (ownership == Hyprcast::Overlay::OverlayInstance::Result::Forwarded) {
         return 0;
     }
@@ -301,9 +324,11 @@ int main(int argc, char* argv[]) {
         return 2;
     }
 
-    const bool explicitConfigPath = parser.isSet(configOption);
+    const bool explicitConfigPath = bootstrap ? bootstrap->explicitConfig : parser.isSet(configOption);
     QString    configPath;
-    if (explicitConfigPath) {
+    if (bootstrap) {
+        configPath = bootstrap->configPath;
+    } else if (explicitConfigPath) {
         configPath = parser.value(configOption);
         if (configPath.isEmpty()) {
             writeError(QStringLiteral("--config path must not be empty"));
@@ -316,6 +341,15 @@ int main(int argc, char* argv[]) {
             qWarning().noquote() << QStringLiteral("hyprcast-overlay: %1").arg(warning);
         }
     }
+
+    configPath = QFileInfo(configPath).absoluteFilePath();
+    const ConfigOverrides startupOverrides = overrides;
+    QStringList replacementArguments{QStringLiteral("--socket"), socketPath};
+    for (const QString& name : parser.optionNames()) {
+        if (name == QStringLiteral("socket") || name == QStringLiteral("instance-signature") || name == QStringLiteral("config") || name == QStringLiteral("quit-after-ms")) continue;
+        replacementArguments << QStringLiteral("--") + name << parser.value(name);
+    }
+    const QString replacementExecutable = QCoreApplication::applicationFilePath();
 
     QStringList themeRoots;
     for (const QString& dataLocation : QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation)) {
@@ -475,7 +509,7 @@ int main(int argc, char* argv[]) {
 
                          if (config.backspaceMode != appliedConfig.backspaceMode || config.maxRetainedUtf16CodeUnits != appliedConfig.maxRetainedUtf16CodeUnits ||
                              config.repeatPresentation != appliedConfig.repeatPresentation || config.repeatCountThreshold != appliedConfig.repeatCountThreshold ||
-                             config.symbolFontFamily != appliedConfig.symbolFontFamily || config.keySymbols != appliedConfig.keySymbols ||
+                             config.symbolFontFamily != appliedConfig.symbolFontFamily || config.spaceSymbol != appliedConfig.spaceSymbol || config.keySymbols != appliedConfig.keySymbols ||
                              config.modifierSymbols != appliedConfig.modifierSymbols) {
                              keyboardPresenter.setHistoryOptions(makeHistoryOptions(config));
                          }
@@ -528,6 +562,40 @@ int main(int argc, char* argv[]) {
     if (toggle) {
         capture.enableWhenReady();
     }
+    Hyprcast::Overlay::RestartContext startup;
+    startup.socketPath = socketPath;
+    startup.configPath = configPath;
+    startup.explicitConfig = explicitConfigPath;
+    startup.arguments = replacementArguments;
+    auto preflight = [&](QString* error) {
+        Hyprcast::Overlay::ThemeCatalog catalog(themeRoots, QUrl(QStringLiteral("qrc:/hyprcast/overlay/qml/themes/default/theme.toml")));
+        if (!catalog.discover(nullptr, error)) return false;
+        Hyprcast::Overlay::OverlayConfigManager candidate(configPath, explicitConfigPath, startupOverrides);
+        candidate.setRuntimeValidator([&](const std::optional<OverlayConfig>&, const OverlayConfig& config, QString* reason) {
+            if (!resolveScreen(application, config.monitor)) {
+                *reason = unavailableScreenMessage(application, config.monitor);
+                return false;
+            }
+            QVariantMap effective;
+            return catalog.validateOptions(config.themeId, config.themeOptions, &effective, reason);
+        });
+        if (!candidate.initialize(error)) return false;
+        // Trusted QML is instantiated in an isolated engine, never the active cache.
+        Hyprcast::Overlay::KeyboardPresenter presenter;
+        QQuickView probe;
+        probe.setScreen(resolveScreen(application, candidate.config().monitor));
+        probe.setResizeMode(QQuickView::SizeRootObjectToView);
+        probe.resize(candidate.config().width, candidate.config().height);
+        probe.setSource(QUrl(QStringLiteral("qrc:/hyprcast/overlay/qml/ThemeHost.qml")));
+        if (probe.status() == QQuickView::Error) {
+            *error = QStringLiteral("Cannot initialize isolated theme preflight host");
+            return false;
+        }
+        Hyprcast::Overlay::ThemeRuntime runtime(catalog, probe, presenter);
+        return runtime.loadInitial(candidate.config(), error);
+    };
+    Hyprcast::Overlay::RestartCoordinator restartCoordinator(instance, capture, handoff, std::move(startup), replacementExecutable, preflight);
+    if (bootstrap) restartCoordinator.initializeReplacement(*bootstrap);
     ipcClient.start();
     configuration.startWatching();
     if (quitAfterMs > 0) {

@@ -41,6 +41,14 @@ To run from a source checkout instead, use absolute paths to `build/release/plug
 
 The overlay reads `${XDG_CONFIG_HOME:-~/.config}/hyprcast/overlay.toml` if present. CLI options can override settings; see `hyprcast-overlay --help`. For a complete configuration example, live-reload behavior, theme installation, and the theme API, see [overlay configuration and themes](docs/overlay.md). Optional example themes include [`ledger`](overlay/examples/themes/ledger/), [`keycaps`](overlay/examples/themes/keycaps/), and [`text-held`](overlay/examples/themes/text-held/) for held-key feedback; the bundled default displays text without configuration.
 
+Ordinary TOML edits reload live, including switching between already discovered themes. After installing or editing a theme package, or changing monitor/click-through, run:
+
+```sh
+hyprcast-overlay restart
+```
+
+This replaces only the session's overlay, not Hyprland or its plugin. It reloads configuration and theme files, preserves the original startup CLI overrides, and restores confirmed active/paused capture. History and held-key state are cleared; input during the brief interruption may be missed. Use the same `--socket` or `--instance-signature` selector as the resident. Restart accepts no appearance/configuration overrides and does not launch an absent overlay. A pre-feature resident needs one manual relaunch before it supports restart; see [restart behavior and failures](docs/overlay.md#restarting-the-overlay).
+
 ## Tests
 
 ```sh

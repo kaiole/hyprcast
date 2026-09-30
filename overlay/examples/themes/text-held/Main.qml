@@ -6,6 +6,15 @@ Item {
     anchors.fill: parent
     clip: true
 
+    // Choose composition from the maximum surface, not transient content.
+    readonly property real historyLineHeight: Math.max(naturalActiveText.implicitHeight, naturalExpiredText.implicitHeight, hyprcast.settings.fontSize * 1.45)
+    readonly property real stackedHeight: historyLineHeight + hyprcast.options.held_key_height +
+                                         hyprcast.options.held_row_padding_bottom + hyprcast.settings.panelBorderWidth * 2 + 12
+    readonly property bool stacked: hyprcast.options.layout === "stacked" ||
+                                    (hyprcast.options.layout === "auto" && hyprcast.settings.height >= stackedHeight)
+    readonly property bool heldLeft: hyprcast.options.held_side === "left"
+    readonly property real compactFraction: hyprcast.options.compact_held_fraction
+    readonly property bool reserveHeld: hyprcast.options.show_held_keys
     readonly property bool heldVisible: hyprcast.options.show_held_keys && hyprcast.heldKeyCount > 0
     readonly property bool hasPanelContent: hyprcast.historyCount > 0 || hyprcast.fading || heldVisible
     readonly property bool panelDecorationVisible: hyprcast.settings.panelVisibility === "always" ||
@@ -15,13 +24,15 @@ Item {
         const border = hyprcast.settings.panelBorderWidth * 2
         const historyExtra = hyprcast.settings.textExtraPaddingX * 2
         const historyWidth = measuredHistoryWidth + historyExtra + hyprcast.settings.historyPaddingX * 2 + border
-        const heldWidth = heldVisible ? heldRow.implicitWidth + hyprcast.options.held_row_padding_x * 2 + border : 0
-        return Math.max(hyprcast.settings.minWidth, historyWidth, heldWidth)
+        // In compact mode reserve a stable fraction even when no keys are down.
+        const compactWidth = reserveHeld && !stacked ? historyWidth / (1 - compactFraction) : historyWidth
+        const heldWidth = reserveHeld && stacked ? heldRow.implicitWidth + hyprcast.options.held_row_padding_x * 2 + border : 0
+        return Math.max(hyprcast.settings.minWidth, compactWidth, heldWidth)
     }
     readonly property real requiredPanelHeight: {
-        const historyHeight = hyprcast.settings.fontSize * 1.45
-        const heldExtra = heldVisible ? hyprcast.options.held_key_height + hyprcast.options.held_row_padding_bottom + 8 : 0
-        return Math.max(hyprcast.settings.minHeight, historyHeight + hyprcast.settings.panelBorderWidth * 2 + heldExtra)
+        const contentHeight = reserveHeld && stacked ? stackedHeight :
+                              Math.max(historyLineHeight, reserveHeld ? hyprcast.options.held_key_height : 0) + hyprcast.settings.panelBorderWidth * 2 + 8
+        return Math.max(hyprcast.settings.minHeight, contentHeight)
     }
 
     Item {
@@ -60,14 +71,13 @@ Item {
 
         Item {
             id: historyArea
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.bottom: heldRow.visible ? heldRow.top : parent.bottom
-            anchors.leftMargin: hyprcast.settings.historyPaddingX + hyprcast.settings.panelBorderWidth
-            anchors.rightMargin: hyprcast.settings.historyPaddingX + hyprcast.settings.panelBorderWidth
-            anchors.topMargin: hyprcast.settings.panelBorderWidth + (heldRow.visible ? 8 : 0)
-            anchors.bottomMargin: heldRow.visible ? 4 : hyprcast.settings.panelBorderWidth
+            objectName: "hyprcastHistoryArea"
+            x: root.reserveHeld && !root.stacked && root.heldLeft ? heldViewport.x + heldViewport.width + 8 :
+               hyprcast.settings.historyPaddingX + hyprcast.settings.panelBorderWidth
+            y: hyprcast.settings.panelBorderWidth + 4
+            width: Math.max(0, (root.reserveHeld && !root.stacked && !root.heldLeft ? heldViewport.x - 8 :
+                               parent.width - hyprcast.settings.historyPaddingX - hyprcast.settings.panelBorderWidth) - x)
+            height: Math.max(0, (root.reserveHeld && root.stacked ? heldViewport.y - 4 : parent.height - hyprcast.settings.panelBorderWidth - 4) - y)
 
             Loader {
                 id: activePresentation
@@ -99,16 +109,26 @@ Item {
             }
         }
 
+        Item {
+            id: heldViewport
+            objectName: "hyprcastHeldViewport"
+            readonly property real inset: hyprcast.options.held_row_padding_x + hyprcast.settings.panelBorderWidth
+            x: root.stacked || root.heldLeft ? inset : parent.width * (1 - root.compactFraction)
+            width: Math.max(0, (root.stacked ? parent.width : parent.width * root.compactFraction) -
+                              (root.stacked ? inset * 2 : inset))
+            // On short forced-stacked surfaces shrink chips before sacrificing history.
+            height: Math.max(0, Math.min(hyprcast.options.held_key_height,
+                                        parent.height - hyprcast.settings.panelBorderWidth * 2 - 8 -
+                                        (root.stacked ? root.historyLineHeight + hyprcast.options.held_row_padding_bottom + 4 : 0)))
+            y: root.stacked ? parent.height - hyprcast.settings.panelBorderWidth - hyprcast.options.held_row_padding_bottom - height : (parent.height - height) / 2
+            clip: true
+            visible: root.reserveHeld
+
         Row {
             id: heldRow
             objectName: "hyprcastHeldRow"
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            anchors.leftMargin: hyprcast.options.held_row_padding_x + hyprcast.settings.panelBorderWidth
-            anchors.rightMargin: hyprcast.options.held_row_padding_x + hyprcast.settings.panelBorderWidth
-            anchors.bottomMargin: hyprcast.options.held_row_padding_bottom + hyprcast.settings.panelBorderWidth
-            height: visible ? hyprcast.options.held_key_height : 0
+            x: root.heldLeft ? 0 : Math.max(0, parent.width - implicitWidth)
+            height: parent.height
             spacing: hyprcast.options.held_key_spacing
             visible: root.heldVisible
 
@@ -119,9 +139,9 @@ Item {
                     required property var modelData
 
                     implicitWidth: label.implicitWidth + hyprcast.options.held_key_padding_x * 2
-                    implicitHeight: hyprcast.options.held_key_height
+                    implicitHeight: heldViewport.height
                     radius: hyprcast.options.held_key_radius
-                    color: hyprcast.options.held_key_background
+                    color: modelData.kind === "text" ? hyprcast.options.held_text_background : hyprcast.options.held_key_background
                     border.width: hyprcast.options.held_key_border_width
                     border.color: hyprcast.options.held_key_border_color
 
@@ -132,12 +152,14 @@ Item {
                         color: hyprcast.options.held_key_text_color
                         font.family: modelData.kind === "text" || hyprcast.settings.symbolFontFamily.length === 0 ?
                                      hyprcast.settings.fontFamily : hyprcast.settings.symbolFontFamily
-                        font.pixelSize: hyprcast.options.held_font_size
+                        font.pixelSize: Math.min(hyprcast.options.held_font_size, Math.max(1, heldViewport.height - hyprcast.options.held_key_border_width * 2 - 4))
                         font.weight: hyprcast.settings.fontWeight
                     }
                 }
             }
         }
+    }
+
     }
 
     Text {

@@ -185,7 +185,11 @@ accent = "#50c9aa"
 item_spacing = 8
 ```
 
-The example themes are `overlay/examples/themes/ledger/`, `overlay/examples/themes/keycaps/`, and `overlay/examples/themes/text-held/`. For an uninstalled source checkout, copy the chosen package directory to `${XDG_DATA_HOME:-~/.local/share}/hyprcast/themes/<id>/`, then select its ID. `ledger` uses a vertically stacked action timeline and declares `accent` and `item_spacing`. `keycaps` uses a horizontal row of labeled caps with cap-specific options. `text-held` is a self-contained text history with a held-key row; its `show_held_keys` and chip/row styling are declared theme options, not shared settings. All work without an application rebuild. For example, after installing `text-held`:
+The example themes are `overlay/examples/themes/ledger/`, `overlay/examples/themes/keycaps/`, and `overlay/examples/themes/text-held/`. For an uninstalled source checkout, copy the chosen package directory to `${XDG_DATA_HOME:-~/.local/share}/hyprcast/themes/<id>/`, then select its ID. `ledger` uses a vertically stacked action timeline with `accent`, `item_spacing`, `rail_width` (0–16 logical pixels), `inner_padding` (0–64 logical pixels), and `text_scale` (0.5–2.0, default 1.0). `keycaps` uses a horizontal row of labeled caps with cap-specific options. `text-held` is a self-contained text history with a held-key row; its `show_held_keys` and chip/row styling are declared theme options, not shared settings. All work without an application rebuild.
+
+`text-held` also exposes `held_side` (`left`, the default, or `right`), `layout` (`auto`, `compact`, or `stacked`), and `compact_held_fraction` (0.2–0.6, default 0.4). Auto uses stacked history-above-held composition when the configured surface is tall enough, otherwise side-by-side. Compact always reserves the held fraction, keeping history geometry stable across key presses. The side option also aligns the stacked row. Forced stacked on a short surface shrinks held chips to preserve history; use compact or a taller surface for readable chips. Oversized held rows clip trailing content rather than exposing a partial leading cap. These examples are starting points to fork, not exhaustive layout editors.
+
+For example, after installing `text-held`:
 
 ```toml
 [theme]

@@ -24,9 +24,29 @@ For a source checkout, substitute the absolute path to `build/debug/overlay/hypr
 - The first launch stays running in the foreground (normal for a GUI launched by a Hyprland exec keybind). Later invocations exit after the plugin confirms the state change. Errors go to stderr; no desktop notification or tray UI is provided yet.
 - First-launch activation fails after three seconds without confirmation. A resident overlay reports an unavailable plugin immediately; it still retries its event connection in the background. Failed/timed-out requests are not replayed after reconnect.
 
-The per-session control socket and ownership lock are next to the event socket (`events.sock.overlay` and `events.sock.overlay.lock`). Stale sockets/locks are recovered after crashes; non-socket files are never removed. `--socket` or `--instance-signature` must select the same session on subsequent commands. Appearance/configuration options are used only when starting a new instance; edit the watched TOML file to configure a resident overlay.
+The per-session control socket and ownership lock are next to the event socket (`events.sock.overlay` and `events.sock.overlay.owner-lock`). The advisory lock's inode stays in place; ownership is held across executable replacement. Stale sockets/locks are recovered after crashes; non-socket files are never removed. `--socket` or `--instance-signature` must select the same session on subsequent commands. Appearance/configuration options are used only when starting a new instance; edit the watched TOML file to configure a resident overlay.
 
 The existing plugin `hyprcast.toggle` function still changes capture, but does **not** launch the overlay; use the executable keybind for the combined UX.
+
+### Restarting the overlay
+
+```sh
+hyprcast-overlay restart
+hyprcast-overlay restart --socket /absolute/path/to/events.sock
+hyprcast-overlay restart --instance-signature SESSION
+```
+
+Use restart after installing a theme or editing its manifest, QML, helpers, or assets—even with the same theme ID/path—or after changing `window.monitor` or `window.click_through`. Ordinary TOML changes (including switching already discovered themes/options) still reload live. Only the selected session's overlay restarts; Hyprland and the plugin remain loaded. There is no PID search or broadcast.
+
+Restart replaces the executable image and Qt runtime, rereads the resident's absolute config path, and rediscovers themes in normal precedence order. The resident's **original explicit CLI overrides** remain authoritative over current TOML; the caller's working directory/configuration does not replace them. Only session selectors plus help/version are valid for `restart`. `--quit-after-ms` is a first-launch smoke-test control and is not replayed in the replacement.
+
+Confirmed active capture is explicitly enabled after the fresh plugin snapshot and shown only after acknowledgement; confirmed paused capture stays hidden. Plugin disconnect pauses capture during the transition. With no connected/confirmed plugin state, restart completes locally in a hidden resident without pending enable intent. History, fade snapshots, held keys, and repeat state are discarded. Input during restart may be missed; keys held across reconnect are not inferred.
+
+Success is silent and means initialization and any required capture restoration are confirmed. Exit codes are 0 for completion, 1 for operational failure, and 2 for CLI misuse. No resident returns “No overlay is running for this session; use toggle to start it.” Startup, pending capture changes, and concurrent restart/capture commands fail boundedly; restart never kills an unresponsive resident or steals ownership. The operation has a 10-second budget after acceptance, with a slightly longer caller wait. A timeout/disconnection can mean **outcome unknown**; do not automatically retry.
+
+Preflight validates current config, fresh manifests/options, output availability, executable availability, and selected QML in a separate engine. Detectable failures retain the existing accepted runtime. There is **no guaranteed rollback after exec**: disk changes or replacement startup failures can leave no working overlay. Failed capture restoration leaves the replacement hidden, disconnects if necessary to pause uncertain capture, and never automatically resumes on reconnect. QML is trusted executable code: preflight can have side effects, and GUI-thread timers cannot preempt a hanging theme; the external caller still has a bounded wait.
+
+A resident launched with a pre-feature binary does not understand `restart`. The new client reports its unsupported-command error rather than killing it; manually close/relaunch that overlay once to activate restart support. Then use your configured toggle binding as usual. Do not unload the plugin just to update themes.
 
 ### Socket discovery and configuration
 
@@ -209,7 +229,7 @@ Themes may use only the shared settings relevant to their composition. Package-l
 
 **Trust warning:** themes are executable QML running in the overlay process with the capabilities of the Qt modules they import. They are not sandboxed. The read-only presentation API and package-relative entry-point rule are interface/organization boundaries, not security isolation; install only themes from authors you trust.
 
-At startup, an invalid selected theme is a clear startup error. On live config reload, manifest/API/option checks and synchronous QML component creation are performed before accepting a theme switch; detectable failures reject the whole candidate and leave the previous accepted config and theme active. Staging does execute theme QML and cannot guarantee rollback from arbitrary runtime errors, side effects, or hangs. Theme files are not watched; restart after installing a theme or editing its manifest/QML to ensure discovery and loading use the updated package.
+At startup, an invalid selected theme is a clear startup error. On live config reload, manifest/API/option checks and synchronous QML component creation are performed before accepting a theme switch; detectable failures reject the whole candidate and leave the previous accepted config and theme active. Staging does execute theme QML and cannot guarantee rollback from arbitrary runtime errors, side effects, or hangs. Theme files are not watched; run `hyprcast-overlay restart` after installing a theme or editing its manifest/QML/helpers/assets to ensure discovery and loading use the updated package.
 
 To select an instance when the environment variable is unavailable, pass `--instance-signature NAME`; `--socket PATH` can specify a socket directly. `--quit-after-ms 1500` is available for smoke tests. The client connects asynchronously and retries with exponential backoff capped at 10 seconds. It validates newline-delimited JSON messages and disconnects/retries on malformed or oversized frames (4 MiB maximum).
 

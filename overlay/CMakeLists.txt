@@ -15,6 +15,8 @@ pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET "xkbcommon>=0.7")
 
 add_library(
   hyprcast_overlay_ipc STATIC
+  src/ipc/Restart.cpp
+  src/ipc/Restart.hpp
   src/ipc/CaptureController.cpp
   src/ipc/CaptureController.hpp
   src/ipc/OverlayInstance.cpp
@@ -70,6 +72,12 @@ target_link_libraries(
 install(DIRECTORY examples/themes/ DESTINATION share/hyprcast/themes)
 
 if(BUILD_TESTING)
+  add_executable(overlay_restart_tests tests/Restart.cpp)
+  target_link_libraries(overlay_restart_tests PRIVATE hyprcast_overlay_ipc PkgConfig::XKBCOMMON)
+  add_dependencies(overlay_restart_tests hyprcast-overlay)
+  add_test(NAME overlay-restart COMMAND overlay_restart_tests $<TARGET_FILE:hyprcast-overlay>)
+  set_tests_properties(overlay-restart PROPERTIES TIMEOUT 90)
+
   add_executable(overlay_lifecycle_tests tests/Lifecycle.cpp)
   target_link_libraries(overlay_lifecycle_tests PRIVATE hyprcast_overlay_ipc)
   add_test(NAME overlay-lifecycle COMMAND overlay_lifecycle_tests)

@@ -185,22 +185,28 @@ accent = "#50c9aa"
 item_spacing = 8
 ```
 
-The example themes are `overlay/examples/themes/ledger/`, `overlay/examples/themes/keycaps/`, and `overlay/examples/themes/text-held/`. For an uninstalled source checkout, copy the chosen package directory to `${XDG_DATA_HOME:-~/.local/share}/hyprcast/themes/<id>/`, then select its ID. `ledger` uses a vertically stacked action timeline with `accent`, `item_spacing`, `rail_width` (0–16 logical pixels), `inner_padding` (0–64 logical pixels), and `text_scale` (0.5–2.0, default 1.0). `keycaps` uses a horizontal row of labeled caps with cap-specific options. `text-held` is a self-contained text history with a held-key row; its `show_held_keys` and chip/row styling are declared theme options, not shared settings. All work without an application rebuild.
+The example themes are `overlay/examples/themes/ledger/`, `overlay/examples/themes/keycaps/`, `overlay/examples/themes/text-held/`, and `overlay/examples/themes/cascade/`. For an uninstalled source checkout, copy the chosen package directory to `${XDG_DATA_HOME:-~/.local/share}/hyprcast/themes/<id>/`, then select its ID. `ledger` uses a vertically stacked action timeline with `accent`, `item_spacing`, `rail_width` (0–16 logical pixels), `inner_padding` (0–64 logical pixels), and `text_scale` (0.5–2.0, default 1.0). `keycaps` uses a stable horizontal row of raised labeled caps with cap-specific options. Its lower lip stays inside the declared `height`; `edge_depth` (0–24, default 3 logical pixels) is clamped to half that height, and `edge_color` defaults to `#101010`. Set `edge_depth = 0` for flat caps. The caps show input history, not held/pressed state. `text-held` is a self-contained horizontal ribbon of raised history caps above a fixed live modifier dock; its cap/ribbon/dock styling is declared through theme-local options. All work without an application rebuild.
 
-`text-held` also exposes `held_side` (`left`, the default, or `right`), `layout` (`auto`, `compact`, or `stacked`), and `compact_held_fraction` (0.2–0.6, default 0.4). Auto uses stacked history-above-held composition when the configured surface is tall enough, otherwise side-by-side. Compact always reserves the held fraction, keeping history geometry stable across key presses. The side option also aligns the stacked row. Forced stacked on a short surface shrinks held chips to preserve history; use compact or a taller surface for readable chips. Oversized held rows clip trailing content rather than exposing a partial leading cap. These examples are starting points to fork, not exhaustive layout editors.
+`cascade` is a bottom-anchored receding stack of raised keycaps with grouped chords, bounded virtualized history, and full/reduced motion. Start with a 420 × 320 surface; shorter surfaces reduce visible depth. Dynamic sizing reserves a stable bounded stage rather than resizing on every key. Cap appearance is theme-local; shared panel appearance, anchor, sizing, font family/weight, symbols, repeats and expiration are honored. Its [package README](../overlay/examples/themes/cascade/README.md) includes installation, a complete demo config, sizing exceptions, and validation notes.
+
+`text-held` always reserves two stable bands: newest history at the right above fixed Ctrl / Shift / Alt / Super slots. `show_altgr` adds a separate AltGr slot; `dock_alignment` selects left/center/right alignment. Groups remain full-size and opaque except for a narrow fade at the far left edge, chords retain separate caps, and `motion = "reduced"` disables ribbon transitions and pressed-face travel. Start with a 600 × 140 surface. Dynamic sizing reserves a content-independent stage, and short/narrow surfaces reduce geometry or elide labels rather than switching to side-by-side. Its [package README](../overlay/examples/themes/text-held/README.md) documents all option defaults/bounds, shared-setting exceptions, and migration: obsolete `layout`, `held_side`, `compact_held_fraction`, and `held_*` styling names are rejected with documented replacements. These examples are starting points to fork, not exhaustive layout editors.
 
 For example, after installing `text-held`:
 
 ```toml
+[window]
+width = 600
+height = 140
+
 [theme]
 id = "text-held"
 [theme.options]
 show_held_keys = true
-held_key_border_width = 1
-held_key_border_color = "#7185a3"
+dock_alignment = "center"
+edge_depth = 3
 ```
 
-The held row follows presses and releases independently of history; a standalone modifier release may still create a normal history entry. `heldKeyItems` supplies canonical identity, kind, and symbol-resolved labels; text-kind labels do not use `[symbols].space` substitution.
+The modifier dock follows canonical observed presses/releases independently of history and expiration; a standalone modifier release may still create a history entry. Duplicate display glyphs do not merge slot identities, and matching observations from multiple keyboards are aggregated. Idle slots mean not currently observed held, not proof of physical release; placeholders alone do not keep `with-content` decoration visible. `heldKeyItems` supplies canonical identity, kind, and symbol-resolved labels; text-kind labels do not use `[symbols].space` substitution.
 
 ### Presentation API version 1
 
@@ -217,13 +223,14 @@ A theme's `Main.qml` must create a `QQuickItem` visual root (for example QML `It
 
 `ThemeApi` sends `heldKeysChanged`, history-count notifications, `fadingChanged`, `fadeDurationMsChanged`, `settingsChanged`, and `optionsChanged`; both semantic and projected models use standard `QAbstractItemModel` notifications. Additions are backward-compatible API-v1 properties/roles. Existing custom themes that keep using only raw `history`/`heldKeys` continue to work but must opt into `displayHistory`, `displayRichText`, and `heldKeyItems` to show shared substitutions and counted-repeat presentation. The theme API version is intentionally narrower than the underlying C++ implementation; undocumented properties and roles may change.
 
-The app owns interpretation, editable history, repeat/expiration lifetime, window lifecycle, and the maximum Wayland surface. Themes own their visual layout, panel/background/borders, typography, visible-panel sizing, and animations; the API does not impose a panel wrapper. The bundled text theme honors shared appearance, sizing, panel visibility, symbol and repeat settings without held-key visuals. `ledger` honors panel borders, panel visibility, font/colors, symbols, counted repeats, and dynamic height (not dynamic width). `keycaps` honors the shared panel, font-family/weight, foreground, symbol, repeat, and visible-panel sizing settings. `text-held` uses shared text appearance and its own declared held-row options. Keycaps' cap-specific colors, font size, height, padding, radius, spacing, and border are declared options, not global settings. For example:
+The app owns interpretation, editable history, repeat/expiration lifetime, window lifecycle, and the maximum Wayland surface. Themes own their visual layout, panel/background/borders, typography, visible-panel sizing, and animations; the API does not impose a panel wrapper. The bundled text theme honors shared appearance, sizing, panel visibility, symbol and repeat settings without held-key visuals. `ledger` honors panel borders, panel visibility, font/colors, symbols, counted repeats, and dynamic height (not dynamic width). `keycaps` honors the shared panel, font-family/weight, foreground, symbol, repeat, and visible-panel sizing settings. `text-held` honors shared panel appearance, stable bounded sizing, font family/weight and symbols; cap typography/colors/geometry replace shared text-specific appearance settings. Keycaps' cap-specific colors, font size, height, padding, radius, spacing, and border are declared options, not global settings. For example:
 
 ```toml
 [theme]
 id = "keycaps"
 [theme.options]
 height = 44
+edge_depth = 3
 spacing = 8
 border_width = 0
 key_background = "#394b66"
@@ -249,7 +256,7 @@ Old text is trimmed at grapheme boundaries and special keys/chords at entry boun
 
 Plain Backspace defaults to deletion: it removes one Unicode grapheme from text, or one whole special-key/chord entry. Generated Backspace repeats apply that deletion repeatedly. In `symbol` mode Backspace is recorded as a visible key. Modified shortcuts such as Ctrl+Backspace remain visible chords and do not emulate word deletion. In counted mode, adjacent equivalent inputs collapse after the configured threshold; separate taps and generated repeats of the same input count together, and the initial press/tap counts as occurrence one. Key identity, interpreted text/chord/modifiers, and keyboard identity determine equivalence; display-symbol substitutions and event timing do not. There is no tap-timeout. A different intervening input or interpretation starts a new group; deleting that intervening input does not retroactively join the groups. Once collapsed, a group stays collapsed while Backspace decrements its underlying retained occurrences, returning to a plain action at one; another equivalent input can extend the same group. Deletion still follows the existing grapheme/atomic-key semantics. Multi-grapheme actions and text whose grapheme boundaries cross action edges remain expanded. Storage, expiration, and retention operate on individual semantic actions, never on the shortened counter. The input presenter itself preserves history on pause/reset, but the application lifecycle clears active and fading history whenever capture pauses or the connection resets; old input does not reappear when casting resumes. XKB translation is not a reconstruction of application- or IME-committed text.
 
-Themes may opt into held-key feedback through the read-only API; the bundled theme does not render it. The `text-held` example reports keys observed as currently pressed, including modifiers. It clears on pause, disconnect, keymap replacement, and keyboard removal; reconnect snapshots do not contain held keys, so unknown held state is not inferred.
+Themes may opt into held-key feedback through the read-only API; the bundled theme does not render it. The `text-held` example renders fixed slots for modifiers observed as currently pressed. It clears on pause, disconnect, keymap replacement, and keyboard removal; reconnect snapshots do not contain held keys, so unknown held state is not inferred.
 
 ## Validation
 

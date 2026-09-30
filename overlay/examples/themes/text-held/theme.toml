@@ -1,105 +1,155 @@
 [theme]
 id = "text-held"
-name = "Text with held keys"
+name = "Ribbon with live modifiers"
 api_version = 1
 entry = "Main.qml"
 
-[options.held_side]
-type = "enum"
-default = "left"
-values = ["left", "right"]
-description = "Held-area side in compact layout; also aligns the stacked row."
-
-[options.layout]
-type = "enum"
-default = "auto"
-values = ["auto", "compact", "stacked"]
-description = "Auto stacks on tall surfaces. Forced stacked shrinks held chips on short surfaces to protect history."
-
-[options.compact_held_fraction]
-type = "number"
-default = 0.4
-minimum = 0.2
-maximum = 0.6
-description = "Fraction of compact panel width reserved for held keys, even when none are pressed."
-
-[options.show_held_keys]
-description = "Show held keys and reserve their layout area."
-type = "boolean"
-default = true
-
-[options.held_font_size]
-description = "Held label size in logical pixels; shrinks to fit short chips."
+[options.height]
 type = "integer"
-default = 19
-minimum = 1
-maximum = 256
-
-[options.held_key_height]
-description = "Preferred held chip height in logical pixels."
-type = "integer"
-default = 40
+default = 48
 minimum = 1
 maximum = 512
+description = "Preferred cap height for both stable bands."
 
-[options.held_key_padding_x]
-description = "Horizontal padding inside held chips, in logical pixels."
+[options.font_size]
 type = "integer"
-default = 12
-minimum = 0
-maximum = 512
-
-[options.held_key_radius]
-description = "Held chip corner radius in logical pixels."
-type = "integer"
-default = 7
-minimum = 0
+default = 24
+minimum = 1
 maximum = 256
+description = "Label size; bounded by available cap height."
 
-[options.held_key_spacing]
-description = "Gap between held chips, in logical pixels."
-type = "integer"
-default = 6
-minimum = 0
-maximum = 128
-
-[options.held_row_padding_x]
-description = "Held-area horizontal inset from the panel border, in logical pixels."
+[options.padding_x]
 type = "integer"
 default = 16
 minimum = 0
 maximum = 512
+description = "Cap horizontal padding; bounded by half cap height."
 
-[options.held_row_padding_bottom]
-description = "Stacked held row bottom inset in logical pixels."
+[options.radius]
 type = "integer"
-default = 10
+default = 7
 minimum = 0
-maximum = 512
+maximum = 256
+description = "Cap radius; clamped to geometry."
 
-[options.held_key_background]
-description = "Fill for held special-key and modifier chips."
+[options.edge_depth]
+type = "integer"
+default = 3
+minimum = 0
+maximum = 24
+description = "Lower lip inside cap height; zero gives flat caps."
+
+[options.edge_color]
 type = "color"
-default = "#2a2a2a"
+default = "#101010"
+description = "Lower lip color."
 
-[options.held_text_background]
-description = "Fill for held printable-text chips."
-type = "color"
-default = "#191919"
-
-[options.held_key_text_color]
-description = "Held chip label color."
-type = "color"
-default = "#cccccc"
-
-[options.held_key_border_width]
-description = "Held chip outline thickness in logical pixels; zero hides it."
+[options.border_width]
 type = "integer"
 default = 1
 minimum = 0
 maximum = 64
+description = "Cap outline thickness; clamped to geometry."
 
-[options.held_key_border_color]
-description = "Held chip outline color."
+[options.border_color]
 type = "color"
 default = "#444444"
+description = "Cap outline color."
+
+[options.text_color]
+type = "color"
+default = "#cccccc"
+description = "Cap label and repeat-count color."
+
+[options.text_background]
+type = "color"
+default = "#191919"
+description = "Printable action face color."
+
+[options.key_background]
+type = "color"
+default = "#2a2a2a"
+description = "Special key and modifier face color."
+
+[options.inner_spacing]
+type = "integer"
+default = 3
+minimum = 0
+maximum = 128
+description = "Spacing between caps in a chord."
+
+[options.visible_groups]
+type = "integer"
+default = 12
+minimum = 1
+maximum = 12
+description = "Maximum tail groups; available width may hide more."
+
+[options.group_spacing]
+type = "integer"
+default = 8
+minimum = 0
+maximum = 48
+description = "Gap between fitted ribbon groups."
+
+[options.motion]
+type = "enum"
+default = "full"
+values = ["full", "reduced"]
+description = "Reduced disables ribbon transitions and pressed face travel; snapshot lifetime is unchanged."
+
+[options.transition_ms]
+type = "integer"
+default = 180
+minimum = 0
+maximum = 600
+description = "Ribbon transition duration; zero disables ribbon animation only. Dock press animation stays at 90 ms unless motion is reduced."
+
+[options.show_held_keys]
+type = "boolean"
+default = true
+description = "Show fixed modifier dock; its band remains reserved when hidden."
+
+[options.show_altgr]
+type = "boolean"
+default = false
+description = "Add a fifth canonical AltGr slot; never merge AltGr into Alt."
+
+[options.dock_alignment]
+type = "enum"
+default = "center"
+values = ["left", "center", "right"]
+description = "Alignment of the fixed dock."
+
+[options.dock_spacing]
+type = "integer"
+default = 6
+minimum = 0
+maximum = 128
+description = "Modifier slot spacing; bounded on narrow surfaces."
+
+[options.dock_idle_opacity]
+type = "number"
+default = 0.45
+minimum = 0.1
+maximum = 1.0
+description = "Idle placeholder opacity, not proof of physical release."
+
+[options.dock_active_background]
+type = "color"
+default = "#444444"
+description = "Observed held modifier face color."
+
+[options.row_gap]
+type = "integer"
+default = 12
+minimum = 0
+maximum = 64
+description = "Fixed gap separating history and live state."
+
+[options.inner_padding]
+type = "integer"
+default = 10
+minimum = 0
+maximum = 64
+description = "Vertical panel inset; horizontal inset uses shared history padding."

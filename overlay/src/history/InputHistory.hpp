@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../input/KeyboardInterpreter.hpp"
+#include "BackspaceMode.hpp"
 
 #include <QAbstractListModel>
 #include <QHash>
@@ -14,11 +15,6 @@
 #include <vector>
 
 namespace Hyprcast::Overlay {
-    enum class BackspaceMode {
-        Delete,
-        Symbol,
-    };
-
     struct HistoryEntry {
         std::uint64_t     id = 0;
         InterpretedAction action;

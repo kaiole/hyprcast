@@ -18,8 +18,17 @@
 #include <optional>
 
 namespace Hyprcast::Overlay {
+    enum class ThemeOptionType {
+        Boolean,
+        Integer,
+        Number,
+        String,
+        Enum,
+        Color,
+    };
+
     struct ThemeOption {
-        QString                 type;
+        ThemeOptionType         type = ThemeOptionType::String;
         QVariant                defaultValue;
         std::optional<QVariant> minimum;
         std::optional<QVariant> maximum;
@@ -36,18 +45,23 @@ namespace Hyprcast::Overlay {
         QHash<QString, ThemeOption> options;
     };
 
+    // The only presentation API version this overlay implements.
+    inline constexpr int ThemeApiVersion = 1;
+
     class ThemeCatalog final {
       public:
         ThemeCatalog(QStringList themeRoots, QUrl bundledManifest);
 
-        [[nodiscard]] bool        discover(QStringList* warnings = nullptr, QString* error = nullptr);
-        [[nodiscard]] bool        resolve(const QString& id, ThemeDescriptor* descriptor, QString* error = nullptr) const;
-        [[nodiscard]] bool        validateOptions(const QString& id, const QVariantMap& supplied, QVariantMap* effective, QString* error = nullptr) const;
-        [[nodiscard]] QStringList availableThemeIds() const;
+        // Scans the theme roots. Returns warnings about ignored themes; fails only if the
+        // bundled default is unusable.
+        [[nodiscard]] std::expected<QStringList, QString> discover();
+        // The returned descriptor stays valid until the next discover().
+        [[nodiscard]] std::expected<const ThemeDescriptor*, QString> resolve(const QString& id) const;
+        // Supplied options merged over the declared defaults, after type and range checks.
+        [[nodiscard]] std::expected<QVariantMap, QString> validateOptions(const QString& id, const QVariantMap& supplied) const;
+        [[nodiscard]] QStringList                         availableThemeIds() const;
 
       private:
-        [[nodiscard]] bool              loadDescriptor(const QUrl& manifestUrl, bool bundled, const QString& expectedId, ThemeDescriptor* descriptor, QString* error) const;
-
         QStringList                     m_themeRoots;
         QUrl                            m_bundledManifest;
         std::optional<ThemeDescriptor>  m_bundledDefault;
@@ -77,7 +91,7 @@ namespace Hyprcast::Overlay {
         ThemeApi(KeyboardPresenter& presenter, const OverlayConfig& config, QString themeId, QVariantMap options, QObject* parent = nullptr);
 
         [[nodiscard]] int version() const noexcept {
-            return 1;
+            return ThemeApiVersion;
         }
         [[nodiscard]] QString themeId() const {
             return m_themeId;
@@ -124,10 +138,12 @@ namespace Hyprcast::Overlay {
       public:
         ThemeRuntime(const ThemeCatalog& catalog, QQuickView& view, KeyboardPresenter& presenter, QObject* parent = nullptr);
 
-        [[nodiscard]] bool    loadInitial(const OverlayConfig& config, QString* error = nullptr);
-        [[nodiscard]] bool    prepareSwitch(const OverlayConfig& config, QString* error = nullptr);
-        void                  applyAcceptedConfiguration(const OverlayConfig& config);
-        [[nodiscard]] QString activeThemeId() const;
+        [[nodiscard]] std::expected<void, QString> loadInitial(const OverlayConfig& config);
+        // Builds the configured theme off-screen so a config reload can be rejected
+        // before it is accepted. Does nothing if that theme is already active.
+        [[nodiscard]] std::expected<void, QString> prepareSwitch(const OverlayConfig& config);
+        void                                       applyAcceptedConfiguration(const OverlayConfig& config);
+        [[nodiscard]] QString                      activeThemeId() const;
 
       private:
         // One loaded theme. Members are destroyed in reverse order, so the visual tree

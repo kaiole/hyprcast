@@ -48,7 +48,7 @@ set_target_properties(hyprcast_overlay_input PROPERTIES AUTOMOC ON)
 target_include_directories(hyprcast_overlay_input PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(hyprcast_overlay_input PRIVATE hyprcast_warnings PUBLIC Qt6::Core hyprcast_overlay_history PkgConfig::XKBCOMMON)
 
-add_library(hyprcast_overlay_config STATIC src/config/OverlayConfig.cpp src/config/OverlayConfig.hpp)
+add_library(hyprcast_overlay_config STATIC src/config/OverlayConfig.cpp src/config/OverlayConfig.hpp src/config/TomlReader.cpp src/config/TomlReader.hpp)
 set_target_properties(hyprcast_overlay_config PROPERTIES AUTOMOC ON)
 target_include_directories(hyprcast_overlay_config PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(hyprcast_overlay_config PRIVATE hyprcast_warnings PUBLIC Qt6::Core Qt6::Gui tomlplusplus::tomlplusplus)

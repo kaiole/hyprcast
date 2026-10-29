@@ -30,6 +30,48 @@ namespace {
         }
     }
 
+    // Adapters keeping the tests' check(bool) style over the std::expected APIs.
+    template <typename T>
+    bool succeeded(std::expected<T, QString> result, QString* error) {
+        if (!result) {
+            *error = result.error();
+            return false;
+        }
+        return true;
+    }
+
+    bool discover(ThemeCatalog& catalog, QStringList* warnings, QString* error) {
+        auto result = catalog.discover();
+        if (result && warnings) {
+            *warnings = *result;
+        }
+        return succeeded(std::move(result), error);
+    }
+
+    bool resolve(const ThemeCatalog& catalog, const QString& id, ThemeDescriptor* descriptor, QString* error) {
+        const auto result = catalog.resolve(id);
+        if (result) {
+            *descriptor = **result;
+        }
+        return succeeded(result, error);
+    }
+
+    bool validateOptions(const ThemeCatalog& catalog, const QString& id, const QVariantMap& supplied, QVariantMap* effective, QString* error) {
+        auto result = catalog.validateOptions(id, supplied);
+        if (result) {
+            *effective = *result;
+        }
+        return succeeded(std::move(result), error);
+    }
+
+    bool loadInitial(ThemeRuntime& runtime, const OverlayConfig& config, QString* error) {
+        return succeeded(runtime.loadInitial(config), error);
+    }
+
+    bool prepareSwitch(ThemeRuntime& runtime, const OverlayConfig& config, QString* error) {
+        return succeeded(runtime.prepareSwitch(config), error);
+    }
+
     QString testKeymap() {
         xkb_context*   context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
         xkb_rule_names names{};
@@ -119,25 +161,25 @@ namespace {
         ThemeCatalog  catalog({userRoot, systemRoot}, QUrl::fromLocalFile(QDir(builtinDirectory).filePath(QStringLiteral("theme.toml"))));
         QStringList   warnings;
         QString       error;
-        check(catalog.discover(&warnings, &error), "discover valid user, system, and bundled themes");
+        check(discover(catalog, &warnings, &error), "discover valid user, system, and bundled themes");
         check(error.isEmpty(), "successful discovery has no error");
 
         ThemeDescriptor descriptor;
-        check(catalog.resolve(QStringLiteral("shared"), &descriptor, &error), "resolve duplicate theme id");
+        check(resolve(catalog, QStringLiteral("shared"), &descriptor, &error), "resolve duplicate theme id");
         check(descriptor.entryUrl.toLocalFile().startsWith(userShared), "user theme deterministically shadows system theme");
-        check(catalog.resolve(QStringLiteral("system-only"), &descriptor, &error) && descriptor.entryUrl.toLocalFile().startsWith(systemOnly),
+        check(resolve(catalog, QStringLiteral("system-only"), &descriptor, &error) && descriptor.entryUrl.toLocalFile().startsWith(systemOnly),
               "system themes are available when there is no user override");
-        check(catalog.resolve(QStringLiteral("default"), &descriptor, &error) && descriptor.entryUrl.toLocalFile().startsWith(userDefault),
+        check(resolve(catalog, QStringLiteral("default"), &descriptor, &error) && descriptor.entryUrl.toLocalFile().startsWith(userDefault),
               "user theme may shadow the bundled theme's ordinary id");
-        check(catalog.resolve(QStringLiteral("builtin:default"), &descriptor, &error) && descriptor.bundled && descriptor.entryUrl.toLocalFile().startsWith(builtinDirectory),
+        check(resolve(catalog, QStringLiteral("builtin:default"), &descriptor, &error) && descriptor.bundled && descriptor.entryUrl.toLocalFile().startsWith(builtinDirectory),
               "the explicit bundled alias remains accessible when its ordinary id is shadowed");
         check(warnings.join(QLatin1Char('\n')).contains(QStringLiteral("shadowed")), "duplicate installation produces a precedence warning");
         check(warnings.join(QLatin1Char('\n')).contains(QStringLiteral("builtin:default")), "shadowing the default name explains the protected built-in alias");
         check(warnings.join(QLatin1Char('\n')).contains(QStringLiteral("API version 99")), "incompatible manifests are diagnosed and ignored");
-        check(!catalog.resolve(QStringLiteral("future"), &descriptor, &error) && error.contains(QStringLiteral("API version 99")),
+        check(!resolve(catalog, QStringLiteral("future"), &descriptor, &error) && error.contains(QStringLiteral("API version 99")),
               "selecting an incompatible theme reports the compatibility failure directly");
         check(warnings.join(QLatin1Char('\n')).contains(QStringLiteral("missing")), "missing entry points are diagnosed and ignored");
-        check(!catalog.resolve(QStringLiteral("badmanifest"), &descriptor, &error) && error.contains(QStringLiteral("unknown theme manifest key")),
+        check(!resolve(catalog, QStringLiteral("badmanifest"), &descriptor, &error) && error.contains(QStringLiteral("unknown theme manifest key")),
               "strict manifest validation rejects unknown fields");
         check(catalog.availableThemeIds().contains(QStringLiteral("builtin:default")), "available themes include the protected bundled alias");
         Q_UNUSED(systemShared);
@@ -151,24 +193,24 @@ namespace {
         const QString bundledDirectory = themeDirectory(bundledRoot, QStringLiteral("default"), manifest(QByteArrayLiteral("default")), validQml());
         ThemeCatalog  catalog({userRoot}, QUrl::fromLocalFile(QDir(bundledDirectory).filePath(QStringLiteral("theme.toml"))));
         QString       error;
-        check(catalog.discover(nullptr, &error), "discover a theme with declared options");
+        check(discover(catalog, nullptr, &error), "discover a theme with declared options");
 
         QVariantMap effective;
-        check(catalog.validateOptions(QStringLiteral("options"), {}, &effective, &error), "apply declared defaults for omitted theme options");
+        check(validateOptions(catalog, QStringLiteral("options"), {}, &effective, &error), "apply declared defaults for omitted theme options");
         check(effective.value(QStringLiteral("gap")).toInt() == 5 && effective.value(QStringLiteral("mode")).toString() == QStringLiteral("rows"),
               "theme option defaults are exposed to QML");
 
         QVariantMap valid{{QStringLiteral("gap"), 12}, {QStringLiteral("mode"), QStringLiteral("compact")}, {QStringLiteral("tint"), QStringLiteral("red")}};
-        check(catalog.validateOptions(QStringLiteral("options"), valid, &effective, &error), "validate well-typed theme option values");
+        check(validateOptions(catalog, QStringLiteral("options"), valid, &effective, &error), "validate well-typed theme option values");
         check(effective.value(QStringLiteral("gap")).toInt() == 12 && effective.value(QStringLiteral("mode")).toString() == QStringLiteral("compact"),
               "accepted option overrides are reflected in the effective map");
 
-        check(!catalog.validateOptions(QStringLiteral("options"), {{QStringLiteral("unknown"), 1}}, &effective, &error) && error.contains(QStringLiteral("unknown option")),
+        check(!validateOptions(catalog, QStringLiteral("options"), {{QStringLiteral("unknown"), 1}}, &effective, &error) && error.contains(QStringLiteral("unknown option")),
               "reject undeclared theme options");
-        check(!catalog.validateOptions(QStringLiteral("options"), {{QStringLiteral("gap"), QStringLiteral("12")}}, &effective, &error), "reject mistyped theme options");
-        check(!catalog.validateOptions(QStringLiteral("options"), {{QStringLiteral("gap"), 21}}, &effective, &error) && error.contains(QStringLiteral("at most 20")),
+        check(!validateOptions(catalog, QStringLiteral("options"), {{QStringLiteral("gap"), QStringLiteral("12")}}, &effective, &error), "reject mistyped theme options");
+        check(!validateOptions(catalog, QStringLiteral("options"), {{QStringLiteral("gap"), 21}}, &effective, &error) && error.contains(QStringLiteral("at most 20")),
               "enforce declared numeric ranges");
-        check(!catalog.validateOptions(QStringLiteral("options"), {{QStringLiteral("mode"), QStringLiteral("wide")}}, &effective, &error) &&
+        check(!validateOptions(catalog, QStringLiteral("options"), {{QStringLiteral("mode"), QStringLiteral("wide")}}, &effective, &error) &&
                   error.contains(QStringLiteral("rows, compact")),
               "enforce declared enum values");
     }
@@ -196,7 +238,7 @@ namespace {
         }
         ThemeCatalog catalog({userRoot, sampleThemes}, QUrl::fromLocalFile(bundledManifest));
         QString      error;
-        check(catalog.discover(nullptr, &error), "discover themes before QML loading test");
+        check(discover(catalog, nullptr, &error), "discover themes before QML loading test");
 
         QTemporaryDir hostDirectory;
         const QString hostPath = hostDirectory.filePath(QStringLiteral("Host.qml"));
@@ -215,11 +257,11 @@ namespace {
         config.dynamicSize       = true;
         config.minWidth          = 160;
         config.minHeight         = 50;
-        config.panelVisibility   = QStringLiteral("with-content");
+        config.panelVisibility   = PanelVisibility::WithContent;
         config.backgroundOpacity = 0.0;
         config.panelBorderWidth  = 2;
         config.panelBorderColor  = QStringLiteral("#80ffffff");
-        check(runtime.loadInitial(config, &error), "load the bundled default as a real QML component");
+        check(loadInitial(runtime, config, &error), "load the bundled default as a real QML component");
         check(runtime.activeThemeId() == QStringLiteral("builtin:default"), "bundled default is active initially");
         view.show();
         QCoreApplication::processEvents();
@@ -252,12 +294,12 @@ namespace {
             QCoreApplication::processEvents();
             check(panelFrame->width() < fullWidth, "deleting content shrinks the dynamic panel and recovers viewport space");
             check(tailText && tailText->x() == 0, "shortened text returns to the start of the viewport");
-            config.panelVisibility = QStringLiteral("never");
+            config.panelVisibility = PanelVisibility::Never;
             runtime.applyAcceptedConfiguration(config);
             QCoreApplication::processEvents();
             check(!panelFill->isVisible() && presenter.historyModel().rowCount() == 1, "never suppresses the outer fill while preserving visible semantic input");
             presenter.historyModel().clear();
-            config.panelVisibility = QStringLiteral("with-content");
+            config.panelVisibility = PanelVisibility::WithContent;
             runtime.applyAcceptedConfiguration(config);
             QCoreApplication::processEvents();
             check(!panelFill->isVisible(), "with-content hides the panel decoration after history is cleared");
@@ -274,8 +316,8 @@ namespace {
             config.themeId      = QStringLiteral("keycaps");
             config.height       = 60;
             config.themeOptions = {{QStringLiteral("height"), 44}, {QStringLiteral("border_width"), 0}};
-            check(runtime.prepareSwitch(config, &error), "load keycaps through ordinary theme discovery");
-            config.repeatPresentation   = QStringLiteral("counted");
+            check(prepareSwitch(runtime, config, &error), "load keycaps through ordinary theme discovery");
+            config.repeatPresentation   = RepeatPresentation::Counted;
             config.repeatCountThreshold = 2;
             config.symbolFontFamily     = QStringLiteral("Symbols Nerd Font");
             config.keySymbols           = {{QStringLiteral("C"), QStringLiteral("COPY")}};
@@ -292,12 +334,12 @@ namespace {
             auto* capPanel = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastKeycapsPanelFrame"), Qt::FindChildrenRecursively);
             check(capPanel && capPanel->height() >= config.minHeight, "keycaps controls its own visible panel");
             QVariantMap capOptions;
-            check(catalog.validateOptions(QStringLiteral("keycaps"), {{QStringLiteral("height"), 45}}, &capOptions, &error) &&
+            check(validateOptions(catalog, QStringLiteral("keycaps"), {{QStringLiteral("height"), 45}}, &capOptions, &error) &&
                       capOptions.value(QStringLiteral("height")).toInt() == 45,
                   "keycaps validates declared height option");
-            check(!catalog.validateOptions(QStringLiteral("keycaps"), {{QStringLiteral("height"), -1}}, &capOptions, &error), "keycaps rejects invalid height option");
-            check(!catalog.validateOptions(QStringLiteral("keycaps"), {{QStringLiteral("edge_depth"), -1}}, &capOptions, &error), "keycaps rejects negative edge depth");
-            check(!catalog.validateOptions(QStringLiteral("keycaps"), {{QStringLiteral("edge_depth"), 25}}, &capOptions, &error), "keycaps rejects excessive edge depth");
+            check(!validateOptions(catalog, QStringLiteral("keycaps"), {{QStringLiteral("height"), -1}}, &capOptions, &error), "keycaps rejects invalid height option");
+            check(!validateOptions(catalog, QStringLiteral("keycaps"), {{QStringLiteral("edge_depth"), -1}}, &capOptions, &error), "keycaps rejects negative edge depth");
+            check(!validateOptions(catalog, QStringLiteral("keycaps"), {{QStringLiteral("edge_depth"), 25}}, &capOptions, &error), "keycaps rejects excessive edge depth");
             InterpretedAction space;
             space.kind = InterpretedActionKind::Text;
             space.text = QStringLiteral(" ");
@@ -430,7 +472,7 @@ namespace {
         config.dynamicSize  = false;
         config.themeOptions = {{QStringLiteral("motion"), QStringLiteral("reduced")}};
         view.resize(420, 320);
-        check(runtime.prepareSwitch(config, &error), "load Cascade through the normal catalog");
+        check(prepareSwitch(runtime, config, &error), "load Cascade through the normal catalog");
         runtime.applyAcceptedConfiguration(config);
         auto settle = [&]() {
             for (int i = 0; i < 5; ++i) {
@@ -592,7 +634,7 @@ namespace {
         config.minWidth = 160;
         config.themeId  = QStringLiteral("text-held");
         config.themeOptions.clear();
-        check(runtime.prepareSwitch(config, &error), "load standalone held-key example through normal theme discovery");
+        check(prepareSwitch(runtime, config, &error), "load standalone held-key example through normal theme discovery");
         runtime.applyAcceptedConfiguration(config);
         auto* heldPanel = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastPanelFrame"), Qt::FindChildrenRecursively);
         auto* heldFill  = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastPanelBackground"), Qt::FindChildrenRecursively);
@@ -613,11 +655,11 @@ namespace {
                   heldPanel->height() == panelHeightBeforeHeld,
               "held press preserves history geometry and panel height");
         QVariantMap heldOptions;
-        check(catalog.validateOptions(QStringLiteral("text-held"), {{QStringLiteral("height"), 31}}, &heldOptions, &error) &&
+        check(validateOptions(catalog, QStringLiteral("text-held"), {{QStringLiteral("height"), 31}}, &heldOptions, &error) &&
                   heldOptions.value(QStringLiteral("height")).toInt() == 31,
               "held example declares its own style options");
-        check(!catalog.validateOptions(QStringLiteral("text-held"), {{QStringLiteral("height"), -1}}, &heldOptions, &error) &&
-                  !catalog.validateOptions(QStringLiteral("text-held"), {{QStringLiteral("show_held_keys"), QStringLiteral("true")}}, &heldOptions, &error),
+        check(!validateOptions(catalog, QStringLiteral("text-held"), {{QStringLiteral("height"), -1}}, &heldOptions, &error) &&
+                  !validateOptions(catalog, QStringLiteral("text-held"), {{QStringLiteral("show_held_keys"), QStringLiteral("true")}}, &heldOptions, &error),
               "held example rejects invalid theme-local options");
         presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 4, .keycode = 42, .pressed = false});
         QCoreApplication::processEvents();
@@ -636,7 +678,7 @@ namespace {
         config.height      = 60;
         for (const auto& alignment : {QStringLiteral("left"), QStringLiteral("center"), QStringLiteral("right")}) {
             config.themeOptions = {{QStringLiteral("dock_alignment"), alignment}, {QStringLiteral("motion"), QStringLiteral("reduced")}};
-            check(runtime.prepareSwitch(config, &error), "prepare fixed dock alignment");
+            check(prepareSwitch(runtime, config, &error), "prepare fixed dock alignment");
             runtime.applyAcceptedConfiguration(config);
             settle();
             auto* history = view.rootObject()->findChild<QQuickItem*>(QStringLiteral("hyprcastHistoryArea"));
@@ -657,8 +699,8 @@ namespace {
             check(!shift->property("pressed").toBool() && shift->x() == slotX, "release clears live state while historical modifier remains");
             presenter.clearHistory();
         }
-        check(!catalog.validateOptions(QStringLiteral("text-held"), {{QStringLiteral("layout"), QStringLiteral("floating")}}, &heldOptions, &error) &&
-                  !catalog.validateOptions(QStringLiteral("text-held"), {{QStringLiteral("compact_held_fraction"), 0.9}}, &heldOptions, &error),
+        check(!validateOptions(catalog, QStringLiteral("text-held"), {{QStringLiteral("layout"), QStringLiteral("floating")}}, &heldOptions, &error) &&
+                  !validateOptions(catalog, QStringLiteral("text-held"), {{QStringLiteral("compact_held_fraction"), 0.9}}, &heldOptions, &error),
               "held layout enums and proportions reject invalid values");
         config.height = 140;
         config.width  = 600;
@@ -711,8 +753,8 @@ namespace {
             check(instantiated <= 16, "ribbon delegates remain bounded independently of retention");
         };
         checkRibbon();
-        check(!catalog.validateOptions(QStringLiteral("text-held"), {{QStringLiteral("depth_scale"), 0.9}}, &heldOptions, &error) &&
-                  !catalog.validateOptions(QStringLiteral("text-held"), {{QStringLiteral("depth_opacity"), 0.7}}, &heldOptions, &error),
+        check(!validateOptions(catalog, QStringLiteral("text-held"), {{QStringLiteral("depth_scale"), 0.9}}, &heldOptions, &error) &&
+                  !validateOptions(catalog, QStringLiteral("text-held"), {{QStringLiteral("depth_opacity"), 0.7}}, &heldOptions, &error),
               "removed receding controls are rejected rather than ignored");
         presenter.clearHistory();
         InterpretedAction edgeText;
@@ -799,7 +841,7 @@ namespace {
         presenter.advance(idleExpiration + std::chrono::milliseconds(2));
         settle();
         auto* fadingDock = findVisualItem(view.rootObject(), QStringLiteral("hyprcastHeldViewport"));
-        for (const QString& visibility : {QStringLiteral("with-content"), QStringLiteral("never"), QStringLiteral("always")}) {
+        for (const PanelVisibility visibility : {PanelVisibility::WithContent, PanelVisibility::Never, PanelVisibility::Always}) {
             config.panelVisibility = visibility;
             runtime.applyAcceptedConfiguration(config);
             settle();
@@ -807,12 +849,12 @@ namespace {
             if (expiredRibbon) {
                 expiredRibbon->setOpacity(0.4);
             }
-            const qreal expectedOpacity = visibility == QStringLiteral("always") ? 1.0 : 0.4;
+            const qreal expectedOpacity = visibility == PanelVisibility::Always ? 1.0 : 0.4;
             check(heldFill && fadingDock && qAbs(heldFill->opacity() - expectedOpacity) < 0.001 && qAbs(fadingDock->opacity() - expectedOpacity) < 0.001,
                   "panel and idle dock fade together unless panel visibility is always");
-            check(heldFill && heldFill->isVisible() == (visibility != QStringLiteral("never")), "never hides decoration while preserving dock fade behavior");
+            check(heldFill && heldFill->isVisible() == (visibility != PanelVisibility::Never), "never hides decoration while preserving dock fade behavior");
         }
-        config.panelVisibility = QStringLiteral("with-content");
+        config.panelVisibility = PanelVisibility::WithContent;
         runtime.applyAcceptedConfiguration(config);
         presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 13, .keycode = 42, .pressed = true});
         settle();
@@ -912,15 +954,15 @@ namespace {
         config.height = 120;
         view.resize(600, 120);
         QVariantMap ledgerOptions;
-        check(catalog.validateOptions(QStringLiteral("ledger"), {{QStringLiteral("rail_width"), 0}, {QStringLiteral("inner_padding"), 8}, {QStringLiteral("text_scale"), 1.5}},
-                                      &ledgerOptions, &error),
+        check(validateOptions(catalog, QStringLiteral("ledger"), {{QStringLiteral("rail_width"), 0}, {QStringLiteral("inner_padding"), 8}, {QStringLiteral("text_scale"), 1.5}},
+                              &ledgerOptions, &error),
               "ledger validates curated layout options");
-        check(!catalog.validateOptions(QStringLiteral("ledger"), {{QStringLiteral("text_scale"), 0.0}}, &ledgerOptions, &error), "ledger rejects unreadable text scales");
+        check(!validateOptions(catalog, QStringLiteral("ledger"), {{QStringLiteral("text_scale"), 0.0}}, &ledgerOptions, &error), "ledger rejects unreadable text scales");
         config.dynamicSize  = true;
         config.height       = 120;
         config.themeId      = QStringLiteral("ledger");
         config.themeOptions = {{QStringLiteral("item_spacing"), 8}, {QStringLiteral("accent"), QStringLiteral("#40ccaa")}};
-        check(runtime.prepareSwitch(config, &error), "load the shipped, distinctly composed QML example");
+        check(prepareSwitch(runtime, config, &error), "load the shipped, distinctly composed QML example");
         runtime.applyAcceptedConfiguration(config);
         check(view.rootObject()->findChild<QQuickItem*>(QStringLiteral("ledger-8"), Qt::FindChildrenRecursively) != nullptr,
               "the shipped example receives its declared options through the public API");
@@ -955,7 +997,7 @@ namespace {
         }
         config.themeId = QStringLiteral("builtin:default");
         config.themeOptions.clear();
-        check(runtime.prepareSwitch(config, &error), "stage return to the bundled theme");
+        check(prepareSwitch(runtime, config, &error), "stage return to the bundled theme");
         runtime.applyAcceptedConfiguration(config);
 
         InterpretedAction typed;
@@ -966,14 +1008,16 @@ namespace {
         const QString configPath = hostDirectory.filePath(QStringLiteral("overlay.toml"));
         check(writeFile(configPath, QByteArrayLiteral("[theme]\nid='builtin:default'\n")), "write initial theme config");
         OverlayConfigManager manager(configPath, true);
-        manager.setRuntimeValidator([&catalog, &runtime](const std::optional<OverlayConfig>& previous, const OverlayConfig& candidate, QString* validationError) {
-            QVariantMap effective;
-            if (!catalog.validateOptions(candidate.themeId, candidate.themeOptions, &effective, validationError)) {
-                return false;
+        manager.setRuntimeValidator([&catalog, &runtime](const std::optional<OverlayConfig>& previous, const OverlayConfig& candidate) -> std::expected<void, QString> {
+            if (auto options = catalog.validateOptions(candidate.themeId, candidate.themeOptions); !options) {
+                return std::unexpected(options.error());
             }
-            return !previous || previous->themeId == candidate.themeId || runtime.prepareSwitch(candidate, validationError);
+            if (!previous || previous->themeId == candidate.themeId) {
+                return {};
+            }
+            return runtime.prepareSwitch(candidate);
         });
-        check(manager.initialize(&error), "initialize config manager with the active bundled theme");
+        check(manager.initialize().has_value(), "initialize config manager with the active bundled theme");
         QObject::connect(&manager, &OverlayConfigManager::configurationChanged, &view, [&manager, &runtime] { runtime.applyAcceptedConfiguration(manager.config()); });
 
         check(writeFile(configPath, QByteArrayLiteral("[theme]\nid='text-held'\n[theme.options]\nheight=30\n")), "select standalone held feedback via live config");

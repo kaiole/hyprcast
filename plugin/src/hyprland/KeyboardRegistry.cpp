@@ -19,6 +19,7 @@
 #include <hyprland/src/Compositor.hpp>
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdlib>
 #include <memory>
 #include <utility>
@@ -44,8 +45,9 @@ namespace Hyprcast {
             return keymapString.get();
         }
 
-        SRepeatInfo toHyprcastType(int repeatRate, int repeatDelay) {
-            return {.rate = repeatRate, .delay = repeatDelay};
+        // Hyprland stores these as int; clamp so a bogus negative value cannot wrap.
+        SRepeatInfo toHyprcastType(int repeatRate, int repeatDelay) noexcept {
+            return {.rate = static_cast<std::uint32_t>(std::max(repeatRate, 0)), .delay = static_cast<std::uint32_t>(std::max(repeatDelay, 0))};
         }
     }
 
@@ -247,12 +249,8 @@ namespace Hyprcast {
                 },
             // Keep subscription snapshots consistent with incremental keymap events and
             // interoperable with Wayland clients: both use libxkbcommon text V1.
-            .keymap = keyboard.m_xkbKeymapV1String,
-            .repeatInfo =
-                {
-                    .rate  = keyboard.m_repeatRate,
-                    .delay = keyboard.m_repeatDelay,
-                },
+            .keymap     = keyboard.m_xkbKeymapV1String,
+            .repeatInfo = toHyprcastType(keyboard.m_repeatRate, keyboard.m_repeatDelay),
         };
     }
 }

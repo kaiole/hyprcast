@@ -11,7 +11,7 @@ namespace Hyprcast {
     struct SKeyboardInfo {
         WP<IKeyboard> keyboard;
 
-        KeyboardId    id;
+        KeyboardId    id = 0;
         std::string   name;
 
         // Hyprland can replace a keymap during config reload without notifying

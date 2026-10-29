@@ -1,5 +1,6 @@
 #include "EventServer.hpp"
 #include "CallbackBoundary.hpp"
+#include "hyprcast/protocol/Wire.hpp"
 
 #include <algorithm>
 #include <array>
@@ -28,10 +29,8 @@ namespace Hyprcast {
         constexpr std::string_view SOCK_DIR           = "hyprcast";
         constexpr std::string_view SOCK_FILE          = "events.sock";
         constexpr std::string_view LOCK_FILE          = "server.lock";
-        constexpr std::string_view ENABLE_COMMAND     = "enable";
-        constexpr std::string_view DISABLE_COMMAND    = "disable";
         // A longer unterminated buffer can never become a valid command.
-        constexpr std::size_t MAX_COMMAND_LENGTH = std::max(ENABLE_COMMAND.size(), DISABLE_COMMAND.size());
+        constexpr std::size_t MAX_COMMAND_LENGTH = std::max(Wire::COMMAND_ENABLE.size(), Wire::COMMAND_DISABLE.size());
     }
 
     CEventServer::CEventServer(ConnectedCB onConnected, CaptureCB onCapture, DisconnectedCB onDisconnected) :
@@ -254,11 +253,11 @@ namespace Hyprcast {
                 return;
             }
             const std::string_view command{m_commandBuffer.data(), end};
-            if (command != ENABLE_COMMAND && command != DISABLE_COMMAND) {
+            if (command != Wire::COMMAND_ENABLE && command != Wire::COMMAND_DISABLE) {
                 disconnectClient();
                 return;
             }
-            const bool enable = command == ENABLE_COMMAND;
+            const bool enable = command == Wire::COMMAND_ENABLE;
             m_commandBuffer.erase(0, end + 1);
             m_onCapture(enable);
             if (!m_clientFd.valid()) {

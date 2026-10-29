@@ -8,6 +8,7 @@
 #include "hyprcast/protocol/Keymap.hpp"
 #include "hyprcast/protocol/Modifiers.hpp"
 #include "hyprcast/protocol/RepeatInfo.hpp"
+#include "hyprcast/protocol/Wire.hpp"
 #include "hyprland/KeyboardRegistry.hpp"
 #include "hyprland/PluginConfig.hpp"
 #include "libjson/json_value.hpp"
@@ -21,27 +22,33 @@
 
 namespace Hyprcast {
     namespace {
+        using namespace Wire;
+
+        [[nodiscard]] std::string key(std::string_view name) {
+            return std::string{name};
+        }
+
         [[nodiscard]] libjson::json_value::object toJsonObject(const SKeyEvent& keyEvent) {
             return libjson::json_value::object{
-                {"time_ms", {.data = static_cast<std::uint64_t>(keyEvent.timeMs)}},
-                {"keycode", {.data = static_cast<std::uint64_t>(keyEvent.keycode)}},
-                {"state", {.data = std::string{keyEvent.state == eKeyState::PRESSED ? "pressed" : "released"}}},
+                {key(FIELD_TIME_MS), {.data = static_cast<std::uint64_t>(keyEvent.timeMs)}},
+                {key(FIELD_KEYCODE), {.data = static_cast<std::uint64_t>(keyEvent.keycode)}},
+                {key(FIELD_STATE), {.data = key(keyEvent.state == eKeyState::PRESSED ? STATE_PRESSED : STATE_RELEASED)}},
             };
         }
 
         [[nodiscard]] libjson::json_value::object toJsonObject(const SModifiers& modifiers) {
             return libjson::json_value::object{
-                {"depressed", {.data = static_cast<std::uint64_t>(modifiers.depressed)}},
-                {"latched", {.data = static_cast<std::uint64_t>(modifiers.latched)}},
-                {"locked", {.data = static_cast<std::uint64_t>(modifiers.locked)}},
-                {"group", {.data = static_cast<std::uint64_t>(modifiers.group)}},
+                {key(FIELD_DEPRESSED), {.data = static_cast<std::uint64_t>(modifiers.depressed)}},
+                {key(FIELD_LATCHED), {.data = static_cast<std::uint64_t>(modifiers.latched)}},
+                {key(FIELD_LOCKED), {.data = static_cast<std::uint64_t>(modifiers.locked)}},
+                {key(FIELD_GROUP), {.data = static_cast<std::uint64_t>(modifiers.group)}},
             };
         }
 
         [[nodiscard]] libjson::json_value::object toJsonObject(const SRepeatInfo& repeatInfo) {
             return libjson::json_value::object{
-                {"rate", {.data = static_cast<std::uint64_t>(repeatInfo.rate)}},
-                {"delay", {.data = static_cast<std::uint64_t>(repeatInfo.delay)}},
+                {key(FIELD_RATE), {.data = static_cast<std::uint64_t>(repeatInfo.rate)}},
+                {key(FIELD_DELAY), {.data = static_cast<std::uint64_t>(repeatInfo.delay)}},
             };
         }
 
@@ -49,51 +56,49 @@ namespace Hyprcast {
             auto jsonObject = toJsonObject(snapshot.modifiers);
             jsonObject.merge(toJsonObject(snapshot.repeatInfo));
 
-            jsonObject.emplace("name", libjson::json_value{.data = std::move(snapshot.name)});
-            jsonObject.emplace("keymap", libjson::json_value{.data = std::move(snapshot.keymap)});
+            jsonObject.emplace(key(FIELD_NAME), libjson::json_value{.data = std::move(snapshot.name)});
+            jsonObject.emplace(key(FIELD_KEYMAP), libjson::json_value{.data = std::move(snapshot.keymap)});
 
             return jsonObject;
         }
 
         [[nodiscard]] libjson::json_value makeEvent(std::string_view eventName, KeyboardId id, libjson::json_value::object jsonObject) {
-            jsonObject.emplace("event", libjson::json_value{.data = std::string{eventName}});
-            jsonObject.emplace("keyboard_id", libjson::json_value{.data = static_cast<std::uint64_t>(id)});
+            jsonObject.emplace(key(FIELD_EVENT), libjson::json_value{.data = key(eventName)});
+            jsonObject.emplace(key(FIELD_KEYBOARD_ID), libjson::json_value{.data = static_cast<std::uint64_t>(id)});
 
             return {.data = std::move(jsonObject)};
         }
 
         [[nodiscard]] std::string keyMessage(KeyboardId id, const SKeyEvent& keyEvent) {
-            return libjson::serialize(makeEvent("key", id, toJsonObject(keyEvent)));
+            return libjson::serialize(makeEvent(EVENT_KEY, id, toJsonObject(keyEvent)));
         }
 
         [[nodiscard]] std::string modifiersMessage(KeyboardId id, const SModifiers& modifiers) {
-            return libjson::serialize(makeEvent("modifiers", id, toJsonObject(modifiers)));
+            return libjson::serialize(makeEvent(EVENT_MODIFIERS, id, toJsonObject(modifiers)));
         }
 
         [[nodiscard]] std::string keymapMessage(KeyboardId id, Keymap keymap) {
             libjson::json_value::object jsonObject;
-            jsonObject.emplace("keymap", libjson::json_value{.data = std::move(keymap)});
+            jsonObject.emplace(key(FIELD_KEYMAP), libjson::json_value{.data = std::move(keymap)});
 
-            return libjson::serialize(makeEvent("keymap", id, std::move(jsonObject)));
+            return libjson::serialize(makeEvent(EVENT_KEYMAP, id, std::move(jsonObject)));
         }
 
         [[nodiscard]] std::string repeatInfoMessage(KeyboardId id, const SRepeatInfo& repeatInfo) {
-            return libjson::serialize(makeEvent("repeat_info", id, toJsonObject(repeatInfo)));
+            return libjson::serialize(makeEvent(EVENT_REPEAT_INFO, id, toJsonObject(repeatInfo)));
         }
 
         [[nodiscard]] std::string subscribeMessage(SKeyboardSnapshot snapshot) {
             const auto id = snapshot.id;
-            return libjson::serialize(makeEvent("subscribe_keyboard", id, toJsonObject(std::move(snapshot))));
+            return libjson::serialize(makeEvent(EVENT_SUBSCRIBE_KEYBOARD, id, toJsonObject(std::move(snapshot))));
         }
 
         [[nodiscard]] std::string unsubscribeMessage(KeyboardId id) {
-            return libjson::serialize(makeEvent("unsubscribe_keyboard", id, libjson::json_value::object{}));
+            return libjson::serialize(makeEvent(EVENT_UNSUBSCRIBE_KEYBOARD, id, libjson::json_value::object{}));
         }
 
         [[nodiscard]] std::string castingStateMessage(bool isPaused) {
-            // KeyboardId's begin at 1.
-            constexpr KeyboardId GLOBAL_EVENT_ID = 0;
-            return libjson::serialize(makeEvent("casting_state", GLOBAL_EVENT_ID, libjson::json_value::object{{"paused", {.data = isPaused}}}));
+            return libjson::serialize(makeEvent(EVENT_CASTING_STATE, GLOBAL_KEYBOARD_ID, libjson::json_value::object{{key(FIELD_PAUSED), {.data = isPaused}}}));
         }
     }
 

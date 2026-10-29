@@ -525,8 +525,7 @@ namespace Hyprcast::Overlay {
 
     void InputHistory::setOptions(InputHistoryOptions options) {
         options.maxRetainedUtf16CodeUnits = std::max<qsizetype>(0, options.maxRetainedUtf16CodeUnits);
-        if (options.backspaceMode == m_options.backspaceMode && options.maxRetainedUtf16CodeUnits == m_options.maxRetainedUtf16CodeUnits &&
-            options.presentation == m_options.presentation) {
+        if (options == m_options) {
             return;
         }
 

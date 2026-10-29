@@ -102,6 +102,7 @@ namespace Hyprcast {
         }
     }
 
+    // Capture starts paused and pauses on disconnect, so only an explicit client request enables it.
     CHyprcast::CHyprcast() :
         m_server([this] { requestRegistrySnapshot(); }, [this](bool enabled) { setPause(!enabled); }, [this] { m_paused = true; }), m_keyboardRegistry(makeRegistryCallbacks()),
         m_config(makePluginConfigCallbacks()) {

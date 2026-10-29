@@ -18,11 +18,19 @@ namespace Hyprcast::Overlay {
             Error
         };
         explicit OverlayInstance(const QString& eventSocket, QObject* parent = nullptr);
-        enum class Command { Start, Toggle, Restart };
+        enum class Command {
+            Start,
+            Toggle,
+            Restart
+        };
         ~OverlayInstance() override;
-        Result acquire(bool toggle, QString* error) { return acquire(toggle ? Command::Toggle : Command::Start, error); }
+        Result acquire(bool toggle, QString* error) {
+            return acquire(toggle ? Command::Toggle : Command::Start, error);
+        }
         Result acquire(Command command, QString* error, int inheritedLock = -1);
-        int lockDescriptor() const { return m_lockFd; }
+        int    lockDescriptor() const {
+            return m_lockFd;
+        }
         static void reply(QLocalSocket* client, const QString& error = {});
 
       signals:

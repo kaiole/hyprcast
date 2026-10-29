@@ -283,17 +283,8 @@ namespace Hyprcast::Overlay {
 
             if (const Table* table = readTable(root, "appearance", error)) {
                 if (!hasOnlyKeys(*table,
-                                 {"background_color",
-                                  "background_opacity",
-                                  "corner_radius",
-                                  "panel_border_width",
-                                  "panel_border_color",
-                                  "foreground_color",
-                                  "font_family",
-                                  "font_size",
-                                  "font_weight",
-                                  "history_padding_x",
-                                  "text_extra_padding_x"},
+                                 {"background_color", "background_opacity", "corner_radius", "panel_border_width", "panel_border_color", "foreground_color", "font_family",
+                                  "font_size", "font_weight", "history_padding_x", "text_extra_padding_x"},
                                  QStringLiteral("appearance"), error) ||
                     !readString(*table, "background_color", &config->backgroundColor, error) || !readOpacity(*table, error, &config->backgroundOpacity) ||
                     !readInteger(*table, "corner_radius", &config->cornerRadius, error) || !readInteger(*table, "panel_border_width", &config->panelBorderWidth, error) ||
@@ -312,8 +303,7 @@ namespace Hyprcast::Overlay {
             }
 
             if (const Table* table = readTable(root, "display", error)) {
-                if (!hasOnlyKeys(*table, {"panel_visibility"}, QStringLiteral("display"), error) ||
-                    !readString(*table, "panel_visibility", &config->panelVisibility, error)) {
+                if (!hasOnlyKeys(*table, {"panel_visibility"}, QStringLiteral("display"), error) || !readString(*table, "panel_visibility", &config->panelVisibility, error)) {
                     return false;
                 }
             } else if (error && !error->isEmpty()) {
@@ -524,28 +514,39 @@ namespace Hyprcast::Overlay {
     }
 
     OverlayConfig applyOverrides(OverlayConfig config, const ConfigOverrides& overrides) {
-        if (overrides.monitor)
+        if (overrides.monitor) {
             config.monitor = *overrides.monitor;
-        if (overrides.anchor)
+        }
+        if (overrides.anchor) {
             config.anchor = *overrides.anchor;
-        if (overrides.margins)
+        }
+        if (overrides.margins) {
             config.margins = *overrides.margins;
-        if (overrides.width)
+        }
+        if (overrides.width) {
             config.width = *overrides.width;
-        if (overrides.height)
+        }
+        if (overrides.height) {
             config.height = *overrides.height;
-        if (overrides.backgroundOpacity)
+        }
+        if (overrides.backgroundOpacity) {
             config.backgroundOpacity = *overrides.backgroundOpacity;
-        if (overrides.backspaceMode)
+        }
+        if (overrides.backspaceMode) {
             config.backspaceMode = *overrides.backspaceMode;
-        if (overrides.maxRetainedUtf16CodeUnits)
+        }
+        if (overrides.maxRetainedUtf16CodeUnits) {
             config.maxRetainedUtf16CodeUnits = *overrides.maxRetainedUtf16CodeUnits;
-        if (overrides.repeatsEnabled)
+        }
+        if (overrides.repeatsEnabled) {
             config.repeatsEnabled = *overrides.repeatsEnabled;
-        if (overrides.expireAfterMs)
+        }
+        if (overrides.expireAfterMs) {
             config.expireAfterMs = *overrides.expireAfterMs;
-        if (overrides.fadeDurationMs)
+        }
+        if (overrides.fadeDurationMs) {
             config.fadeDurationMs = *overrides.fadeDurationMs;
+        }
         return config;
     }
 

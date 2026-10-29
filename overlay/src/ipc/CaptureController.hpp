@@ -16,8 +16,12 @@ namespace Hyprcast::Overlay {
         void enableWhenReady();
         void toggle(QLocalSocket* requester);
         void restoreWhenReady(bool enabled, qint64 deadline);
-        bool busy() const { return m_waiting || m_target.has_value() || m_blocked; }
-        void setBlocked(bool blocked) { m_blocked = blocked; }
+        bool busy() const {
+            return m_waiting || m_target.has_value() || m_blocked;
+        }
+        void setBlocked(bool blocked) {
+            m_blocked = blocked;
+        }
         std::optional<bool> confirmedTarget() const {
             return m_ipc.connected() && m_ipc.hasCastingState() ? std::optional<bool>(!m_ipc.paused()) : std::nullopt;
         }
@@ -34,10 +38,10 @@ namespace Hyprcast::Overlay {
         QTimer                 m_timeout;
         QPointer<QLocalSocket> m_requester;
         std::optional<bool>    m_target;
-        bool                   m_waiting = false;
-        bool                   m_waitingTarget = true;
-        bool                   m_restoring = false;
+        bool                   m_waiting         = false;
+        bool                   m_waitingTarget   = true;
+        bool                   m_restoring       = false;
         qint64                 m_restoreDeadline = 0;
-        bool                   m_blocked = false;
+        bool                   m_blocked         = false;
     };
 }

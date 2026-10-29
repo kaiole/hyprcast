@@ -162,8 +162,8 @@ namespace Hyprcast::Overlay {
         QString       result;
         const QString symbolFont = m_source->presentationOptions().symbolFontFamily;
         for (const Row& row : m_rows) {
-            const auto& action = row.source.action;
-            const auto visibleCount = row.counted ? std::min(row.occurrences, static_cast<std::uint32_t>(m_source->presentationOptions().repeatThreshold - 1)) : 1u;
+            const auto& action       = row.source.action;
+            const auto  visibleCount = row.counted ? std::min(row.occurrences, static_cast<std::uint32_t>(m_source->presentationOptions().repeatThreshold - 1)) : 1u;
             if (action.kind == InterpretedActionKind::Text) {
                 if (row.counted && !result.isEmpty() && !result.endsWith(QLatin1Char(' '))) {
                     result.append(QLatin1Char(' '));

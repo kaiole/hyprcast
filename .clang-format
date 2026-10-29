@@ -63,3 +63,5 @@ BraceWrapping:
 AlignConsecutiveDeclarations: AcrossEmptyLines
 
 NamespaceIndentation: All
+
+InsertBraces: true

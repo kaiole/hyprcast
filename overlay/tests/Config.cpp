@@ -64,26 +64,24 @@ int main(int argc, char** argv) {
     check(defaults.panelVisibility == QStringLiteral("with-content") && defaults.expireAfterMs == 3000 && defaults.fadeDurationMs == 250,
           "default panel hides when history expires after inactivity");
     check(defaults.panelBorderWidth == 1 && defaults.panelBorderColor == QStringLiteral("#ffffff"), "default panel has a white one-pixel border");
-    check(defaults.repeatPresentation == QStringLiteral("counted") && defaults.repeatCountThreshold == 4,
-          "default repeats collapse at four occurrences");
+    check(defaults.repeatPresentation == QStringLiteral("counted") && defaults.repeatCountThreshold == 4, "default repeats collapse at four occurrences");
 
     OverlayConfig config;
     QString       error;
     check(parse("[appearance]\nfont_size = 36\nbackground_color = '#112233'\n", &config, &error), "load a valid partial TOML file");
     check(config.fontSize == 36 && config.backgroundColor == QStringLiteral("#112233"), "read appearance overrides");
-    check(config.width == 600 && config.themeId == QStringLiteral("builtin:default"),
-          "partial files inherit the bundled text theme");
+    check(config.width == 600 && config.themeId == QStringLiteral("builtin:default"), "partial files inherit the bundled text theme");
     check(parse("[theme]\nid='ledger'\n[theme.options]\nitem_spacing=7\naccent='#abcdef'\n", &config, &error), "parse theme selection and scalar options");
     check(config.themeId == QStringLiteral("ledger") && config.themeOptions.value(QStringLiteral("item_spacing")).toLongLong() == 7 &&
               config.themeOptions.value(QStringLiteral("accent")).toString() == QStringLiteral("#abcdef"),
           "preserve dynamic theme option values for descriptor validation");
-    check(parse("[window]\nwidth=720\nheight=140\nmin_width=180\nmin_height=70\ndynamic_size=true\n[appearance]\npanel_border_width=2\npanel_border_color='#80112233'\n[display]\npanel_visibility='with-content'\n[repeat]\npresentation='counted'\ncount_threshold=4\n[symbols]\nfont_family='"
+    check(parse("[window]\nwidth=720\nheight=140\nmin_width=180\nmin_height=70\ndynamic_size=true\n[appearance]\npanel_border_width=2\npanel_border_color='#80112233'\n[display]"
+                "\npanel_visibility='with-content'\n[repeat]\npresentation='counted'\ncount_threshold=4\n[symbols]\nfont_family='"
                 "Symbols Nerd Font'\n[symbols.keys]\nBackspace='⌫'\n[symbols.modifiers]\nCtrl='⌃'\n",
                 &config, &error),
           "parse dynamic sizing, border, panel visibility, counted repeat, and symbol settings");
     check(config.dynamicSize && config.width == 720 && config.minWidth == 180 && config.minHeight == 70 && config.panelBorderWidth == 2 &&
-              config.panelVisibility == QStringLiteral("with-content") && config.repeatPresentation == QStringLiteral("counted") &&
-              config.repeatCountThreshold == 4,
+              config.panelVisibility == QStringLiteral("with-content") && config.repeatPresentation == QStringLiteral("counted") && config.repeatCountThreshold == 4,
           "retain extension settings after validation");
     check(config.keySymbols.value(QStringLiteral("Backspace")).toString() == QStringLiteral("⌫") &&
               config.modifierSymbols.value(QStringLiteral("Ctrl")).toString() == QStringLiteral("⌃") && config.symbolFontFamily == QStringLiteral("Symbols Nerd Font"),
@@ -96,8 +94,7 @@ int main(int argc, char** argv) {
     overrides.width          = 600;
     overrides.repeatsEnabled = false;
     const auto effective     = applyOverrides(config, overrides);
-    check(effective.width == 600 && !effective.repeatsEnabled,
-          "explicit CLI values override file settings even when equal to defaults");
+    check(effective.width == 600 && !effective.repeatsEnabled, "explicit CLI values override file settings even when equal to defaults");
 
     check(!parse("[display\npresentation='text'\n", &config, &error), "reject malformed TOML");
     check(!parse("[display]\npresentation='keycaps'\n", &config, &error) && error.contains(QStringLiteral("unknown configuration key")), "reject removed display mode");

@@ -34,13 +34,12 @@ namespace Hyprcast::Overlay {
         int         historyPaddingX   = 16;
         int         textExtraPaddingX = 4;
 
-
         QString     symbolFontFamily;
         QString     spaceSymbol = QStringLiteral(" ");
         QVariantMap keySymbols;
         QVariantMap modifierSymbols;
 
-        QString     themeId      = QStringLiteral("builtin:default");
+        QString     themeId = QStringLiteral("builtin:default");
         QVariantMap themeOptions;
         QString     panelVisibility           = QStringLiteral("with-content");
         QString     backspaceMode             = QStringLiteral("delete");

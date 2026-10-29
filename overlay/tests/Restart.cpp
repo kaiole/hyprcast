@@ -111,7 +111,7 @@ namespace {
             process.start(executable, QStringList{name, "--socket", socket} + extra);
             check(process.waitForStarted(), "start caller");
         }
-        int result(QProcess& process, int budget = RestartReplyMs + 4000) {
+        int result(QProcess& process, int budget = static_cast<int>(RestartReplyTimeout.count()) + 4000) {
             check(until([&] { return process.state() == QProcess::NotRunning; }, budget), "bounded command reply");
             if (process.exitCode() != 0) {
                 std::cerr << process.readAllStandardError().constData();
@@ -395,7 +395,7 @@ namespace {
         const QString   path = dir.filePath("event.sock");
         OverlayInstance owner(path);
         QString         error;
-        check(owner.acquire(false, &error) == OverlayInstance::Result::Owner, "fixture owner");
+        check(owner.acquire(OverlayInstance::Command::Start).value_or(OverlayInstance::Ownership::Forwarded) == OverlayInstance::Ownership::Owner, "fixture owner");
         QLocalSocket requester;
         requester.connectToServer(path + ".overlay");
         check(requester.waitForConnected(), "handoff requester connects");
@@ -403,9 +403,9 @@ namespace {
             RestartContext context;
             context.socketPath = path;
             context.configPath = dir.filePath("config");
-            context.deadline   = monotonicMilliseconds() + RestartBudgetMs;
-            RestartHandoff handoff;
-            check(!handoff.execute(context, owner.lockDescriptor(), int(client->socketDescriptor()), dir.filePath("not-an-executable"), &error), "exec failure returns");
+            context.deadline   = Clock::now() + RestartBudget;
+            error              = execReplacement(context, owner.lockDescriptor(), static_cast<int>(client->socketDescriptor()), dir.filePath("not-an-executable"));
+            check(!error.isEmpty(), "exec failure returns");
             OverlayInstance::reply(client, error);
         });
         requester.write("restart\n");
@@ -413,14 +413,14 @@ namespace {
         check(until([&] { return requester.canReadLine(); }), "exec failure response");
         check(requester.readLine().contains("Executable replacement failed"), "exec failure distinguished");
         OverlayInstance duplicate(path);
-        check(duplicate.acquire(false, &error) == OverlayInstance::Result::Error, "failed exec retains ownership");
+        check(!duplicate.acquire(OverlayInstance::Command::Start), "failed exec retains ownership");
 
         // Old servers need not hold the new flock. A live socket is never stale.
         const QString oldPath = dir.filePath("old.sock");
         QLocalServer  old;
         check(old.listen(oldPath + ".overlay"), "old resident fixture");
         OverlayInstance newLaunch(oldPath);
-        check(newLaunch.acquire(false, &error) == OverlayInstance::Result::Error, "legacy live socket not taken over");
+        check(!newLaunch.acquire(OverlayInstance::Command::Start), "legacy live socket not taken over");
         check(QFile::exists(oldPath + ".overlay"), "legacy socket remains");
         QObject::connect(&old, &QLocalServer::newConnection, &old, [&] {
             while (auto* client = old.nextPendingConnection()) {

@@ -28,7 +28,9 @@
 #include <QUrl>
 
 #include <cmath>
+#include <expected>
 #include <limits>
+#include <optional>
 #include <utility>
 
 namespace {
@@ -241,13 +243,13 @@ namespace {
 
 int main(int argc, char* argv[]) {
     Hyprcast::Overlay::RestartHandoff handoff;
-    QString                           bootstrapError;
-    if (!handoff.adopt(&bootstrapError)) {
-        writeError(bootstrapError);
+    if (const auto adopted = handoff.adopt(); !adopted) {
+        writeError(adopted.error());
         return 1;
     }
-    const auto      bootstrap = handoff.pending() ? std::optional(handoff.context()) : std::nullopt;
-    QGuiApplication application(argc, argv);
+    // A plain copy of the bootstrap data; the descriptors stay owned by `handoff`.
+    const std::optional<Hyprcast::Overlay::RestartContext> bootstrap = handoff.context();
+    QGuiApplication                                        application(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("hyprcast-overlay"));
     QCoreApplication::setApplicationVersion(QStringLiteral("0.1.0"));
 
@@ -311,18 +313,14 @@ int main(int argc, char* argv[]) {
     }
     socketPath = QFileInfo(socketPath).absoluteFilePath();
     Hyprcast::Overlay::OverlayInstance instance(socketPath);
-    QString                            instanceError;
     using Instance       = Hyprcast::Overlay::OverlayInstance;
-    const auto ownership = instance.acquire(restart    ? Instance::Command::Restart :
-                                                toggle ? Instance::Command::Toggle :
-                                                         Instance::Command::Start,
-                                            &instanceError, bootstrap ? bootstrap->lockFd : -1);
-    if (ownership == Hyprcast::Overlay::OverlayInstance::Result::Forwarded) {
-        return 0;
-    }
-    if (ownership == Hyprcast::Overlay::OverlayInstance::Result::Error) {
-        writeError(instanceError);
+    const auto ownership = instance.acquire(restart ? Instance::Command::Restart : toggle ? Instance::Command::Toggle : Instance::Command::Start, handoff.takeLock());
+    if (!ownership) {
+        writeError(ownership.error());
         return 1;
+    }
+    if (*ownership == Instance::Ownership::Forwarded) {
+        return 0;
     }
 
     ConfigOverrides overrides;
@@ -576,10 +574,13 @@ int main(int argc, char* argv[]) {
     startup.configPath     = configPath;
     startup.explicitConfig = explicitConfigPath;
     startup.arguments      = replacementArguments;
-    auto preflight         = [&](QString* error) {
+    auto preflight         = [&]() -> std::expected<void, QString> {
+        QString                         preflightError;
+        QString*                        error  = &preflightError;
+        const auto                      failed = [&] { return std::unexpected(preflightError); };
         Hyprcast::Overlay::ThemeCatalog catalog(themeRoots, QUrl(QStringLiteral("qrc:/hyprcast/overlay/qml/themes/default/theme.toml")));
         if (!catalog.discover(nullptr, error)) {
-            return false;
+            return failed();
         }
         Hyprcast::Overlay::OverlayConfigManager candidate(configPath, explicitConfigPath, startupOverrides);
         candidate.setRuntimeValidator([&](const std::optional<OverlayConfig>&, const OverlayConfig& config, QString* reason) {
@@ -591,7 +592,7 @@ int main(int argc, char* argv[]) {
             return catalog.validateOptions(config.themeId, config.themeOptions, &effective, reason);
         });
         if (!candidate.initialize(error)) {
-            return false;
+            return failed();
         }
         // Trusted QML is instantiated in an isolated engine, never the active cache.
         Hyprcast::Overlay::KeyboardPresenter presenter;
@@ -601,11 +602,13 @@ int main(int argc, char* argv[]) {
         probe.resize(candidate.config().width, candidate.config().height);
         probe.setSource(QUrl(QStringLiteral("qrc:/hyprcast/overlay/qml/ThemeHost.qml")));
         if (probe.status() == QQuickView::Error) {
-            *error = QStringLiteral("Cannot initialize isolated theme preflight host");
-            return false;
+            return std::unexpected(QStringLiteral("Cannot initialize isolated theme preflight host"));
         }
         Hyprcast::Overlay::ThemeRuntime runtime(catalog, probe, presenter);
-        return runtime.loadInitial(candidate.config(), error);
+        if (!runtime.loadInitial(candidate.config(), error)) {
+            return failed();
+        }
+        return {};
     };
     Hyprcast::Overlay::RestartCoordinator restartCoordinator(instance, capture, handoff, std::move(startup), replacementExecutable, preflight);
     if (bootstrap) {

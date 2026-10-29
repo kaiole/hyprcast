@@ -1,6 +1,7 @@
 #pragma once
 
 #include "IpcClient.hpp"
+#include "Restart.hpp"
 #include <QObject>
 #include <QPointer>
 #include <QTimer>
@@ -15,7 +16,7 @@ namespace Hyprcast::Overlay {
         explicit CaptureController(IpcClient& ipc, QObject* parent = nullptr);
         void enableWhenReady();
         void toggle(QLocalSocket* requester);
-        void restoreWhenReady(bool enabled, qint64 deadline);
+        void restoreWhenReady(bool enabled, Deadline deadline);
         bool busy() const {
             return m_waiting || m_target.has_value() || m_blocked;
         }
@@ -38,10 +39,10 @@ namespace Hyprcast::Overlay {
         QTimer                 m_timeout;
         QPointer<QLocalSocket> m_requester;
         std::optional<bool>    m_target;
-        bool                   m_waiting         = false;
-        bool                   m_waitingTarget   = true;
-        bool                   m_restoring       = false;
-        qint64                 m_restoreDeadline = 0;
-        bool                   m_blocked         = false;
+        bool                   m_waiting       = false;
+        bool                   m_waitingTarget = true;
+        bool                   m_restoring     = false;
+        Deadline               m_restoreDeadline{};
+        bool                   m_blocked = false;
     };
 }

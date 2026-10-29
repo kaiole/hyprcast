@@ -1,119 +1,156 @@
 #include "Restart.hpp"
 #include "CaptureController.hpp"
 #include "OverlayInstance.hpp"
-#include <QFileInfo>
-#include <QLocalSocket>
-#include <QPointer>
 
 #include <QByteArray>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLocalSocket>
+#include <QPointer>
+
+#include <algorithm>
 #include <cerrno>
 #include <cstring>
-#include <dirent.h>
 #include <fcntl.h>
+#include <filesystem>
+#include <limits>
 #include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
-#include <time.h>
+#include <system_error>
 #include <unistd.h>
+#include <utility>
 #include <vector>
 
 namespace Hyprcast::Overlay {
     namespace {
-        constexpr int  MaxContextBytes   = 65536;
-        constexpr auto BootstrapVariable = "HYPRCAST_PRIVATE_REEXEC_FD";
-        bool           inheritable(int fd) {
+        constexpr qsizetype MaxContextBytes   = 65536;
+        constexpr auto      BootstrapVariable = "HYPRCAST_PRIVATE_REEXEC_FD";
+        constexpr int       BootstrapSeals    = F_SEAL_SEAL | F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_WRITE;
+        // Descriptors 0-2 are stdio and must never be adopted or closed.
+        constexpr int FirstPrivateFd = 3;
+
+        bool          inheritable(int fd) {
             return ::fcntl(fd, F_SETFD, 0) == 0;
         }
         void cloexec(int fd) {
             ::fcntl(fd, F_SETFD, FD_CLOEXEC);
         }
-    } // namespace
-    qint64 monotonicMilliseconds() {
-        timespec now{};
-        ::clock_gettime(CLOCK_MONOTONIC, &now);
-        return qint64(now.tv_sec) * 1000 + now.tv_nsec / 1000000;
-    }
-    RestartHandoff::~RestartHandoff() {
-        if (pending()) {
-            finish(QStringLiteral("Replacement failed during initialization; capture remains paused"));
+
+        qint64 toWire(Deadline deadline) {
+            return std::chrono::duration_cast<std::chrono::milliseconds>(deadline.time_since_epoch()).count();
         }
+        Deadline fromWire(qint64 milliseconds) {
+            return Deadline{std::chrono::duration_cast<Clock::duration>(std::chrono::milliseconds{milliseconds})};
+        }
+    } // namespace
+
+    int remainingMs(Deadline deadline) {
+        const auto remaining = std::chrono::ceil<std::chrono::milliseconds>(deadline - Clock::now()).count();
+        return static_cast<int>(std::clamp<std::chrono::milliseconds::rep>(remaining, 0, std::numeric_limits<int>::max()));
     }
-    bool RestartHandoff::adopt(QString* error) {
+
+    RestartHandoff::~RestartHandoff() {
+        finish(QStringLiteral("Replacement failed during initialization; capture remains paused"));
+    }
+
+    std::expected<void, QString> RestartHandoff::adopt() {
         const QByteArray value = qgetenv(BootstrapVariable);
         if (value.isEmpty()) {
-            return true;
+            return {};
         }
         qunsetenv(BootstrapVariable);
-        bool        ok = false;
-        const int   fd = value.toInt(&ok);
+
+        bool      ok    = false;
+        const int rawFd = value.toInt(&ok);
+        // Own the bootstrap descriptor immediately so every early return closes it.
+        CUniqueFd   stateFd{ok && rawFd >= FirstPrivateFd ? rawFd : -1};
         struct stat st{};
-        if (!ok || fd < 3 || ::fstat(fd, &st) || !S_ISREG(st.st_mode) || st.st_uid != ::getuid() || st.st_size <= 0 || st.st_size > MaxContextBytes ||
-            ::fcntl(fd, F_GET_SEALS) != (F_SEAL_SEAL | F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_WRITE)) {
-            *error = QStringLiteral("Invalid private restart bootstrap");
-            return false;
+        if (!stateFd || ::fstat(stateFd.get(), &st) || !S_ISREG(st.st_mode) || st.st_uid != ::getuid() || st.st_size <= 0 || st.st_size > MaxContextBytes ||
+            ::fcntl(stateFd.get(), F_GET_SEALS) != BootstrapSeals) {
+            return std::unexpected(QStringLiteral("Invalid private restart bootstrap"));
         }
-        QByteArray bytes(int(st.st_size), '\0');
-        const auto count = ::pread(fd, bytes.data(), static_cast<std::size_t>(bytes.size()), 0);
-        ::close(fd);
+        QByteArray bytes(static_cast<qsizetype>(st.st_size), '\0');
+        const auto count = ::pread(stateFd.get(), bytes.data(), static_cast<std::size_t>(bytes.size()), 0);
+        stateFd.reset();
+
         const QJsonObject object = QJsonDocument::fromJson(bytes).object();
-        RestartContext    c;
-        c.socketPath     = object.value("socket").toString();
-        c.configPath     = object.value("config").toString();
-        c.explicitConfig = object.value("explicit").toBool();
+        RestartContext    context;
+        context.socketPath     = object.value("socket").toString();
+        context.configPath     = object.value("config").toString();
+        context.explicitConfig = object.value("explicit").toBool();
         for (const auto& arg : object.value("args").toArray()) {
-            c.arguments.push_back(arg.toString());
+            context.arguments.push_back(arg.toString());
         }
         if (object.value("target").isBool()) {
-            c.target = object.value("target").toBool();
+            context.target = object.value("target").toBool();
         }
-        c.deadline       = object.value("deadline").toVariant().toLongLong();
-        c.lockFd         = object.value("lock").toInt(-1);
-        c.replyFd        = object.value("reply").toInt(-1);
+        context.deadline = fromWire(object.value("deadline").toInteger());
+
+        const int lockFd  = object.value("lock").toInt(-1);
+        const int replyFd = object.value("reply").toInt(-1);
+        if (count != bytes.size() || !context.socketPath.startsWith('/') || !context.configPath.startsWith('/') || lockFd < FirstPrivateFd || replyFd < FirstPrivateFd ||
+            lockFd == replyFd) {
+            return std::unexpected(QStringLiteral("Invalid private restart descriptors/context"));
+        }
+        // From here on the descriptors are ours, so validation failures close them.
+        CUniqueFd lock{lockFd};
+        CUniqueFd reply{replyFd};
         int       type   = 0;
         socklen_t length = sizeof(type);
-        if (count != bytes.size() || !c.socketPath.startsWith('/') || !c.configPath.startsWith('/') || c.lockFd < 3 || c.replyFd < 3 || c.lockFd == c.replyFd ||
-            ::getsockopt(c.replyFd, SOL_SOCKET, SO_TYPE, &type, &length) || type != SOCK_STREAM) {
-            *error = QStringLiteral("Invalid private restart descriptors/context");
-            return false;
+        if (::getsockopt(reply.get(), SOL_SOCKET, SO_TYPE, &type, &length) || type != SOCK_STREAM) {
+            return std::unexpected(QStringLiteral("Invalid private restart descriptors/context"));
         }
-        cloexec(c.lockFd);
-        cloexec(c.replyFd);
-        m_context = std::move(c);
-        if (monotonicMilliseconds() >= m_context->deadline) {
-            *error = QStringLiteral("Restart deadline expired before replacement initialization");
-            finish(*error);
-            return false;
+        cloexec(lock.get());
+        cloexec(reply.get());
+
+        m_context = std::move(context);
+        m_lockFd  = std::move(lock);
+        m_replyFd = std::move(reply);
+        if (Clock::now() >= m_context->deadline) {
+            const QString error = QStringLiteral("Restart deadline expired before replacement initialization");
+            finish(error);
+            return std::unexpected(error);
         }
-        return true;
+        return {};
     }
-    bool RestartHandoff::execute(const RestartContext& c, int lockFd, int replyFd, const QString& executable, QString* error) {
-        const int reply = ::fcntl(replyFd, F_DUPFD_CLOEXEC, 3);
-        const int state = ::memfd_create("hyprcast-restart", MFD_CLOEXEC | MFD_ALLOW_SEALING);
-        if (reply < 0 || state < 0) {
-            if (reply >= 0) {
-                ::close(reply);
-            }
-            if (state >= 0) {
-                ::close(state);
-            }
-            *error = QStringLiteral("Cannot create restart handoff descriptors");
-            return false;
+
+    void RestartHandoff::finish(const QString& error) {
+        if (!pending()) {
+            return;
         }
-        QJsonObject object{
-            {"socket", c.socketPath}, {"config", c.configPath}, {"explicit", c.explicitConfig}, {"args", QJsonArray::fromStringList(c.arguments)}, {"deadline", c.deadline},
-            {"lock", lockFd},         {"reply", reply}};
-        if (c.target) {
-            object.insert("target", *c.target);
+        const QByteArray response = OverlayInstance::replyLine(error);
+        ::send(m_replyFd.get(), response.constData(), static_cast<std::size_t>(response.size()), MSG_NOSIGNAL | MSG_DONTWAIT);
+        m_replyFd.reset();
+        m_context.reset();
+    }
+
+    QString execReplacement(const RestartContext& context, int lockFd, int requesterFd, const QString& executable) {
+        const CUniqueFd reply{::fcntl(requesterFd, F_DUPFD_CLOEXEC, FirstPrivateFd)};
+        const CUniqueFd state{::memfd_create("hyprcast-restart", MFD_CLOEXEC | MFD_ALLOW_SEALING)};
+        if (!reply || !state) {
+            return QStringLiteral("Cannot create restart handoff descriptors");
+        }
+
+        QJsonObject object{{"socket", context.socketPath},
+                           {"config", context.configPath},
+                           {"explicit", context.explicitConfig},
+                           {"args", QJsonArray::fromStringList(context.arguments)},
+                           {"deadline", toWire(context.deadline)},
+                           {"lock", lockFd},
+                           {"reply", reply.get()}};
+        if (context.target) {
+            object.insert("target", *context.target);
         }
         const QByteArray bytes    = QJsonDocument(object).toJson(QJsonDocument::Compact);
-        bool             prepared = bytes.size() <= MaxContextBytes && ::write(state, bytes.constData(), static_cast<std::size_t>(bytes.size())) == bytes.size() &&
-            ::fcntl(state, F_ADD_SEALS, F_SEAL_SEAL | F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_WRITE) == 0 && inheritable(state) && inheritable(reply) && inheritable(lockFd);
+        bool             prepared = bytes.size() <= MaxContextBytes && ::write(state.get(), bytes.constData(), static_cast<std::size_t>(bytes.size())) == bytes.size() &&
+            ::fcntl(state.get(), F_ADD_SEALS, BootstrapSeals) == 0 && inheritable(state.get()) && inheritable(reply.get()) && inheritable(lockFd);
+
         std::vector<QByteArray> storage{QFile::encodeName(executable)};
-        for (const auto& arg : c.arguments) {
+        for (const auto& arg : context.arguments) {
             storage.push_back(arg.toLocal8Bit());
         }
         std::vector<char*> argv;
@@ -121,45 +158,46 @@ namespace Hyprcast::Overlay {
             argv.push_back(arg.data());
         }
         argv.push_back(nullptr);
+
         // Do not rely on Qt or theme code setting CLOEXEC on every descriptor.
         // Restore the previous flags if exec fails, keeping the old runtime usable.
         std::vector<std::pair<int, int>> changedFlags;
-        if (DIR* directory = ::opendir("/proc/self/fd")) {
-            while (const auto* entry = ::readdir(directory)) {
-                bool      valid = false;
-                const int fd    = QByteArray(entry->d_name).toInt(&valid);
-                if (!valid || fd < 3 || fd == state || fd == reply || fd == lockFd) {
-                    continue;
-                }
-                const int flags = ::fcntl(fd, F_GETFD);
-                if (flags >= 0 && !(flags & FD_CLOEXEC)) {
-                    if (::fcntl(fd, F_SETFD, flags | FD_CLOEXEC)) {
-                        prepared = false;
-                    } else {
-                        changedFlags.emplace_back(fd, flags);
-                    }
+        std::error_code                  iterationError;
+        for (const auto& entry : std::filesystem::directory_iterator("/proc/self/fd", iterationError)) {
+            bool      valid = false;
+            const int fd    = QByteArray::fromStdString(entry.path().filename().string()).toInt(&valid);
+            if (!valid || fd < FirstPrivateFd || fd == state.get() || fd == reply.get() || fd == lockFd) {
+                continue;
+            }
+            const int flags = ::fcntl(fd, F_GETFD);
+            if (flags >= 0 && !(flags & FD_CLOEXEC)) {
+                if (::fcntl(fd, F_SETFD, flags | FD_CLOEXEC)) {
+                    prepared = false;
+                } else {
+                    changedFlags.emplace_back(fd, flags);
                 }
             }
-            ::closedir(directory);
-        } else {
+        }
+        if (iterationError) {
             prepared = false;
         }
-        if (prepared && monotonicMilliseconds() < c.deadline) {
-            qputenv(BootstrapVariable, QByteArray::number(state));
+
+        QString error;
+        if (prepared && Clock::now() < context.deadline) {
+            qputenv(BootstrapVariable, QByteArray::number(state.get()));
             ::execv(storage.front().constData(), argv.data());
-            *error = QStringLiteral("Executable replacement failed: %1").arg(QString::fromLocal8Bit(std::strerror(errno)));
+            error = QStringLiteral("Executable replacement failed: %1").arg(QString::fromLocal8Bit(std::strerror(errno)));
         } else {
-            *error = QStringLiteral("Cannot prepare restart handoff, or operation deadline expired");
+            error = QStringLiteral("Cannot prepare restart handoff, or operation deadline expired");
         }
         qunsetenv(BootstrapVariable);
         for (const auto& [fd, flags] : changedFlags) {
             ::fcntl(fd, F_SETFD, flags);
         }
         cloexec(lockFd);
-        ::close(state);
-        ::close(reply);
-        return false;
+        return error; // `state` and `reply` close here.
     }
+
     RestartCoordinator::RestartCoordinator(OverlayInstance& instance, CaptureController& capture, RestartHandoff& handoff, RestartContext startup, QString executable,
                                            Preflight preflight, QObject* parent) :
         QObject(parent), m_instance(instance), m_capture(capture), m_handoff(handoff), m_startup(std::move(startup)), m_executable(std::move(executable)),
@@ -170,6 +208,7 @@ namespace Hyprcast::Overlay {
             m_capture.setBlocked(false);
         });
     }
+
     void RestartCoordinator::request(QLocalSocket* requester) {
         if (m_capture.busy() || m_handoff.pending()) {
             OverlayInstance::reply(requester, QStringLiteral("Overlay lifecycle is busy; try again"));
@@ -179,27 +218,25 @@ namespace Hyprcast::Overlay {
         m_capture.setBlocked(true);
         RestartContext context = m_startup;
         context.target         = m_capture.confirmedTarget();
-        context.deadline       = monotonicMilliseconds() + RestartBudgetMs;
+        context.deadline       = Clock::now() + RestartBudget;
         QString error;
         if (!QFileInfo(m_executable).isExecutable()) {
             error = QStringLiteral("Replacement executable is unavailable: %1").arg(m_executable);
-        } else if (!m_preflight(&error)) {
-            if (error.isEmpty()) {
-                error = QStringLiteral("Restart preflight failed; existing overlay retained");
-            }
+        } else if (const auto preflight = m_preflight(); !preflight) {
+            error = preflight.error().isEmpty() ? QStringLiteral("Restart preflight failed; existing overlay retained") : preflight.error();
         } else if (client && client->state() == QLocalSocket::ConnectedState) {
             // Old objects remain alive until exec succeeds. Disconnecting the
             // requester before commit cancels the operation; after exec it does
             // not cancel a restoration whose outcome may already be committed.
-            m_handoff.execute(context, m_instance.lockDescriptor(), int(client->socketDescriptor()), m_executable, &error);
+            error = execReplacement(context, m_instance.lockDescriptor(), static_cast<int>(client->socketDescriptor()), m_executable);
         }
         m_capture.setBlocked(false);
         OverlayInstance::reply(client.data(), error);
     }
+
     void RestartCoordinator::initializeReplacement(const RestartContext& bootstrap) {
         m_capture.setBlocked(true);
-        const int remaining = int(bootstrap.deadline - monotonicMilliseconds());
-        if (remaining <= 0) {
+        if (Clock::now() >= bootstrap.deadline) {
             m_handoff.finish(QStringLiteral("Restart deadline expired during initialization; capture remains paused"));
             m_capture.setBlocked(false);
         } else if (bootstrap.target) {
@@ -208,17 +245,5 @@ namespace Hyprcast::Overlay {
             m_handoff.finish();
             m_capture.setBlocked(false);
         }
-    }
-    void RestartHandoff::finish(const QString& error) {
-        if (!pending()) {
-            return;
-        }
-        QString clean = error;
-        clean.replace('\n', ' ');
-        clean.replace('\r', ' ');
-        QByteArray response = error.isEmpty() ? QByteArray("ok\n") : QByteArray("error: ") + clean.toUtf8().left(1000) + '\n';
-        ::send(m_context->replyFd, response.constData(), static_cast<std::size_t>(response.size()), MSG_NOSIGNAL | MSG_DONTWAIT);
-        ::close(m_context->replyFd);
-        m_context.reset();
     }
 } // namespace Hyprcast::Overlay

@@ -35,6 +35,8 @@ namespace Hyprcast::Overlay {
         BackspaceMode              backspaceMode             = BackspaceMode::Delete;
         qsizetype                  maxRetainedUtf16CodeUnits = 4096; // Stable budget for the expanded canonical formatted history.
         HistoryPresentationOptions presentation;
+
+        friend bool                operator==(const InputHistoryOptions&, const InputHistoryOptions&) = default;
     };
 
     class HistoryListModel;

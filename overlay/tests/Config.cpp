@@ -46,7 +46,13 @@ namespace {
             return false;
         }
         file.close();
-        return Hyprcast::Overlay::parseOverlayConfig(path, config, error);
+        auto parsed = Hyprcast::Overlay::parseOverlayConfig(path);
+        if (!parsed) {
+            *error = parsed.error();
+            return false;
+        }
+        *config = std::move(*parsed);
+        return true;
     }
 } // namespace
 
@@ -55,16 +61,16 @@ int main(int argc, char** argv) {
     using namespace Hyprcast::Overlay;
 
     OverlayConfig defaults;
-    check(defaults.width == 600 && defaults.height == 88 && defaults.anchor == QStringLiteral("bottom-right"), "use built-in window defaults");
-    check(defaults.maxRetainedUtf16CodeUnits == 4096 && defaults.backspaceMode == QStringLiteral("delete"), "preserve documented history defaults");
+    check(defaults.width == 600 && defaults.height == 88 && toString(defaults.anchor) == QStringLiteral("bottom-right"), "use built-in window defaults");
+    check(defaults.maxRetainedUtf16CodeUnits == 4096 && defaults.backspaceMode == BackspaceMode::Delete, "preserve documented history defaults");
     check(defaults.themeId == QStringLiteral("builtin:default") && defaults.spaceSymbol == QStringLiteral(" "),
           "select the bundled text theme and preserve literal spaces by default");
     check(defaults.dynamicSize && defaults.minWidth == 240 && defaults.minHeight == 64 && defaults.width == 600 && defaults.height == 88,
           "default panel grows up to the unchanged maximum surface size");
-    check(defaults.panelVisibility == QStringLiteral("with-content") && defaults.expireAfterMs == 3000 && defaults.fadeDurationMs == 250,
+    check(defaults.panelVisibility == PanelVisibility::WithContent && defaults.expireAfterMs == 3000 && defaults.fadeDurationMs == 250,
           "default panel hides when history expires after inactivity");
     check(defaults.panelBorderWidth == 1 && defaults.panelBorderColor == QStringLiteral("#ffffff"), "default panel has a white one-pixel border");
-    check(defaults.repeatPresentation == QStringLiteral("counted") && defaults.repeatCountThreshold == 4, "default repeats collapse at four occurrences");
+    check(defaults.repeatPresentation == RepeatPresentation::Counted && defaults.repeatCountThreshold == 4, "default repeats collapse at four occurrences");
 
     OverlayConfig config;
     QString       error;
@@ -81,7 +87,7 @@ int main(int argc, char** argv) {
                 &config, &error),
           "parse dynamic sizing, border, panel visibility, counted repeat, and symbol settings");
     check(config.dynamicSize && config.width == 720 && config.minWidth == 180 && config.minHeight == 70 && config.panelBorderWidth == 2 &&
-              config.panelVisibility == QStringLiteral("with-content") && config.repeatPresentation == QStringLiteral("counted") && config.repeatCountThreshold == 4,
+              config.panelVisibility == PanelVisibility::WithContent && config.repeatPresentation == RepeatPresentation::Counted && config.repeatCountThreshold == 4,
           "retain extension settings after validation");
     check(config.keySymbols.value(QStringLiteral("Backspace")).toString() == QStringLiteral("⌫") &&
               config.modifierSymbols.value(QStringLiteral("Ctrl")).toString() == QStringLiteral("⌃") && config.symbolFontFamily == QStringLiteral("Symbols Nerd Font"),
@@ -136,13 +142,15 @@ int main(int argc, char** argv) {
     QTemporaryDir        absentDirectory;
     const QString        absentPath = absentDirectory.filePath(QStringLiteral("new/settings/overlay.toml"));
     OverlayConfigManager optionalDefault(absentPath, false);
-    check(optionalDefault.initialize(&error), "an absent implicit config starts from built-in defaults");
+    check(optionalDefault.initialize().has_value(), "an absent implicit config starts from built-in defaults");
     check(optionalDefault.config().width == 600 && QFileInfo::exists(QFileInfo(absentPath).absolutePath()), "create the default config directory for watching");
     OverlayConfigManager missingExplicit(absentPath, true);
-    check(!missingExplicit.initialize(&error) && error.contains(QStringLiteral("does not exist")), "an explicitly requested missing config is an error");
+    const auto           missing = missingExplicit.initialize();
+    check(!missing && missing.error().contains(QStringLiteral("does not exist")), "an explicitly requested missing config is an error");
     check(writeAtomically(absentPath, QByteArrayLiteral("[display\npresentation='text'\n")), "create a malformed initial config");
     OverlayConfigManager malformedInitial(absentPath, true);
-    check(!malformedInitial.initialize(&error) && error.contains(absentPath), "an invalid initial config fails with its path");
+    const auto           malformed = malformedInitial.initialize();
+    check(!malformed && malformed.error().contains(absentPath), "an invalid initial config fails with its path");
 
     QTemporaryDir directory;
     const QString path = directory.filePath(QStringLiteral("overlay.toml"));
@@ -155,16 +163,13 @@ int main(int argc, char** argv) {
         ++rejections;
         lastRejection = reason;
     });
-    manager.setRuntimeValidator([](const std::optional<OverlayConfig>& previous, const OverlayConfig& candidate, QString* validatorError) {
+    manager.setRuntimeValidator([](const std::optional<OverlayConfig>& previous, const OverlayConfig& candidate) -> std::expected<void, QString> {
         if (previous && candidate.width != previous->width) {
-            if (validatorError) {
-                *validatorError = QStringLiteral("test runtime rejection");
-            }
-            return false;
+            return std::unexpected(QStringLiteral("test runtime rejection"));
         }
-        return true;
+        return {};
     });
-    check(manager.initialize(&error), "load initial config before runtime start");
+    check(manager.initialize().has_value(), "load initial config before runtime start");
     check(manager.config().fontSize == 30, "initial config accepted");
     manager.startWatching();
 

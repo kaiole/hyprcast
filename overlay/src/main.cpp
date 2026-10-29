@@ -37,46 +37,23 @@ namespace {
     using LayerWindow = LayerShellQt::Window;
     using Hyprcast::Overlay::ConfigOverrides;
     using Hyprcast::Overlay::OverlayConfig;
+    using Hyprcast::Overlay::Range;
+    namespace Limits = Hyprcast::Overlay::Limits;
 
-    bool parseAnchor(const QString& value, LayerWindow::Anchors* anchors) {
-        const auto parts = value.toLower().split(QLatin1Char('-'), Qt::SkipEmptyParts);
-        if (parts.isEmpty() || parts.size() > 2) {
-            return false;
+    LayerWindow::Anchors toLayerAnchors(Hyprcast::Overlay::Anchor anchor) {
+        using Anchor = Hyprcast::Overlay::Anchor;
+        LayerWindow::Anchors anchors;
+        if (anchor.vertical == Anchor::Vertical::Top) {
+            anchors |= LayerWindow::AnchorTop;
+        } else if (anchor.vertical == Anchor::Vertical::Bottom) {
+            anchors |= LayerWindow::AnchorBottom;
         }
-
-        *anchors           = {};
-        bool hasHorizontal = false;
-        bool hasVertical   = false;
-        for (const auto& part : parts) {
-            if (part == QStringLiteral("top")) {
-                if (hasVertical) {
-                    return false;
-                }
-                *anchors |= LayerWindow::AnchorTop;
-                hasVertical = true;
-            } else if (part == QStringLiteral("bottom")) {
-                if (hasVertical) {
-                    return false;
-                }
-                *anchors |= LayerWindow::AnchorBottom;
-                hasVertical = true;
-            } else if (part == QStringLiteral("left")) {
-                if (hasHorizontal) {
-                    return false;
-                }
-                *anchors |= LayerWindow::AnchorLeft;
-                hasHorizontal = true;
-            } else if (part == QStringLiteral("right")) {
-                if (hasHorizontal) {
-                    return false;
-                }
-                *anchors |= LayerWindow::AnchorRight;
-                hasHorizontal = true;
-            } else {
-                return false;
-            }
+        if (anchor.horizontal == Anchor::Horizontal::Left) {
+            anchors |= LayerWindow::AnchorLeft;
+        } else if (anchor.horizontal == Anchor::Horizontal::Right) {
+            anchors |= LayerWindow::AnchorRight;
         }
-        return true;
+        return anchors;
     }
 
     bool parseMargins(const QString& value, QMargins* margins) {
@@ -88,7 +65,7 @@ namespace {
         for (qsizetype i = 0; i < parts.size(); ++i) {
             bool ok   = false;
             parsed[i] = parts[i].toInt(&ok);
-            if (!ok || parsed[i] < 0 || parsed[i] > 8192) {
+            if (!ok || !Limits::Margin.contains(parsed[i])) {
                 return false;
             }
         }
@@ -96,10 +73,10 @@ namespace {
         return true;
     }
 
-    bool parseInteger(const QString& value, int minimum, int maximum, int* result) {
+    bool parseInteger(const QString& value, Range<int> range, int* result) {
         bool      ok     = false;
         const int parsed = value.toInt(&ok);
-        if (!ok || parsed < minimum || parsed > maximum) {
+        if (!ok || !range.contains(parsed)) {
             return false;
         }
         *result = parsed;
@@ -167,28 +144,33 @@ namespace {
             overrides->monitor = parser.value(monitorOption);
         }
         if (parser.isSet(anchorOption)) {
-            overrides->anchor = parser.value(anchorOption);
+            const auto anchor = Hyprcast::Overlay::parseAnchor(parser.value(anchorOption));
+            if (!anchor) {
+                writeError(QStringLiteral("--anchor: %1").arg(anchor.error()));
+                return false;
+            }
+            overrides->anchor = *anchor;
         }
         if (parser.isSet(marginsOption)) {
             QMargins margins;
             if (!parseMargins(parser.value(marginsOption), &margins)) {
-                writeError(QStringLiteral("--margins must contain four integers from 0 to 8192: left,top,right,bottom"));
+                writeError(QStringLiteral("--margins must contain four integers from %1 to %2: left,top,right,bottom").arg(Limits::Margin.minimum).arg(Limits::Margin.maximum));
                 return false;
             }
             overrides->margins = margins;
         }
         if (parser.isSet(widthOption)) {
             int width = 0;
-            if (!parseInteger(parser.value(widthOption), 1, 8192, &width)) {
-                writeError(QStringLiteral("--width must be an integer in the range 1..8192"));
+            if (!parseInteger(parser.value(widthOption), Limits::SurfaceSize, &width)) {
+                writeError(QStringLiteral("--width must be an integer in the range %1..%2").arg(Limits::SurfaceSize.minimum).arg(Limits::SurfaceSize.maximum));
                 return false;
             }
             overrides->width = width;
         }
         if (parser.isSet(heightOption)) {
             int height = 0;
-            if (!parseInteger(parser.value(heightOption), 1, 8192, &height)) {
-                writeError(QStringLiteral("--height must be an integer in the range 1..8192"));
+            if (!parseInteger(parser.value(heightOption), Limits::SurfaceSize, &height)) {
+                writeError(QStringLiteral("--height must be an integer in the range %1..%2").arg(Limits::SurfaceSize.minimum).arg(Limits::SurfaceSize.maximum));
                 return false;
             }
             overrides->height = height;
@@ -204,27 +186,33 @@ namespace {
         }
         if (parser.isSet(expireAfterOption)) {
             int duration = 0;
-            if (!parseInteger(parser.value(expireAfterOption), 0, 86'400'000, &duration)) {
-                writeError(QStringLiteral("--expire-after-ms must be an integer from 0 to 86400000"));
+            if (!parseInteger(parser.value(expireAfterOption), Limits::ExpireAfterMs, &duration)) {
+                writeError(QStringLiteral("--expire-after-ms must be an integer from %1 to %2").arg(Limits::ExpireAfterMs.minimum).arg(Limits::ExpireAfterMs.maximum));
                 return false;
             }
             overrides->expireAfterMs = duration;
         }
         if (parser.isSet(fadeDurationOption)) {
             int duration = 0;
-            if (!parseInteger(parser.value(fadeDurationOption), 0, 60'000, &duration)) {
-                writeError(QStringLiteral("--fade-duration-ms must be an integer from 0 to 60000"));
+            if (!parseInteger(parser.value(fadeDurationOption), Limits::FadeDurationMs, &duration)) {
+                writeError(QStringLiteral("--fade-duration-ms must be an integer from %1 to %2").arg(Limits::FadeDurationMs.minimum).arg(Limits::FadeDurationMs.maximum));
                 return false;
             }
             overrides->fadeDurationMs = duration;
         }
         if (parser.isSet(backspaceOption)) {
-            overrides->backspaceMode = parser.value(backspaceOption);
+            const auto mode = Hyprcast::Overlay::parseBackspaceMode(parser.value(backspaceOption));
+            if (!mode) {
+                writeError(QStringLiteral("--backspace-mode must be delete or symbol"));
+                return false;
+            }
+            overrides->backspaceMode = *mode;
         }
         if (parser.isSet(retentionOption)) {
-            int units = 0;
-            if (!parseInteger(parser.value(retentionOption), 1, 1'048'576, &units)) {
-                writeError(QStringLiteral("--max-retained-utf16-code-units must be an integer from 1 to 1048576"));
+            int                  units = 0;
+            constexpr Range<int> retention{static_cast<int>(Limits::RetainedUtf16CodeUnits.minimum), static_cast<int>(Limits::RetainedUtf16CodeUnits.maximum)};
+            if (!parseInteger(parser.value(retentionOption), retention, &units)) {
+                writeError(QStringLiteral("--max-retained-utf16-code-units must be an integer from %1 to %2").arg(retention.minimum).arg(retention.maximum));
                 return false;
             }
             overrides->maxRetainedUtf16CodeUnits = units;
@@ -363,54 +351,43 @@ int main(int argc, char* argv[]) {
         themeRoots.push_back(QDir(dataLocation).filePath(QStringLiteral("hyprcast/themes")));
     }
     Hyprcast::Overlay::ThemeCatalog themeCatalog(themeRoots, QUrl(QStringLiteral("qrc:/hyprcast/overlay/qml/themes/default/theme.toml")));
-    QStringList                     themeWarnings;
-    QString                         themeDiscoveryError;
-    if (!themeCatalog.discover(&themeWarnings, &themeDiscoveryError)) {
-        writeError(themeDiscoveryError);
+    const auto                      themeWarnings = themeCatalog.discover();
+    if (!themeWarnings) {
+        writeError(themeWarnings.error());
         return 1;
     }
-    for (const QString& warning : themeWarnings) {
+    for (const QString& warning : *themeWarnings) {
         qWarning().noquote() << QStringLiteral("hyprcast-overlay: %1").arg(warning);
     }
 
     Hyprcast::Overlay::ThemeRuntime*        themeRuntime = nullptr;
     Hyprcast::Overlay::OverlayConfigManager configuration(configPath, explicitConfigPath, std::move(overrides));
-    configuration.setRuntimeValidator([&application, &themeCatalog, &themeRuntime](const std::optional<OverlayConfig>& previous, const OverlayConfig& candidate, QString* error) {
-        if (previous && previous->monitor != candidate.monitor) {
-            if (error) {
-                *error = QStringLiteral("window.monitor cannot be changed live; restart the overlay to apply it");
+    configuration.setRuntimeValidator(
+        [&application, &themeCatalog, &themeRuntime](const std::optional<OverlayConfig>& previous, const OverlayConfig& candidate) -> std::expected<void, QString> {
+            if (previous && previous->monitor != candidate.monitor) {
+                return std::unexpected(QStringLiteral("window.monitor cannot be changed live; restart the overlay to apply it"));
             }
-            return false;
-        }
-        if (previous && previous->clickThrough != candidate.clickThrough) {
-            if (error) {
-                *error = QStringLiteral("window.click_through cannot be changed live; restart the overlay to apply it");
+            if (previous && previous->clickThrough != candidate.clickThrough) {
+                return std::unexpected(QStringLiteral("window.click_through cannot be changed live; restart the overlay to apply it"));
             }
-            return false;
-        }
-        if (!resolveScreen(application, candidate.monitor)) {
-            if (error) {
-                *error = unavailableScreenMessage(application, candidate.monitor);
+            if (!resolveScreen(application, candidate.monitor)) {
+                return std::unexpected(unavailableScreenMessage(application, candidate.monitor));
             }
-            return false;
-        }
-        QVariantMap effectiveOptions;
-        if (!themeCatalog.validateOptions(candidate.themeId, candidate.themeOptions, &effectiveOptions, error)) {
-            return false;
-        }
-        if (previous && previous->themeId != candidate.themeId && themeRuntime && !themeRuntime->prepareSwitch(candidate, error)) {
-            return false;
-        }
-        return true;
-    });
-    QString configError;
-    if (!configuration.initialize(&configError)) {
-        writeError(configError);
+            if (auto options = themeCatalog.validateOptions(candidate.themeId, candidate.themeOptions); !options) {
+                return std::unexpected(options.error());
+            }
+            if (previous && previous->themeId != candidate.themeId && themeRuntime) {
+                return themeRuntime->prepareSwitch(candidate);
+            }
+            return {};
+        });
+    if (const auto initialized = configuration.initialize(); !initialized) {
+        writeError(initialized.error());
         return 2;
     }
 
     int quitAfterMs = 0;
-    if (parser.isSet(quitAfterOption) && !parseInteger(parser.value(quitAfterOption), 1, std::numeric_limits<int>::max(), &quitAfterMs)) {
+    if (parser.isSet(quitAfterOption) && !parseInteger(parser.value(quitAfterOption), {1, std::numeric_limits<int>::max()}, &quitAfterMs)) {
         writeError(QStringLiteral("--quit-after-ms must be a positive integer"));
         return 2;
     }
@@ -425,11 +402,11 @@ int main(int argc, char* argv[]) {
     Hyprcast::Overlay::KeyboardPresenter keyboardPresenter;
     auto                                 makeHistoryOptions = [](const OverlayConfig& config) {
         return Hyprcast::Overlay::InputHistoryOptions{
-            .backspaceMode             = config.backspaceMode == QStringLiteral("symbol") ? Hyprcast::Overlay::BackspaceMode::Symbol : Hyprcast::Overlay::BackspaceMode::Delete,
+            .backspaceMode             = config.backspaceMode,
             .maxRetainedUtf16CodeUnits = config.maxRetainedUtf16CodeUnits,
             .presentation =
                 {
-                    .countedRepeats   = config.repeatPresentation == QStringLiteral("counted"),
+                    .countedRepeats   = config.repeatPresentation == Hyprcast::Overlay::RepeatPresentation::Counted,
                     .repeatThreshold  = config.repeatCountThreshold,
                     .symbolFontFamily = config.symbolFontFamily,
                     .spaceSymbol      = config.spaceSymbol,
@@ -481,12 +458,7 @@ int main(int argc, char* argv[]) {
     LayerWindow* layerWindow = LayerWindow::get(&view);
     layerWindow->setScope(QStringLiteral("hyprcast-overlay"));
     layerWindow->setLayer(LayerWindow::LayerOverlay);
-    LayerWindow::Anchors anchors;
-    if (!parseAnchor(initialConfig.anchor, &anchors)) {
-        writeError(QStringLiteral("invalid configured anchor '%1'").arg(initialConfig.anchor));
-        return 2;
-    }
-    layerWindow->setAnchors(anchors);
+    layerWindow->setAnchors(toLayerAnchors(initialConfig.anchor));
     layerWindow->setMargins(initialConfig.margins);
     layerWindow->setDesiredSize(QSize(initialConfig.width, initialConfig.height));
     layerWindow->setScreen(selectedScreen);
@@ -495,9 +467,8 @@ int main(int argc, char* argv[]) {
     layerWindow->setCloseOnDismissed(true);
 
     Hyprcast::Overlay::ThemeRuntime loadedTheme(themeCatalog, view, keyboardPresenter);
-    QString                         themeLoadError;
-    if (!loadedTheme.loadInitial(initialConfig, &themeLoadError)) {
-        writeError(themeLoadError);
+    if (const auto loaded = loadedTheme.loadInitial(initialConfig); !loaded) {
+        writeError(loaded.error());
         return 1;
     }
     themeRuntime = &loadedTheme;
@@ -509,9 +480,7 @@ int main(int argc, char* argv[]) {
                          loadedTheme.applyAcceptedConfiguration(config);
                          view.resize(config.width, config.height);
                          layerWindow->setDesiredSize(QSize(config.width, config.height));
-                         LayerWindow::Anchors configuredAnchors;
-                         parseAnchor(config.anchor, &configuredAnchors); // The candidate was validated before it was accepted.
-                         layerWindow->setAnchors(configuredAnchors);
+                         layerWindow->setAnchors(toLayerAnchors(config.anchor));
                          layerWindow->setMargins(config.margins);
 
                          if (config.backspaceMode != appliedConfig.backspaceMode || config.maxRetainedUtf16CodeUnits != appliedConfig.maxRetainedUtf16CodeUnits ||
@@ -543,7 +512,7 @@ int main(int argc, char* argv[]) {
                              .arg(initialConfig.width)
                              .arg(initialConfig.height)
                              .arg(selectedScreen->devicePixelRatio())
-                             .arg(initialConfig.anchor)
+                             .arg(Hyprcast::Overlay::toString(initialConfig.anchor))
                              .arg(loadedTheme.activeThemeId());
 
     Hyprcast::Overlay::CaptureController capture(ipcClient);
@@ -575,24 +544,19 @@ int main(int argc, char* argv[]) {
     startup.explicitConfig = explicitConfigPath;
     startup.arguments      = replacementArguments;
     auto preflight         = [&]() -> std::expected<void, QString> {
-        QString                         preflightError;
-        QString*                        error  = &preflightError;
-        const auto                      failed = [&] { return std::unexpected(preflightError); };
         Hyprcast::Overlay::ThemeCatalog catalog(themeRoots, QUrl(QStringLiteral("qrc:/hyprcast/overlay/qml/themes/default/theme.toml")));
-        if (!catalog.discover(nullptr, error)) {
-            return failed();
+        if (auto discovered = catalog.discover(); !discovered) {
+            return std::unexpected(discovered.error());
         }
         Hyprcast::Overlay::OverlayConfigManager candidate(configPath, explicitConfigPath, startupOverrides);
-        candidate.setRuntimeValidator([&](const std::optional<OverlayConfig>&, const OverlayConfig& config, QString* reason) {
+        candidate.setRuntimeValidator([&](const std::optional<OverlayConfig>&, const OverlayConfig& config) -> std::expected<void, QString> {
             if (!resolveScreen(application, config.monitor)) {
-                *reason = unavailableScreenMessage(application, config.monitor);
-                return false;
+                return std::unexpected(unavailableScreenMessage(application, config.monitor));
             }
-            QVariantMap effective;
-            return catalog.validateOptions(config.themeId, config.themeOptions, &effective, reason);
+            return catalog.validateOptions(config.themeId, config.themeOptions).transform([](const QVariantMap&) {});
         });
-        if (!candidate.initialize(error)) {
-            return failed();
+        if (auto initialized = candidate.initialize(); !initialized) {
+            return initialized;
         }
         // Trusted QML is instantiated in an isolated engine, never the active cache.
         Hyprcast::Overlay::KeyboardPresenter presenter;
@@ -605,10 +569,7 @@ int main(int argc, char* argv[]) {
             return std::unexpected(QStringLiteral("Cannot initialize isolated theme preflight host"));
         }
         Hyprcast::Overlay::ThemeRuntime runtime(catalog, probe, presenter);
-        if (!runtime.loadInitial(candidate.config(), error)) {
-            return failed();
-        }
-        return {};
+        return runtime.loadInitial(candidate.config());
     };
     Hyprcast::Overlay::RestartCoordinator restartCoordinator(instance, capture, handoff, std::move(startup), replacementExecutable, preflight);
     if (bootstrap) {

@@ -1,6 +1,5 @@
 #include "Theme.hpp"
-
-#include <toml++/toml.hpp>
+#include "../config/TomlReader.hpp"
 
 #include <QColor>
 #include <QDebug>
@@ -16,77 +15,18 @@
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
 #include <string>
 #include <string_view>
 
 namespace Hyprcast::Overlay {
     namespace {
-        using Table = toml::table;
+        using Toml::TableReader;
+        using Toml::toQString;
 
-        bool fail(QString* error, const QString& message) {
-            if (error) {
-                *error = message;
-            }
-            return false;
-        }
+        const QString BuiltinDefaultId = QStringLiteral("builtin:default");
+        const QString ManifestLabel    = QStringLiteral("theme manifest");
 
-        QString keyString(std::string_view key) {
-            return QString::fromUtf8(key.data(), static_cast<qsizetype>(key.size()));
-        }
-
-        bool hasOnlyKeys(const Table& table, std::initializer_list<std::string_view> allowed, const QString& prefix, QString* error) {
-            for (const auto& [key, value] : table) {
-                Q_UNUSED(value);
-                const std::string_view candidate = key.str();
-                if (std::find(allowed.begin(), allowed.end(), candidate) == allowed.end()) {
-                    const QString name = prefix.isEmpty() ? keyString(candidate) : prefix + QLatin1Char('.') + keyString(candidate);
-                    return fail(error, QStringLiteral("unknown theme manifest key '%1'").arg(name));
-                }
-            }
-            return true;
-        }
-
-        const Table* readTable(const Table& table, std::string_view key, QString* error) {
-            const auto* node = table.get(key);
-            if (!node) {
-                return nullptr;
-            }
-            const auto* child = node->as_table();
-            if (!child) {
-                fail(error, QStringLiteral("'%1' must be a TOML table").arg(keyString(key)));
-                return nullptr;
-            }
-            return child;
-        }
-
-        bool readString(const Table& table, std::string_view key, QString* value, QString* error, bool required = false) {
-            const auto* node = table.get(key);
-            if (!node) {
-                return !required || fail(error, QStringLiteral("missing required theme manifest key '%1'").arg(keyString(key)));
-            }
-            const auto parsed = node->value_exact<std::string>();
-            if (!parsed) {
-                return fail(error, QStringLiteral("'%1' must be a string").arg(keyString(key)));
-            }
-            *value = QString::fromUtf8(parsed->data(), static_cast<qsizetype>(parsed->size()));
-            return true;
-        }
-
-        bool readInteger(const Table& table, std::string_view key, int* value, QString* error) {
-            const auto* node = table.get(key);
-            if (!node) {
-                return fail(error, QStringLiteral("missing required theme manifest key '%1'").arg(keyString(key)));
-            }
-            const auto parsed = node->value_exact<std::int64_t>();
-            if (!parsed || *parsed < std::numeric_limits<int>::min() || *parsed > std::numeric_limits<int>::max()) {
-                return fail(error, QStringLiteral("'%1' must be an integer").arg(keyString(key)));
-            }
-            *value = static_cast<int>(*parsed);
-            return true;
-        }
-
-        bool validOptionName(const QString& name) {
+        bool          validOptionName(const QString& name) {
             static const QRegularExpression pattern(QStringLiteral("^[a-z][a-z0-9_]{0,63}$"));
             return pattern.match(name).hasMatch();
         }
@@ -96,40 +36,51 @@ namespace Hyprcast::Overlay {
             return pattern.match(id).hasMatch() && !id.startsWith(QStringLiteral("builtin."));
         }
 
-        bool readTomlOptionValue(const toml::node& node, const QString& type, QVariant* value, QString* error, const QString& path) {
-            if (type == QStringLiteral("boolean")) {
-                const auto parsed = node.value_exact<bool>();
-                if (!parsed) {
-                    return fail(error, QStringLiteral("'%1' must be a TOML boolean").arg(path));
-                }
-                *value = *parsed;
-                return true;
+        std::expected<ThemeOptionType, QString> parseOptionType(QStringView text, const QString& path) {
+            static const QHash<QString, ThemeOptionType> types{
+                {QStringLiteral("boolean"), ThemeOptionType::Boolean}, {QStringLiteral("integer"), ThemeOptionType::Integer}, {QStringLiteral("number"), ThemeOptionType::Number},
+                {QStringLiteral("string"), ThemeOptionType::String},   {QStringLiteral("enum"), ThemeOptionType::Enum},       {QStringLiteral("color"), ThemeOptionType::Color},
+            };
+            const auto found = types.constFind(text.toString().toLower());
+            if (found == types.cend()) {
+                return std::unexpected(QStringLiteral("'%1' must be boolean, integer, number, string, enum, or color").arg(path));
             }
-            if (type == QStringLiteral("integer")) {
-                const auto parsed = node.value_exact<std::int64_t>();
-                if (!parsed) {
-                    return fail(error, QStringLiteral("'%1' must be a TOML integer").arg(path));
-                }
-                *value = QVariant::fromValue<qlonglong>(*parsed);
-                return true;
+            return found.value();
+        }
+
+        bool isNumeric(ThemeOptionType type) {
+            return type == ThemeOptionType::Integer || type == ThemeOptionType::Number;
+        }
+
+        // Converts a TOML value to the QVariant representation used for `type`.
+        std::expected<QVariant, QString> readOptionValue(const toml::node& node, ThemeOptionType type, const QString& path) {
+            switch (type) {
+                case ThemeOptionType::Boolean:
+                    if (const auto parsed = node.value_exact<bool>()) {
+                        return QVariant(*parsed);
+                    }
+                    return std::unexpected(QStringLiteral("'%1' must be a TOML boolean").arg(path));
+                case ThemeOptionType::Integer:
+                    if (const auto parsed = node.value_exact<std::int64_t>()) {
+                        return QVariant::fromValue<qlonglong>(*parsed);
+                    }
+                    return std::unexpected(QStringLiteral("'%1' must be a TOML integer").arg(path));
+                case ThemeOptionType::Number:
+                    if (const auto parsed = node.value_exact<double>()) {
+                        return QVariant(*parsed);
+                    }
+                    if (const auto parsed = node.value_exact<std::int64_t>()) {
+                        return QVariant(static_cast<double>(*parsed));
+                    }
+                    return std::unexpected(QStringLiteral("'%1' must be a TOML number").arg(path));
+                case ThemeOptionType::String:
+                case ThemeOptionType::Enum:
+                case ThemeOptionType::Color: break;
             }
-            if (type == QStringLiteral("number")) {
-                if (const auto parsed = node.value_exact<double>()) {
-                    *value = *parsed;
-                    return true;
-                }
-                if (const auto parsed = node.value_exact<std::int64_t>()) {
-                    *value = static_cast<double>(*parsed);
-                    return true;
-                }
-                return fail(error, QStringLiteral("'%1' must be a TOML number").arg(path));
+            if (const auto parsed = node.value_exact<std::string>()) {
+                return QVariant(toQString(*parsed));
             }
-            const auto parsed = node.value_exact<std::string>();
-            if (!parsed) {
-                return fail(error, QStringLiteral("'%1' must be a TOML string").arg(path));
-            }
-            *value = QString::fromUtf8(parsed->data(), static_cast<qsizetype>(parsed->size()));
-            return true;
+            return std::unexpected(QStringLiteral("'%1' must be a TOML string").arg(path));
         }
 
         bool isIntegerVariant(const QVariant& value) {
@@ -137,46 +88,53 @@ namespace Hyprcast::Overlay {
             return type == QMetaType::Int || type == QMetaType::LongLong || type == QMetaType::UInt || type == QMetaType::ULongLong;
         }
 
-        bool validateOptionValue(const ThemeOption& option, const QVariant& value, QString* error, const QString& path) {
-            if (option.type == QStringLiteral("boolean")) {
-                if (value.metaType().id() != QMetaType::Bool) {
-                    return fail(error, QStringLiteral("'%1' must be a boolean").arg(path));
-                }
-            } else if (option.type == QStringLiteral("integer")) {
-                if (!isIntegerVariant(value)) {
-                    return fail(error, QStringLiteral("'%1' must be an integer").arg(path));
-                }
-            } else if (option.type == QStringLiteral("number")) {
-                if (!isIntegerVariant(value) && value.metaType().id() != QMetaType::Double) {
-                    return fail(error, QStringLiteral("'%1' must be a number").arg(path));
-                }
-                if (!std::isfinite(value.toDouble())) {
-                    return fail(error, QStringLiteral("'%1' must be finite").arg(path));
-                }
-            } else if (option.type == QStringLiteral("string")) {
-                if (value.metaType().id() != QMetaType::QString || value.toString().size() > 4096 || value.toString().contains(QChar::Null)) {
-                    return fail(error, QStringLiteral("'%1' must be a string no longer than 4096 characters").arg(path));
-                }
-            } else if (option.type == QStringLiteral("enum")) {
-                if (value.metaType().id() != QMetaType::QString || !option.choices.contains(value.toString())) {
-                    return fail(error, QStringLiteral("'%1' must be one of: %2").arg(path, option.choices.join(QStringLiteral(", "))));
-                }
-            } else if (option.type == QStringLiteral("color")) {
-                if (value.metaType().id() != QMetaType::QString || !QColor(value.toString()).isValid()) {
-                    return fail(error, QStringLiteral("'%1' must be a valid Qt color, for example '#ffffff'").arg(path));
-                }
+        std::expected<void, QString> validateOptionValue(const ThemeOption& option, const QVariant& value, const QString& path) {
+            const int  typeId   = value.metaType().id();
+            const bool isString = typeId == QMetaType::QString;
+            switch (option.type) {
+                case ThemeOptionType::Boolean:
+                    if (typeId != QMetaType::Bool) {
+                        return std::unexpected(QStringLiteral("'%1' must be a boolean").arg(path));
+                    }
+                    break;
+                case ThemeOptionType::Integer:
+                    if (!isIntegerVariant(value)) {
+                        return std::unexpected(QStringLiteral("'%1' must be an integer").arg(path));
+                    }
+                    break;
+                case ThemeOptionType::Number:
+                    if (!isIntegerVariant(value) && typeId != QMetaType::Double) {
+                        return std::unexpected(QStringLiteral("'%1' must be a number").arg(path));
+                    }
+                    if (!std::isfinite(value.toDouble())) {
+                        return std::unexpected(QStringLiteral("'%1' must be finite").arg(path));
+                    }
+                    break;
+                case ThemeOptionType::String:
+                    if (!isString || value.toString().size() > 4096 || value.toString().contains(QChar::Null)) {
+                        return std::unexpected(QStringLiteral("'%1' must be a string no longer than 4096 characters").arg(path));
+                    }
+                    break;
+                case ThemeOptionType::Enum:
+                    if (!isString || !option.choices.contains(value.toString())) {
+                        return std::unexpected(QStringLiteral("'%1' must be one of: %2").arg(path, option.choices.join(QStringLiteral(", "))));
+                    }
+                    break;
+                case ThemeOptionType::Color:
+                    if (!isString || !QColor(value.toString()).isValid()) {
+                        return std::unexpected(QStringLiteral("'%1' must be a valid Qt color, for example '#ffffff'").arg(path));
+                    }
+                    break;
             }
 
-            if (option.minimum || option.maximum) {
-                const double numeric = value.toDouble();
-                if (option.minimum && numeric < option.minimum->toDouble()) {
-                    return fail(error, QStringLiteral("'%1' must be at least %2").arg(path, option.minimum->toString()));
-                }
-                if (option.maximum && numeric > option.maximum->toDouble()) {
-                    return fail(error, QStringLiteral("'%1' must be at most %2").arg(path, option.maximum->toString()));
-                }
+            const double numeric = value.toDouble();
+            if (option.minimum && numeric < option.minimum->toDouble()) {
+                return std::unexpected(QStringLiteral("'%1' must be at least %2").arg(path, option.minimum->toString()));
             }
-            return true;
+            if (option.maximum && numeric > option.maximum->toDouble()) {
+                return std::unexpected(QStringLiteral("'%1' must be at most %2").arg(path, option.maximum->toString()));
+            }
+            return {};
         }
 
         QString readFileName(const QUrl& url) {
@@ -197,334 +155,321 @@ namespace Hyprcast::Overlay {
             return errors;
         }
 
-        bool pathIsRelativeToPackage(const QString& relativePath, const QString& packageRoot, QString* absolutePath, QString* error) {
+        std::expected<QString, QString> resolveInsidePackage(const QString& relativePath, const QString& packageRoot) {
             if (relativePath.isEmpty() || QDir::isAbsolutePath(relativePath) || relativePath.contains(QChar::Null)) {
-                return fail(error, QStringLiteral("theme entry must be a non-empty relative path"));
+                return std::unexpected(QStringLiteral("theme entry must be a non-empty relative path"));
             }
             const QString clean = QDir::cleanPath(relativePath);
             if (clean == QStringLiteral("..") || clean.startsWith(QStringLiteral("../"))) {
-                return fail(error, QStringLiteral("theme entry must stay inside its theme directory"));
+                return std::unexpected(QStringLiteral("theme entry must stay inside its theme directory"));
             }
             const QString rootCanonical = QFileInfo(packageRoot).canonicalFilePath();
             const QString fileCanonical = QFileInfo(QDir(packageRoot).filePath(clean)).canonicalFilePath();
             if (rootCanonical.isEmpty() || fileCanonical.isEmpty() || !QFileInfo(fileCanonical).isFile() ||
                 !(fileCanonical == rootCanonical || fileCanonical.startsWith(rootCanonical + QDir::separator()))) {
-                return fail(error, QStringLiteral("theme entry '%1' is missing or resolves outside the theme directory").arg(relativePath));
+                return std::unexpected(QStringLiteral("theme entry '%1' is missing or resolves outside the theme directory").arg(relativePath));
             }
-            *absolutePath = fileCanonical;
-            return true;
+            return fileCanonical;
+        }
+
+        // Reads the numeric bound `key` ("minimum" or "maximum") of an integer or number option.
+        std::expected<std::optional<QVariant>, QString> readBound(const toml::table& declaration, std::string_view key, const ThemeOption& option, const QString& prefix) {
+            const auto* node = declaration.get(key);
+            if (!node) {
+                return std::nullopt;
+            }
+            const QString path = prefix + QLatin1Char('.') + toQString(key);
+            if (!isNumeric(option.type)) {
+                return std::unexpected(QStringLiteral("'%1' is only valid for integer and number options").arg(path));
+            }
+            auto value = readOptionValue(*node, option.type, path);
+            if (!value) {
+                return std::unexpected(value.error());
+            }
+            if (option.type == ThemeOptionType::Number && !std::isfinite(value->toDouble())) {
+                return std::unexpected(QStringLiteral("'%1' must be finite").arg(path));
+            }
+            return std::optional<QVariant>{std::move(*value)};
+        }
+
+        std::expected<QStringList, QString> readChoices(const toml::node& node, const QString& prefix) {
+            const auto* array = node.as_array();
+            if (!array || array->empty()) {
+                return std::unexpected(QStringLiteral("'%1.values' must be a non-empty array of strings").arg(prefix));
+            }
+            QStringList choices;
+            for (const auto& item : *array) {
+                const auto value = item.value_exact<std::string>();
+                if (!value) {
+                    return std::unexpected(QStringLiteral("'%1.values' must contain only strings").arg(prefix));
+                }
+                choices.push_back(toQString(*value));
+            }
+            if (choices.removeDuplicates() != 0) {
+                return std::unexpected(QStringLiteral("'%1.values' must not contain duplicates").arg(prefix));
+            }
+            return choices;
+        }
+
+        std::expected<ThemeOption, QString> readOptionDeclaration(const QString& name, const toml::node& node) {
+            const QString prefix      = QStringLiteral("options.%1").arg(name);
+            const auto*   declaration = node.as_table();
+            if (!declaration) {
+                return std::unexpected(QStringLiteral("'%1' must be a TOML table").arg(prefix));
+            }
+
+            ThemeOption option;
+            TableReader read(*declaration, prefix, ManifestLabel);
+            read.onlyKeys({"type", "default", "minimum", "maximum", "values", "description"})
+                .required("type")
+                .choice("type", option.type, [&](QStringView text) { return parseOptionType(text, prefix + QStringLiteral(".type")); })
+                .required("default")
+                .node("default",
+                      [&](const toml::node& value) {
+                          return readOptionValue(value, option.type, prefix + QStringLiteral(".default")).transform([&](QVariant parsed) {
+                              option.defaultValue = std::move(parsed);
+                          });
+                      })
+                .string("description", option.description);
+            if (auto ok = read.result(); !ok) {
+                return std::unexpected(ok.error());
+            }
+
+            auto minimum = readBound(*declaration, "minimum", option, prefix);
+            if (!minimum) {
+                return std::unexpected(minimum.error());
+            }
+            auto maximum = readBound(*declaration, "maximum", option, prefix);
+            if (!maximum) {
+                return std::unexpected(maximum.error());
+            }
+            option.minimum = std::move(*minimum);
+            option.maximum = std::move(*maximum);
+
+            if (const auto* values = declaration->get("values")) {
+                if (option.type != ThemeOptionType::Enum) {
+                    return std::unexpected(QStringLiteral("'%1.values' is only valid for enum options").arg(prefix));
+                }
+                auto choices = readChoices(*values, prefix);
+                if (!choices) {
+                    return std::unexpected(choices.error());
+                }
+                option.choices = std::move(*choices);
+            }
+            if (option.type == ThemeOptionType::Enum && option.choices.isEmpty()) {
+                return std::unexpected(QStringLiteral("enum option '%1' must declare values").arg(name));
+            }
+            if (option.minimum && option.maximum && option.minimum->toDouble() > option.maximum->toDouble()) {
+                return std::unexpected(QStringLiteral("'%1.minimum' must not exceed maximum").arg(prefix));
+            }
+            if (auto ok = validateOptionValue(option, option.defaultValue, prefix + QStringLiteral(".default")); !ok) {
+                return std::unexpected(ok.error());
+            }
+            if (option.description.size() > 1024 || option.description.contains(QChar::Null)) {
+                return std::unexpected(QStringLiteral("'%1.description' must be at most 1024 characters and contain no NUL").arg(prefix));
+            }
+            return option;
+        }
+
+        std::expected<ThemeDescriptor, QString> loadDescriptor(const QUrl& manifestUrl, bool bundled, const QString& expectedId) {
+            const QString manifestFile = readFileName(manifestUrl);
+            QFile         file(manifestFile);
+            if (manifestFile.isEmpty() || !file.open(QIODevice::ReadOnly)) {
+                return std::unexpected(QStringLiteral("cannot read theme manifest '%1'").arg(manifestUrl.toString()));
+            }
+            if (file.size() > 256 * 1024) {
+                return std::unexpected(QStringLiteral("theme manifest exceeds 256 KiB"));
+            }
+            const QByteArray contents = file.readAll();
+
+            toml::table      parsed;
+            try {
+                parsed = toml::parse(std::string_view(contents.constData(), static_cast<std::size_t>(contents.size())), manifestUrl.toString().toStdString());
+            } catch (const std::exception& exception) { // toml::parse_error derives from std::runtime_error.
+                return std::unexpected(QString::fromUtf8(exception.what()));
+            }
+
+            if (auto ok = TableReader(parsed, {}, ManifestLabel).onlyKeys({"theme", "options"}).result(); !ok) {
+                return std::unexpected(ok.error());
+            }
+            const auto theme = Toml::optionalTable(parsed, "theme");
+            if (!theme || !*theme) {
+                return std::unexpected(QStringLiteral("theme manifest must contain a [theme] table"));
+            }
+
+            ThemeDescriptor result;
+            result.bundled = bundled;
+            QString     entry;
+            TableReader read(**theme, QStringLiteral("theme"), ManifestLabel);
+            read.onlyKeys({"id", "name", "api_version", "entry"})
+                .required("id")
+                .string("id", result.id)
+                .required("entry")
+                .string("entry", entry)
+                .string("name", result.name)
+                .required("api_version")
+                .integer("api_version", result.apiVersion);
+            if (auto ok = read.result(); !ok) {
+                return std::unexpected(ok.error());
+            }
+            if (entry.size() > 1024 || entry.contains(QChar::Null)) {
+                return std::unexpected(QStringLiteral("theme.entry must be at most 1024 characters and contain no NUL"));
+            }
+            if (result.name.isEmpty()) {
+                result.name = result.id;
+            }
+            if (!validThemeId(result.id)) {
+                return std::unexpected(QStringLiteral("theme id '%1' must match [a-z0-9][a-z0-9._-]{0,63} and not use the reserved 'builtin.' prefix").arg(result.id));
+            }
+            if (!expectedId.isEmpty() && result.id != expectedId) {
+                return std::unexpected(QStringLiteral("manifest id '%1' does not match directory name '%2'").arg(result.id, expectedId));
+            }
+            if (result.apiVersion != ThemeApiVersion) {
+                return std::unexpected(
+                    QStringLiteral("theme '%1' requires presentation API version %2; this overlay supports version %3").arg(result.id).arg(result.apiVersion).arg(ThemeApiVersion));
+            }
+            if (result.name.size() > 128 || result.name.contains(QChar::Null)) {
+                return std::unexpected(QStringLiteral("theme.name must be at most 128 characters and contain no NUL"));
+            }
+
+            if (bundled) {
+                const QUrl entryUrl = manifestUrl.resolved(QUrl(entry));
+                if (!QFile::exists(readFileName(entryUrl))) {
+                    return std::unexpected(QStringLiteral("bundled theme entry '%1' does not exist").arg(entry));
+                }
+                result.entryUrl = entryUrl;
+            } else {
+                const auto absoluteEntry = resolveInsidePackage(entry, QFileInfo(manifestUrl.toLocalFile()).absolutePath());
+                if (!absoluteEntry) {
+                    return std::unexpected(absoluteEntry.error());
+                }
+                result.entryUrl = QUrl::fromLocalFile(*absoluteEntry);
+            }
+
+            const auto options = Toml::optionalTable(parsed, "options");
+            if (!options) {
+                return std::unexpected(options.error());
+            }
+            if (*options) {
+                for (const auto& [rawName, node] : **options) {
+                    const QString name = toQString(rawName.str());
+                    if (!validOptionName(name)) {
+                        return std::unexpected(QStringLiteral("theme option name '%1' must match [a-z][a-z0-9_]{0,63}").arg(name));
+                    }
+                    auto option = readOptionDeclaration(name, node);
+                    if (!option) {
+                        return std::unexpected(option.error());
+                    }
+                    result.options.insert(name, std::move(*option));
+                }
+            }
+            return result;
         }
     } // namespace
 
     ThemeCatalog::ThemeCatalog(QStringList themeRoots, QUrl bundledManifest) : m_themeRoots(std::move(themeRoots)), m_bundledManifest(std::move(bundledManifest)) {}
 
-    bool ThemeCatalog::discover(QStringList* warnings, QString* error) {
-        if (warnings) {
-            warnings->clear();
-        }
-        if (error) {
-            error->clear();
-        }
+    std::expected<QStringList, QString> ThemeCatalog::discover() {
         m_themes.clear();
         m_rejected.clear();
         m_bundledDefault.reset();
 
-        ThemeDescriptor bundled;
-        QString         bundledError;
-        if (!loadDescriptor(m_bundledManifest, true, {}, &bundled, &bundledError)) {
-            return fail(error, QStringLiteral("bundled default theme is invalid: %1").arg(bundledError));
+        auto bundled = loadDescriptor(m_bundledManifest, true, {});
+        if (!bundled) {
+            return std::unexpected(QStringLiteral("bundled default theme is invalid: %1").arg(bundled.error()));
         }
-        if (bundled.id != QStringLiteral("default")) {
-            return fail(error, QStringLiteral("bundled default manifest must use the reserved id 'default'"));
+        if (bundled->id != QStringLiteral("default")) {
+            return std::unexpected(QStringLiteral("bundled default manifest must use the reserved id 'default'"));
         }
-        m_bundledDefault = bundled;
+        m_bundledDefault = *bundled;
 
+        QStringList   warnings;
         QSet<QString> claimedIds;
         for (const QString& rootPath : m_themeRoots) {
             const QDir root(rootPath);
             if (!root.exists()) {
                 continue;
             }
-            const QFileInfoList directories = root.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-            for (const QFileInfo& directory : directories) {
+            for (const QFileInfo& directory : root.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
                 const QString id = directory.fileName();
                 if (!validThemeId(id)) {
-                    if (warnings) {
-                        warnings->push_back(QStringLiteral("Ignoring theme directory '%1': invalid theme ID").arg(directory.absoluteFilePath()));
-                    }
+                    warnings.push_back(QStringLiteral("Ignoring theme directory '%1': invalid theme ID").arg(directory.absoluteFilePath()));
                     continue;
                 }
                 if (claimedIds.contains(id)) {
-                    if (warnings) {
-                        warnings->push_back(QStringLiteral("Theme '%1' from '%2' is shadowed by a higher-precedence installation").arg(id, directory.absoluteFilePath()));
-                    }
+                    warnings.push_back(QStringLiteral("Theme '%1' from '%2' is shadowed by a higher-precedence installation").arg(id, directory.absoluteFilePath()));
                     continue;
                 }
                 claimedIds.insert(id);
 
-                const QString   manifestPath = QDir(directory.absoluteFilePath()).filePath(QStringLiteral("theme.toml"));
-                ThemeDescriptor descriptor;
-                QString         themeError;
-                if (!loadDescriptor(QUrl::fromLocalFile(manifestPath), false, id, &descriptor, &themeError)) {
-                    m_rejected.insert(id, themeError);
-                    if (warnings) {
-                        warnings->push_back(QStringLiteral("Ignoring theme directory '%1': %2").arg(directory.absoluteFilePath(), themeError));
-                    }
+                const QString manifestPath = QDir(directory.absoluteFilePath()).filePath(QStringLiteral("theme.toml"));
+                auto          descriptor   = loadDescriptor(QUrl::fromLocalFile(manifestPath), false, id);
+                if (!descriptor) {
+                    m_rejected.insert(id, descriptor.error());
+                    warnings.push_back(QStringLiteral("Ignoring theme directory '%1': %2").arg(directory.absoluteFilePath(), descriptor.error()));
                     continue;
                 }
-                m_themes.insert(descriptor.id, std::move(descriptor));
+                m_themes.insert(descriptor->id, std::move(*descriptor));
             }
         }
 
-        if (!claimedIds.contains(bundled.id)) {
-            m_themes.insert(bundled.id, bundled);
-        } else if (warnings) {
-            warnings->push_back(QStringLiteral("Bundled theme '%1' is shadowed; select 'builtin:default' to use it explicitly").arg(bundled.id));
+        if (!claimedIds.contains(bundled->id)) {
+            m_themes.insert(bundled->id, *bundled);
+        } else {
+            warnings.push_back(QStringLiteral("Bundled theme '%1' is shadowed; select '%2' to use it explicitly").arg(bundled->id, BuiltinDefaultId));
         }
-        return true;
+        return warnings;
     }
 
-    bool ThemeCatalog::resolve(const QString& id, ThemeDescriptor* descriptor, QString* error) const {
-        if (!descriptor) {
-            return fail(error, QStringLiteral("internal error: null theme descriptor destination"));
-        }
-        if (id == QStringLiteral("builtin:default")) {
+    std::expected<const ThemeDescriptor*, QString> ThemeCatalog::resolve(const QString& id) const {
+        if (id == BuiltinDefaultId) {
             if (!m_bundledDefault) {
-                return fail(error, QStringLiteral("bundled default theme has not been discovered"));
+                return std::unexpected(QStringLiteral("bundled default theme has not been discovered"));
             }
-            *descriptor = *m_bundledDefault;
-            return true;
+            return &*m_bundledDefault;
         }
         const auto found = m_themes.constFind(id);
-        if (found == m_themes.cend()) {
-            const auto rejected = m_rejected.constFind(id);
-            if (rejected != m_rejected.cend()) {
-                return fail(error, QStringLiteral("theme '%1' could not be loaded: %2").arg(id, rejected.value()));
-            }
-            return fail(error, QStringLiteral("theme '%1' was not found; available themes: %2").arg(id, availableThemeIds().join(QStringLiteral(", "))));
+        if (found != m_themes.cend()) {
+            return &found.value();
         }
-        *descriptor = found.value();
-        return true;
+        const auto rejected = m_rejected.constFind(id);
+        if (rejected != m_rejected.cend()) {
+            return std::unexpected(QStringLiteral("theme '%1' could not be loaded: %2").arg(id, rejected.value()));
+        }
+        return std::unexpected(QStringLiteral("theme '%1' was not found; available themes: %2").arg(id, availableThemeIds().join(QStringLiteral(", "))));
     }
 
-    bool ThemeCatalog::validateOptions(const QString& id, const QVariantMap& supplied, QVariantMap* effective, QString* error) const {
-        ThemeDescriptor descriptor;
-        if (!resolve(id, &descriptor, error)) {
-            return false;
+    std::expected<QVariantMap, QString> ThemeCatalog::validateOptions(const QString& id, const QVariantMap& supplied) const {
+        const auto descriptor = resolve(id);
+        if (!descriptor) {
+            return std::unexpected(descriptor.error());
         }
-        if (!effective) {
-            return fail(error, QStringLiteral("internal error: null theme option destination"));
-        }
-
+        const auto& declared = (*descriptor)->options;
         for (auto it = supplied.cbegin(); it != supplied.cend(); ++it) {
-            if (!descriptor.options.contains(it.key())) {
-                return fail(error, QStringLiteral("unknown option 'theme.options.%1' for theme '%2'").arg(it.key(), id));
+            if (!declared.contains(it.key())) {
+                return std::unexpected(QStringLiteral("unknown option 'theme.options.%1' for theme '%2'").arg(it.key(), id));
             }
         }
 
         QVariantMap values;
-        for (auto it = descriptor.options.cbegin(); it != descriptor.options.cend(); ++it) {
-            const ThemeOption& option = it.value();
-            const QVariant     value  = supplied.contains(it.key()) ? supplied.value(it.key()) : option.defaultValue;
-            if (!validateOptionValue(option, value, error, QStringLiteral("theme.options.%1").arg(it.key()))) {
-                return false;
+        for (auto it = declared.cbegin(); it != declared.cend(); ++it) {
+            const QVariant value = supplied.contains(it.key()) ? supplied.value(it.key()) : it.value().defaultValue;
+            if (auto ok = validateOptionValue(it.value(), value, QStringLiteral("theme.options.%1").arg(it.key())); !ok) {
+                return std::unexpected(ok.error());
             }
             values.insert(it.key(), value);
         }
-        *effective = std::move(values);
-        return true;
+        return values;
     }
 
     QStringList ThemeCatalog::availableThemeIds() const {
         QStringList ids = m_themes.keys();
         if (m_bundledDefault) {
-            ids.push_back(QStringLiteral("builtin:default"));
+            ids.push_back(BuiltinDefaultId);
         }
         ids.removeDuplicates();
-        std::sort(ids.begin(), ids.end());
+        std::ranges::sort(ids);
         return ids;
-    }
-
-    bool ThemeCatalog::loadDescriptor(const QUrl& manifestUrl, bool bundled, const QString& expectedId, ThemeDescriptor* descriptor, QString* error) const {
-        if (!descriptor) {
-            return fail(error, QStringLiteral("internal error: null theme manifest destination"));
-        }
-        const QString manifestFile = readFileName(manifestUrl);
-        QFile         file(manifestFile);
-        if (manifestFile.isEmpty() || !file.open(QIODevice::ReadOnly)) {
-            return fail(error, QStringLiteral("cannot read theme manifest '%1'").arg(manifestUrl.toString()));
-        }
-        if (file.size() > 256 * 1024) {
-            return fail(error, QStringLiteral("theme manifest exceeds 256 KiB"));
-        }
-        const QByteArray contents = file.readAll();
-
-        try {
-            const Table parsed = toml::parse(std::string_view(contents.constData(), static_cast<std::size_t>(contents.size())), manifestUrl.toString().toStdString());
-            if (!hasOnlyKeys(parsed, {"theme", "options"}, {}, error)) {
-                return false;
-            }
-            const Table* theme = readTable(parsed, "theme", error);
-            if (!theme) {
-                return fail(error, QStringLiteral("theme manifest must contain a [theme] table"));
-            }
-            if (!hasOnlyKeys(*theme, {"id", "name", "api_version", "entry"}, QStringLiteral("theme"), error)) {
-                return false;
-            }
-
-            ThemeDescriptor result;
-            result.bundled = bundled;
-            if (!readString(*theme, "id", &result.id, error, true)) {
-                return false;
-            }
-            QString entry;
-            if (!readString(*theme, "entry", &entry, error, true)) {
-                return false;
-            }
-            if (entry.size() > 1024 || entry.contains(QChar::Null)) {
-                return fail(error, QStringLiteral("theme.entry must be at most 1024 characters and contain no NUL"));
-            }
-            if (!readString(*theme, "name", &result.name, error)) {
-                return false;
-            }
-            if (result.name.isEmpty()) {
-                result.name = result.id;
-            }
-            if (!readInteger(*theme, "api_version", &result.apiVersion, error)) {
-                return false;
-            }
-            if (!validThemeId(result.id)) {
-                return fail(error, QStringLiteral("theme id '%1' must match [a-z0-9][a-z0-9._-]{0,63} and not use the reserved 'builtin.' prefix").arg(result.id));
-            }
-            if (!expectedId.isEmpty() && result.id != expectedId) {
-                return fail(error, QStringLiteral("manifest id '%1' does not match directory name '%2'").arg(result.id, expectedId));
-            }
-            if (result.apiVersion != 1) {
-                return fail(error, QStringLiteral("theme '%1' requires presentation API version %2; this overlay supports version 1").arg(result.id).arg(result.apiVersion));
-            }
-            if (result.name.size() > 128 || result.name.contains(QChar::Null)) {
-                return fail(error, QStringLiteral("theme.name must be at most 128 characters and contain no NUL"));
-            }
-
-            if (bundled) {
-                const QUrl entryUrl = manifestUrl.resolved(QUrl(entry));
-                if (!QFile::exists(readFileName(entryUrl))) {
-                    return fail(error, QStringLiteral("bundled theme entry '%1' does not exist").arg(entry));
-                }
-                result.entryUrl = entryUrl;
-            } else {
-                const QString packageRoot = QFileInfo(manifestUrl.toLocalFile()).absolutePath();
-                QString       absoluteEntry;
-                if (!pathIsRelativeToPackage(entry, packageRoot, &absoluteEntry, error)) {
-                    return false;
-                }
-                result.entryUrl = QUrl::fromLocalFile(absoluteEntry);
-            }
-
-            const Table* options = readTable(parsed, "options", error);
-            if (options) {
-                for (const auto& [rawName, node] : *options) {
-                    const QString name = keyString(rawName.str());
-                    if (!validOptionName(name)) {
-                        return fail(error, QStringLiteral("theme option name '%1' must match [a-z][a-z0-9_]{0,63}").arg(name));
-                    }
-                    const Table* declaration = node.as_table();
-                    if (!declaration) {
-                        return fail(error, QStringLiteral("'options.%1' must be a TOML table").arg(name));
-                    }
-                    const QString prefix = QStringLiteral("options.%1").arg(name);
-                    if (!hasOnlyKeys(*declaration, {"type", "default", "minimum", "maximum", "values", "description"}, prefix, error)) {
-                        return false;
-                    }
-                    ThemeOption option;
-                    if (!readString(*declaration, "type", &option.type, error, true)) {
-                        return false;
-                    }
-                    option.type = option.type.toLower();
-                    const QStringList supportedTypes{QStringLiteral("boolean"), QStringLiteral("integer"), QStringLiteral("number"),
-                                                     QStringLiteral("string"),  QStringLiteral("enum"),    QStringLiteral("color")};
-                    if (!supportedTypes.contains(option.type)) {
-                        return fail(error, QStringLiteral("'%1.type' must be boolean, integer, number, string, enum, or color").arg(prefix));
-                    }
-                    const auto* defaultNode = declaration->get("default");
-                    if (!defaultNode) {
-                        return fail(error, QStringLiteral("missing required theme option default '%1.default'").arg(prefix));
-                    }
-                    if (!readTomlOptionValue(*defaultNode, option.type, &option.defaultValue, error, prefix + QStringLiteral(".default"))) {
-                        return false;
-                    }
-                    if (!readString(*declaration, "description", &option.description, error)) {
-                        return false;
-                    }
-                    if (const auto* minimum = declaration->get("minimum")) {
-                        if (option.type != QStringLiteral("integer") && option.type != QStringLiteral("number")) {
-                            return fail(error, QStringLiteral("'%1.minimum' is only valid for integer and number options").arg(prefix));
-                        }
-                        QVariant value;
-                        if (!readTomlOptionValue(*minimum, option.type, &value, error, prefix + QStringLiteral(".minimum"))) {
-                            return false;
-                        }
-                        if (option.type == QStringLiteral("number") && !std::isfinite(value.toDouble())) {
-                            return fail(error, QStringLiteral("'%1.minimum' must be finite").arg(prefix));
-                        }
-                        option.minimum = value;
-                    }
-                    if (const auto* maximum = declaration->get("maximum")) {
-                        if (option.type != QStringLiteral("integer") && option.type != QStringLiteral("number")) {
-                            return fail(error, QStringLiteral("'%1.maximum' is only valid for integer and number options").arg(prefix));
-                        }
-                        QVariant value;
-                        if (!readTomlOptionValue(*maximum, option.type, &value, error, prefix + QStringLiteral(".maximum"))) {
-                            return false;
-                        }
-                        if (option.type == QStringLiteral("number") && !std::isfinite(value.toDouble())) {
-                            return fail(error, QStringLiteral("'%1.maximum' must be finite").arg(prefix));
-                        }
-                        option.maximum = value;
-                    }
-                    if (const auto* values = declaration->get("values")) {
-                        if (option.type != QStringLiteral("enum")) {
-                            return fail(error, QStringLiteral("'%1.values' is only valid for enum options").arg(prefix));
-                        }
-                        const auto* array = values->as_array();
-                        if (!array || array->empty()) {
-                            return fail(error, QStringLiteral("'%1.values' must be a non-empty array of strings").arg(prefix));
-                        }
-                        for (const auto& item : *array) {
-                            const auto value = item.value_exact<std::string>();
-                            if (!value) {
-                                return fail(error, QStringLiteral("'%1.values' must contain only strings").arg(prefix));
-                            }
-                            option.choices.push_back(QString::fromUtf8(value->data(), static_cast<qsizetype>(value->size())));
-                        }
-                        const qsizetype choiceCount = option.choices.size();
-                        option.choices.removeDuplicates();
-                        if (option.choices.size() != choiceCount) {
-                            return fail(error, QStringLiteral("'%1.values' must not contain duplicates").arg(prefix));
-                        }
-                    }
-                    if (option.type == QStringLiteral("enum") && option.choices.isEmpty()) {
-                        return fail(error, QStringLiteral("enum option '%1' must declare values").arg(name));
-                    }
-                    if (option.minimum && option.maximum && option.minimum->toDouble() > option.maximum->toDouble()) {
-                        return fail(error, QStringLiteral("'%1.minimum' must not exceed maximum").arg(prefix));
-                    }
-                    if (!validateOptionValue(option, option.defaultValue, error, prefix + QStringLiteral(".default"))) {
-                        return false;
-                    }
-                    if (option.description.size() > 1024 || option.description.contains(QChar::Null)) {
-                        return fail(error, QStringLiteral("'%1.description' must be at most 1024 characters and contain no NUL").arg(prefix));
-                    }
-                    result.options.insert(name, std::move(option));
-                }
-            } else if (error && !error->isEmpty()) {
-                return false;
-            }
-            *descriptor = std::move(result);
-            return true;
-        } catch (const toml::parse_error& exception) { return fail(error, QString::fromUtf8(exception.what())); } catch (const std::exception& exception) {
-            return fail(error, QString::fromUtf8(exception.what()));
-        }
     }
 
     ThemeApi::ThemeApi(KeyboardPresenter& presenter, const OverlayConfig& config, QString themeId, QVariantMap options, QObject* parent) :
@@ -606,34 +551,34 @@ namespace Hyprcast::Overlay {
         }
     }
 
-    bool ThemeRuntime::loadInitial(const OverlayConfig& config, QString* error) {
+    std::expected<void, QString> ThemeRuntime::loadInitial(const OverlayConfig& config) {
         if (!m_host) {
-            return fail(error, QStringLiteral("theme host QML root is not a QQuickItem"));
+            return std::unexpected(QStringLiteral("theme host QML root is not a QQuickItem"));
         }
         auto instance = createInstance(config);
         if (!instance) {
-            return fail(error, instance.error());
+            return std::unexpected(instance.error());
         }
         (*instance)->slot->setVisible(true);
         m_active = std::move(*instance);
-        return true;
+        return {};
     }
 
-    bool ThemeRuntime::prepareSwitch(const OverlayConfig& config, QString* error) {
+    std::expected<void, QString> ThemeRuntime::prepareSwitch(const OverlayConfig& config) {
         if (!m_active) {
-            return fail(error, QStringLiteral("no active theme is available to switch from"));
+            return std::unexpected(QStringLiteral("no active theme is available to switch from"));
         }
         if (config.themeId == m_active->id) {
-            return true;
+            return {};
         }
         // This only stages detectable component creation failures. QML is trusted code and may
         // already have performed side effects; staging is not a security or rollback boundary.
         auto candidate = createInstance(config);
         if (!candidate) {
-            return fail(error, candidate.error());
+            return std::unexpected(candidate.error());
         }
         m_staged = std::move(*candidate);
-        return true;
+        return {};
     }
 
     void ThemeRuntime::applyAcceptedConfiguration(const OverlayConfig& config) {
@@ -648,13 +593,12 @@ namespace Hyprcast::Overlay {
             qWarning().noquote() << QStringLiteral("hyprcast-overlay: accepted config references theme '%1' but no matching theme instance is active").arg(config.themeId);
             return;
         }
-        QVariantMap options;
-        QString     error;
-        if (!m_catalog.validateOptions(config.themeId, config.themeOptions, &options, &error)) {
-            qWarning().noquote() << QStringLiteral("hyprcast-overlay: accepted theme options became invalid: %1").arg(error);
+        auto options = m_catalog.validateOptions(config.themeId, config.themeOptions);
+        if (!options) {
+            qWarning().noquote() << QStringLiteral("hyprcast-overlay: accepted theme options became invalid: %1").arg(options.error());
             return;
         }
-        m_active->api->updateConfiguration(config, std::move(options));
+        m_active->api->updateConfiguration(config, std::move(*options));
     }
 
     QString ThemeRuntime::activeThemeId() const {
@@ -662,16 +606,19 @@ namespace Hyprcast::Overlay {
     }
 
     std::expected<std::unique_ptr<ThemeRuntime::Instance>, QString> ThemeRuntime::createInstance(const OverlayConfig& config) {
-        ThemeDescriptor descriptor;
-        QVariantMap     effectiveOptions;
-        QString         error;
-        if (!m_catalog.resolve(config.themeId, &descriptor, &error) || !m_catalog.validateOptions(config.themeId, config.themeOptions, &effectiveOptions, &error)) {
-            return std::unexpected(error);
+        const auto descriptor = m_catalog.resolve(config.themeId);
+        if (!descriptor) {
+            return std::unexpected(descriptor.error());
         }
-        auto instance     = std::make_unique<Instance>();
-        instance->id      = config.themeId;
-        instance->context = std::make_unique<QQmlContext>(m_view.rootContext());
-        instance->api     = new ThemeApi(m_presenter, config, config.themeId, std::move(effectiveOptions), instance->context.get());
+        auto effectiveOptions = m_catalog.validateOptions(config.themeId, config.themeOptions);
+        if (!effectiveOptions) {
+            return std::unexpected(effectiveOptions.error());
+        }
+        const QUrl entryUrl = (*descriptor)->entryUrl;
+        auto       instance = std::make_unique<Instance>();
+        instance->id        = config.themeId;
+        instance->context   = std::make_unique<QQmlContext>(m_view.rootContext());
+        instance->api       = new ThemeApi(m_presenter, config, config.themeId, std::move(*effectiveOptions), instance->context.get());
         instance->context->setContextProperty(QStringLiteral("hyprcast"), instance->api);
         instance->slot = QObjectOwner<QQuickItem>(new QQuickItem(m_host));
         instance->slot->setObjectName(QStringLiteral("hyprcastThemeSlot"));
@@ -679,10 +626,10 @@ namespace Hyprcast::Overlay {
         instance->slot->setSize(m_host->size());
         instance->slot->setVisible(false);
 
-        QQmlComponent component(m_view.engine(), descriptor.entryUrl, QQmlComponent::PreferSynchronous);
+        QQmlComponent component(m_view.engine(), entryUrl, QQmlComponent::PreferSynchronous);
         if (component.isError()) {
             return std::unexpected(
-                QStringLiteral("theme '%1' failed to load '%2':\n%3").arg(config.themeId, descriptor.entryUrl.toString(), componentErrors(component).join(QLatin1Char('\n'))));
+                QStringLiteral("theme '%1' failed to load '%2':\n%3").arg(config.themeId, entryUrl.toString(), componentErrors(component).join(QLatin1Char('\n'))));
         }
         // Creation evaluates theme QML (including Component.onCompleted handlers).
         std::unique_ptr<QObject> object{component.create(instance->context.get())};
@@ -690,7 +637,7 @@ namespace Hyprcast::Overlay {
         if (component.isError() || !root) {
             const QString message = componentErrors(component).join(QLatin1Char('\n'));
             return std::unexpected(QStringLiteral("theme '%1' must create a QQuickItem root; loading '%2' failed%3")
-                                       .arg(config.themeId, descriptor.entryUrl.toString(), message.isEmpty() ? QString{} : QStringLiteral(":\n") + message));
+                                       .arg(config.themeId, entryUrl.toString(), message.isEmpty() ? QString{} : QStringLiteral(":\n") + message));
         }
         root->setParent(instance->slot.get());
         root->setParentItem(instance->slot.get());

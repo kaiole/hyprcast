@@ -44,9 +44,55 @@ namespace Hyprcast::Overlay {
             }
             return true;
         }
+
+        // Canonical label: text as typed, chords as "Mod+Key", keys by name.
+        QString rawLabel(const InterpretedAction& action) {
+            switch (action.kind) {
+                case InterpretedActionKind::Text: return action.text;
+                case InterpretedActionKind::Chord: {
+                    QStringList parts = action.modifiers;
+                    if (!action.key.isEmpty()) {
+                        parts.push_back(action.key);
+                    }
+                    return parts.join(QLatin1Char('+'));
+                }
+                case InterpretedActionKind::Key: return action.key;
+            }
+            return {};
+        }
+
+        QString kindName(InterpretedActionKind kind) {
+            switch (kind) {
+                case InterpretedActionKind::Text: return QStringLiteral("text");
+                case InterpretedActionKind::Key: return QStringLiteral("key");
+                case InterpretedActionKind::Chord: return QStringLiteral("chord");
+            }
+            return {};
+        }
+
+        bool isPlainBackspace(const InterpretedAction& action) {
+            return action.kind == InterpretedActionKind::Key && action.key == QStringLiteral("Backspace") && action.modifiers.isEmpty();
+        }
+
+        qsizetype nextGraphemeBoundary(const QString& text, qsizetype position) {
+            if (position <= 0) {
+                return 0;
+            }
+            if (position >= text.size()) {
+                return text.size();
+            }
+
+            QTextBoundaryFinder finder(QTextBoundaryFinder::Grapheme, text);
+            finder.setPosition(position);
+            if (finder.isAtBoundary()) {
+                return position;
+            }
+            const qsizetype boundary = finder.toNextBoundary();
+            return boundary < 0 ? text.size() : boundary;
+        }
     } // namespace
 
-    HistoryProjectionModel::HistoryProjectionModel(const HistoryListModel* source, QObject* parent) : QAbstractListModel(parent), m_source(source) {}
+    HistoryProjectionModel::HistoryProjectionModel(const HistoryListModel& source, QObject* parent) : QAbstractListModel(parent), m_source(source) {}
 
     int HistoryProjectionModel::rowCount(const QModelIndex& parent) const {
         return parent.isValid() ? 0 : static_cast<int>(m_rows.size());
@@ -54,7 +100,7 @@ namespace Hyprcast::Overlay {
 
     QString HistoryProjectionModel::mappedText(const QString& text) const {
         QString result = text;
-        result.replace(QLatin1Char(' '), m_source->presentationOptions().spaceSymbol);
+        result.replace(QLatin1Char(' '), m_source.presentationOptions().spaceSymbol);
         return result;
     }
 
@@ -65,25 +111,11 @@ namespace Hyprcast::Overlay {
         if (modifierKeys.contains(identity)) {
             return mappedModifier(identity);
         }
-        return m_source->presentationOptions().keySymbols.value(identity, identity).toString();
+        return m_source.presentationOptions().keySymbols.value(identity, identity).toString();
     }
 
     QString HistoryProjectionModel::mappedModifier(const QString& identity) const {
-        return m_source->presentationOptions().modifierSymbols.value(identity, identity).toString();
-    }
-
-    QString HistoryProjectionModel::rawLabel(const InterpretedAction& action) const {
-        if (action.kind == InterpretedActionKind::Text) {
-            return action.text;
-        }
-        if (action.kind == InterpretedActionKind::Chord) {
-            QStringList parts = action.modifiers;
-            if (!action.key.isEmpty()) {
-                parts.push_back(action.key);
-            }
-            return parts.join(QLatin1Char('+'));
-        }
-        return action.key;
+        return m_source.presentationOptions().modifierSymbols.value(identity, identity).toString();
     }
 
     QString HistoryProjectionModel::displayLabel(const InterpretedAction& action) const {
@@ -116,13 +148,7 @@ namespace Hyprcast::Overlay {
                 }
                 return row.displayLabel + QStringLiteral(" x") + QString::number(row.occurrences);
             case EntryIdRole: return QVariant::fromValue<qulonglong>(row.source.id);
-            case KindRole:
-                switch (action.kind) {
-                    case InterpretedActionKind::Text: return QStringLiteral("text");
-                    case InterpretedActionKind::Key: return QStringLiteral("key");
-                    case InterpretedActionKind::Chord: return QStringLiteral("chord");
-                }
-                return {};
+            case KindRole: return kindName(action.kind);
             case TextRole: return action.text;
             case KeyRole: return action.key;
             case ModifiersRole: return action.modifiers;
@@ -150,20 +176,12 @@ namespace Hyprcast::Overlay {
                 {RepeatCountRole, "repeatCount"}};
     }
 
-    QString HistoryProjectionModel::displayText() const {
-        return formatText(false);
-    }
-
-    QString HistoryProjectionModel::displayRichText() const {
-        return formatText(true);
-    }
-
     QString HistoryProjectionModel::formatText(bool rich) const {
         QString       result;
-        const QString symbolFont = m_source->presentationOptions().symbolFontFamily;
+        const QString symbolFont = m_source.presentationOptions().symbolFontFamily;
         for (const Row& row : m_rows) {
             const auto& action       = row.source.action;
-            const auto  visibleCount = row.counted ? std::min(row.occurrences, static_cast<std::uint32_t>(m_source->presentationOptions().repeatThreshold - 1)) : 1u;
+            const auto  visibleCount = row.counted ? std::min(row.occurrences, static_cast<std::uint32_t>(m_source.presentationOptions().repeatThreshold - 1)) : 1u;
             if (action.kind == InterpretedActionKind::Text) {
                 if (row.counted && !result.isEmpty() && !result.endsWith(QLatin1Char(' '))) {
                     result.append(QLatin1Char(' '));
@@ -205,31 +223,38 @@ namespace Hyprcast::Overlay {
         return result;
     }
 
-    bool HistoryProjectionModel::sameRow(const Row& a, const Row& b) const {
+    bool HistoryProjectionModel::sameRow(const Row& a, const Row& b) {
         const auto& x = a.source.action;
         const auto& y = b.source.action;
         return a.source.id == b.source.id && x.kind == y.kind && x.text == y.text && x.key == y.key && x.modifiers == y.modifiers && a.displayLabel == b.displayLabel &&
             a.displayKey == b.displayKey && a.displayModifiers == b.displayModifiers && a.occurrences == b.occurrences && a.counted == b.counted;
     }
 
-    void HistoryProjectionModel::refresh(QSet<quint64>& collapsedRuns) {
-        const QString previousText     = displayText();
-        const QString previousRichText = displayRichText();
-        const auto&   entries          = m_source->entries();
-        const auto&   options          = m_source->presentationOptions();
+    HistoryProjectionModel::Row HistoryProjectionModel::makeRow(const HistoryEntry& entry, std::uint32_t occurrences, bool counted) const {
+        Row row;
+        row.source       = entry;
+        row.displayLabel = displayLabel(entry.action);
+        row.displayKey   = mappedKey(entry.action.key);
+        for (const QString& modifier : entry.action.modifiers) {
+            row.displayModifiers.push_back(mappedModifier(modifier));
+        }
+        row.occurrences = occurrences;
+        row.counted     = counted;
+        return row;
+    }
+
+    QSet<quint64> HistoryProjectionModel::refresh(const QSet<quint64>& collapsedRuns) {
+        const auto&   entries = m_source.entries();
+        const auto&   options = m_source.presentationOptions();
         QSet<quint64> presentRuns;
         for (const auto& entry : entries) {
             if (entry.repeatGroupId != 0) {
                 presentRuns.insert(static_cast<quint64>(entry.repeatGroupId));
             }
         }
-        for (auto it = collapsedRuns.begin(); it != collapsedRuns.end();) {
-            if (!presentRuns.contains(*it)) {
-                it = collapsedRuns.erase(it);
-            } else {
-                ++it;
-            }
-        }
+        // Forget collapsed runs whose entries are gone.
+        QSet<quint64> collapsed = collapsedRuns;
+        collapsed.intersect(presentRuns);
 
         std::vector<Row> nextRows;
         nextRows.reserve(entries.size());
@@ -242,38 +267,29 @@ namespace Hyprcast::Overlay {
                     ++end;
                 }
             }
-            const bool eligibleText =
-                !options.countedRepeats || action.kind != InterpretedActionKind::Text || runId == 0 || end - i <= 1 || textRunHasGraphemeBoundaries(entries, i, end);
-            if (options.countedRepeats && runId != 0 && end - i > 1 && eligibleText && (static_cast<int>(end - i) >= options.repeatThreshold || collapsedRuns.contains(runId))) {
-                if (static_cast<int>(end - i) >= options.repeatThreshold) {
-                    collapsedRuns.insert(runId);
+            const std::size_t runLength = end - i;
+            const bool        eligibleText =
+                !options.countedRepeats || action.kind != InterpretedActionKind::Text || runId == 0 || runLength <= 1 || textRunHasGraphemeBoundaries(entries, i, end);
+            const bool reachedThreshold = static_cast<int>(runLength) >= options.repeatThreshold;
+            if (options.countedRepeats && runId != 0 && runLength > 1 && eligibleText && (reachedThreshold || collapsed.contains(runId))) {
+                if (reachedThreshold) {
+                    collapsed.insert(runId);
                 }
-                Row row;
-                row.source       = entries[i];
-                row.displayLabel = displayLabel(action);
-                row.displayKey   = mappedKey(action.key);
-                for (const QString& modifier : action.modifiers) {
-                    row.displayModifiers.push_back(mappedModifier(modifier));
-                }
-                row.occurrences = static_cast<std::uint32_t>(end - i);
-                row.counted     = true;
-                nextRows.push_back(std::move(row));
+                nextRows.push_back(makeRow(entries[i], static_cast<std::uint32_t>(runLength), true));
                 i = end;
-                continue;
+            } else {
+                nextRows.push_back(makeRow(entries[i], 1, false));
+                ++i;
             }
-
-            Row row;
-            row.source       = entries[i];
-            row.displayLabel = displayLabel(action);
-            row.displayKey   = mappedKey(action.key);
-            for (const QString& modifier : action.modifiers) {
-                row.displayModifiers.push_back(mappedModifier(modifier));
-            }
-            nextRows.push_back(std::move(row));
-            ++i;
         }
 
-        const auto                  oldRows = m_rows;
+        applyRows(std::move(nextRows));
+        return collapsed;
+    }
+
+    // Applies `nextRows` as minimal model changes: keeps the longest run of rows common to
+    // both versions (by entry id), removes/inserts around it, and updates changed rows.
+    void HistoryProjectionModel::applyRows(std::vector<Row> nextRows) {
         QHash<quint64, std::size_t> newPositions;
         newPositions.reserve(static_cast<qsizetype>(nextRows.size()));
         for (std::size_t i = 0; i < nextRows.size(); ++i) {
@@ -286,8 +302,8 @@ namespace Hyprcast::Overlay {
         std::size_t currentOld    = 0;
         std::size_t currentNew    = 0;
         std::size_t currentLength = 0;
-        for (std::size_t i = 0; i < oldRows.size(); ++i) {
-            const auto found = newPositions.constFind(static_cast<quint64>(oldRows[i].source.id));
+        for (std::size_t i = 0; i < m_rows.size(); ++i) {
+            const auto found = newPositions.constFind(static_cast<quint64>(m_rows[i].source.id));
             if (found == newPositions.cend()) {
                 currentLength = 0;
                 continue;
@@ -307,11 +323,17 @@ namespace Hyprcast::Overlay {
             }
         }
 
+        // Decide which kept rows changed before m_rows is reshaped.
+        std::vector<std::size_t> changed;
+        for (std::size_t i = 0; i < bestLength; ++i) {
+            if (!sameRow(m_rows[bestOld + i], nextRows[bestNew + i])) {
+                changed.push_back(bestNew + i);
+            }
+        }
+
         if (bestOld + bestLength < m_rows.size()) {
-            const int first = static_cast<int>(bestOld + bestLength);
-            const int last  = rowCount() - 1;
-            beginRemoveRows({}, first, last);
-            m_rows.erase(m_rows.begin() + first, m_rows.end());
+            beginRemoveRows({}, static_cast<int>(bestOld + bestLength), rowCount() - 1);
+            m_rows.erase(m_rows.begin() + static_cast<std::ptrdiff_t>(bestOld + bestLength), m_rows.end());
             endRemoveRows();
         }
         if (bestOld > 0) {
@@ -321,30 +343,31 @@ namespace Hyprcast::Overlay {
         }
         if (bestNew > 0) {
             beginInsertRows({}, 0, static_cast<int>(bestNew - 1));
-            m_rows.insert(m_rows.begin(), nextRows.begin(), nextRows.begin() + static_cast<std::ptrdiff_t>(bestNew));
+            m_rows.insert(m_rows.begin(), std::make_move_iterator(nextRows.begin()), std::make_move_iterator(nextRows.begin() + static_cast<std::ptrdiff_t>(bestNew)));
             endInsertRows();
         }
         const std::size_t suffixStart = bestNew + bestLength;
         if (suffixStart < nextRows.size()) {
             beginInsertRows({}, static_cast<int>(suffixStart), static_cast<int>(nextRows.size() - 1));
-            m_rows.insert(m_rows.end(), nextRows.begin() + static_cast<std::ptrdiff_t>(suffixStart), nextRows.end());
+            m_rows.insert(m_rows.end(), std::make_move_iterator(nextRows.begin() + static_cast<std::ptrdiff_t>(suffixStart)), std::make_move_iterator(nextRows.end()));
             endInsertRows();
         }
-        for (std::size_t i = 0; i < bestLength; ++i) {
-            const std::size_t oldIndex = bestOld + i;
-            const std::size_t newIndex = bestNew + i;
-            if (!sameRow(oldRows[oldIndex], nextRows[newIndex])) {
-                m_rows[newIndex] = nextRows[newIndex];
-                emit dataChanged(index(static_cast<int>(newIndex)), index(static_cast<int>(newIndex)));
-            }
+        for (const std::size_t row : changed) {
+            m_rows[row] = std::move(nextRows[row]);
+            emit dataChanged(index(static_cast<int>(row)), index(static_cast<int>(row)));
         }
-        if (displayText() != previousText || displayRichText() != previousRichText) {
+
+        QString text     = formatText(false);
+        QString richText = formatText(true);
+        if (text != m_displayText || richText != m_displayRichText) {
+            m_displayText     = std::move(text);
+            m_displayRichText = std::move(richText);
             emit displayTextChanged();
         }
     }
 
     HistoryListModel::HistoryListModel(QObject* parent) : QAbstractListModel(parent) {
-        m_presentation = new HistoryProjectionModel(this, this);
+        m_presentation = new HistoryProjectionModel(*this, this); // Owned by this (Qt parent).
         refreshPresentation();
     }
 
@@ -361,15 +384,9 @@ namespace Hyprcast::Overlay {
         const auto& action = entry.action;
         switch (role) {
             case Qt::DisplayRole:
-            case LabelRole: return label(action);
+            case LabelRole: return rawLabel(action);
             case EntryIdRole: return QVariant::fromValue<qulonglong>(entry.id);
-            case KindRole:
-                switch (action.kind) {
-                    case InterpretedActionKind::Text: return QStringLiteral("text");
-                    case InterpretedActionKind::Key: return QStringLiteral("key");
-                    case InterpretedActionKind::Chord: return QStringLiteral("chord");
-                }
-                return {};
+            case KindRole: return kindName(action.kind);
             case TextRole: return action.text;
             case KeyRole: return action.key;
             case ModifiersRole: return action.modifiers;
@@ -405,7 +422,7 @@ namespace Hyprcast::Overlay {
                 continue;
             }
 
-            const QString entryLabel = label(action);
+            const QString entryLabel = rawLabel(action);
             if (entryLabel.isEmpty()) {
                 continue;
             }
@@ -433,23 +450,6 @@ namespace Hyprcast::Overlay {
         emit displayTextChanged();
     }
 
-    QString HistoryListModel::label(const InterpretedAction& action) const {
-        if (action.kind == InterpretedActionKind::Text) {
-            return action.text;
-        }
-        if (action.kind == InterpretedActionKind::Chord) {
-            QStringList parts = action.modifiers;
-            if (!action.key.isEmpty()) {
-                parts.push_back(action.key);
-            }
-            return parts.join(QLatin1Char('+'));
-        }
-        if (action.kind == InterpretedActionKind::Key) {
-            return action.key;
-        }
-        return {};
-    }
-
     void HistoryListModel::setSnapshot(const std::deque<HistoryEntry>& entries, const HistoryPresentationOptions& presentationOptions, const QSet<quint64>& collapsedRuns) {
         m_presentationOptions = presentationOptions;
         m_collapsedRuns       = collapsedRuns;
@@ -469,7 +469,7 @@ namespace Hyprcast::Overlay {
     }
 
     void HistoryListModel::refreshPresentation() {
-        m_presentation->refresh(m_collapsedRuns);
+        m_collapsedRuns = m_presentation->refresh(m_collapsedRuns);
     }
 
     InputHistory::InputHistory(InputHistoryOptions options, QObject* parent) : HistoryListModel(parent), m_options(options) {
@@ -498,7 +498,7 @@ namespace Hyprcast::Overlay {
             if (action.text.isEmpty()) {
                 return false;
             }
-        } else if (label(action).isEmpty()) {
+        } else if (rawLabel(action).isEmpty()) {
             return false;
         }
 
@@ -556,7 +556,7 @@ namespace Hyprcast::Overlay {
                 continue;
             }
 
-            const QString entryLabel = label(action);
+            const QString entryLabel = rawLabel(action);
             if (entryLabel.isEmpty()) {
                 continue;
             }
@@ -568,10 +568,6 @@ namespace Hyprcast::Overlay {
             hasOutput = true;
         }
         return size;
-    }
-
-    bool InputHistory::isPlainBackspace(const InterpretedAction& action) const {
-        return action.kind == InterpretedActionKind::Key && action.key == QStringLiteral("Backspace") && action.modifiers.isEmpty();
     }
 
     void InputHistory::eraseLast() {
@@ -709,22 +705,5 @@ namespace Hyprcast::Overlay {
             const int lastRow = rowCount() - 1;
             emit      dataChanged(index(lastRow), index(lastRow), {Qt::DisplayRole, TextRole, LabelRole});
         }
-    }
-
-    qsizetype InputHistory::nextGraphemeBoundary(const QString& text, qsizetype position) const {
-        if (position <= 0) {
-            return 0;
-        }
-        if (position >= text.size()) {
-            return text.size();
-        }
-
-        QTextBoundaryFinder finder(QTextBoundaryFinder::Grapheme, text);
-        finder.setPosition(position);
-        if (finder.isAtBoundary()) {
-            return position;
-        }
-        const qsizetype boundary = finder.toNextBoundary();
-        return boundary < 0 ? text.size() : boundary;
     }
 } // namespace Hyprcast::Overlay

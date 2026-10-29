@@ -59,13 +59,19 @@ namespace Hyprcast::Overlay {
         };
         Q_ENUM(Role)
 
-        explicit HistoryProjectionModel(const HistoryListModel* source, QObject* parent = nullptr);
+        explicit HistoryProjectionModel(const HistoryListModel& source, QObject* parent = nullptr);
         [[nodiscard]] int                    rowCount(const QModelIndex& parent = {}) const override;
         [[nodiscard]] QVariant               data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
         [[nodiscard]] QHash<int, QByteArray> roleNames() const override;
-        [[nodiscard]] QString                displayText() const;
-        [[nodiscard]] QString                displayRichText() const;
-        void                                 refresh(QSet<quint64>& collapsedRuns);
+        [[nodiscard]] QString                displayText() const {
+            return m_displayText;
+        }
+        [[nodiscard]] QString displayRichText() const {
+            return m_displayRichText;
+        }
+        // Rebuilds rows from the source. Takes the repeat runs collapsed so far and returns
+        // them updated: runs no longer present are dropped, newly collapsed ones added.
+        [[nodiscard]] QSet<quint64> refresh(const QSet<quint64>& collapsedRuns);
 
       signals:
         void displayTextChanged();
@@ -79,16 +85,19 @@ namespace Hyprcast::Overlay {
             std::uint32_t occurrences = 1;
             bool          counted     = false;
         };
-        [[nodiscard]] QString   rawLabel(const InterpretedAction& action) const;
-        [[nodiscard]] QString   displayLabel(const InterpretedAction& action) const;
-        [[nodiscard]] QString   mappedText(const QString& text) const;
-        [[nodiscard]] QString   mappedKey(const QString& identity) const;
-        [[nodiscard]] QString   mappedModifier(const QString& identity) const;
-        [[nodiscard]] bool      sameRow(const Row& a, const Row& b) const;
-        [[nodiscard]] QString   formatText(bool rich) const;
+        [[nodiscard]] QString     displayLabel(const InterpretedAction& action) const;
+        [[nodiscard]] QString     mappedText(const QString& text) const;
+        [[nodiscard]] QString     mappedKey(const QString& identity) const;
+        [[nodiscard]] QString     mappedModifier(const QString& identity) const;
+        [[nodiscard]] Row         makeRow(const HistoryEntry& entry, std::uint32_t occurrences, bool counted) const;
+        [[nodiscard]] static bool sameRow(const Row& a, const Row& b);
+        [[nodiscard]] QString     formatText(bool rich) const;
+        void                      applyRows(std::vector<Row> nextRows);
 
-        const HistoryListModel* m_source;
-        std::vector<Row>        m_rows;
+        const HistoryListModel&   m_source;
+        std::vector<Row>          m_rows;
+        QString                   m_displayText;
+        QString                   m_displayRichText;
     };
 
     class HistoryListModel : public QAbstractListModel {
@@ -138,7 +147,6 @@ namespace Hyprcast::Overlay {
         void displayTextChanged();
 
       protected:
-        [[nodiscard]] QString      label(const InterpretedAction& action) const;
         void                       refreshPresentation();
         std::deque<HistoryEntry>   m_entries;
         HistoryPresentationOptions m_presentationOptions;
@@ -157,16 +165,14 @@ namespace Hyprcast::Overlay {
         [[nodiscard]] qsizetype retainedUtf16CodeUnits() const;
 
       private:
-        [[nodiscard]] bool      isPlainBackspace(const InterpretedAction& action) const;
-        void                    eraseLast();
-        void                    eraseLastTextGrapheme();
-        void                    trimRetention();
-        void                    removeTextPrefix(qsizetype length, std::size_t entryCount);
-        void                    removeTextSuffix(qsizetype length, std::size_t entryCount);
-        [[nodiscard]] qsizetype nextGraphemeBoundary(const QString& text, qsizetype position) const;
+        void                eraseLast();
+        void                eraseLastTextGrapheme();
+        void                trimRetention();
+        void                removeTextPrefix(qsizetype length, std::size_t entryCount);
+        void                removeTextSuffix(qsizetype length, std::size_t entryCount);
 
-        InputHistoryOptions     m_options;
-        std::uint64_t           m_nextEntryId   = 1;
-        bool                    m_groupBoundary = false; // Prevents a later append from bridging an erased intervening input.
+        InputHistoryOptions m_options;
+        std::uint64_t       m_nextEntryId   = 1;
+        bool                m_groupBoundary = false; // Prevents a later append from bridging an erased intervening input.
     };
 } // namespace Hyprcast::Overlay

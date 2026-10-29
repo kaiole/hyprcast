@@ -24,6 +24,7 @@ namespace Hyprcast::Overlay {
                 m_ipc.restartConnection();
             }
         });
+        // Pending requests are dropped, not replayed on reconnect; resuming capture takes a new toggle.
         connect(&m_ipc, &IpcClient::connectionReset, this, [this] {
             emit activeChanged(false);
             if (m_target || m_restoring) {

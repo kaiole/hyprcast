@@ -464,6 +464,7 @@ namespace Hyprcast::Overlay {
                         }
                     }
                 } else if constexpr (std::is_same_v<T, KeyboardSnapshotMessage>) {
+                    // Snapshots carry no pressed keys; keys held across a reconnect are never inferred.
                     m_impl->keyboards.erase(event.id);
                     Impl::Keyboard keyboard{.modifiers = event.modifiers, .repeatInfo = event.repeatInfo};
                     if (auto installed = Impl::installKeymap(m_impl->context.get(), keyboard, event.keymap); !installed) {

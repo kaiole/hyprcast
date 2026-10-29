@@ -4,10 +4,18 @@
 
 #include <QLocalSocket>
 
+#include <algorithm>
+#include <chrono>
+
 namespace Hyprcast::Overlay {
+    namespace {
+        // How long the plugin has to echo a capture change before we give up.
+        constexpr std::chrono::milliseconds ConfirmTimeout{3000};
+    }
+
     CaptureController::CaptureController(IpcClient& ipc, QObject* parent) : QObject(parent), m_ipc(ipc) {
         m_timeout.setSingleShot(true);
-        m_timeout.setInterval(3000);
+        m_timeout.setInterval(ConfirmTimeout);
         connect(&m_timeout, &QTimer::timeout, this, [this] {
             finish(QStringLiteral("Plugin did not confirm capture; check that the updated Hyprcast plugin is loaded"));
             // A request may have reached the plugin even if its reply was lost.
@@ -27,7 +35,7 @@ namespace Hyprcast::Overlay {
             if (!state) {
                 return;
             }
-            if (m_restoring && monotonicMilliseconds() >= m_restoreDeadline) {
+            if (m_restoring && Clock::now() >= m_restoreDeadline) {
                 finish(QStringLiteral("Capture restoration deadline expired"));
                 return;
             }
@@ -50,23 +58,23 @@ namespace Hyprcast::Overlay {
     void CaptureController::enableWhenReady() {
         m_waitingTarget = true;
         m_waiting       = true;
-        m_timeout.start(3000);
+        m_timeout.start(ConfirmTimeout);
         if (m_ipc.connected() && m_ipc.hasCastingState()) {
             m_waiting = false;
             request(true);
         }
     }
 
-    void CaptureController::restoreWhenReady(bool enabled, qint64 deadline) {
+    void CaptureController::restoreWhenReady(bool enabled, Deadline deadline) {
         m_restoring       = true;
         m_restoreDeadline = deadline;
         m_waitingTarget   = enabled;
         m_waiting         = true;
-        if (monotonicMilliseconds() >= deadline) {
+        if (Clock::now() >= deadline) {
             finish(QStringLiteral("Capture restoration deadline expired"));
             return;
         }
-        m_timeout.setInterval(qMax(1, int(deadline - monotonicMilliseconds())));
+        m_timeout.setInterval(std::max(1, remainingMs(deadline)));
         m_timeout.start();
         if (m_ipc.connected() && m_ipc.hasCastingState()) {
             m_waiting = false;
@@ -92,15 +100,15 @@ namespace Hyprcast::Overlay {
     }
 
     void CaptureController::request(bool enabled) {
-        if (m_restoring && monotonicMilliseconds() >= m_restoreDeadline) {
+        if (m_restoring && Clock::now() >= m_restoreDeadline) {
             finish(QStringLiteral("Capture restoration deadline expired"));
             return;
         }
         m_target = enabled;
         if (m_restoring) {
-            m_timeout.start(int(m_restoreDeadline - monotonicMilliseconds()));
+            m_timeout.start(remainingMs(m_restoreDeadline));
         } else {
-            m_timeout.start(3000);
+            m_timeout.start(ConfirmTimeout);
         }
         if (!m_ipc.setCaptureEnabled(enabled)) {
             finish(QStringLiteral("Cannot send capture request to plugin"));

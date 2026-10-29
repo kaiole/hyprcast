@@ -37,6 +37,9 @@ namespace {
         peer->write(paused ? "{\"event\":\"casting_state\",\"keyboard_id\":0,\"paused\":true}\n" : "{\"event\":\"casting_state\",\"keyboard_id\":0,\"paused\":false}\n");
         peer->flush();
     }
+    bool isOwner(const std::expected<OverlayInstance::Ownership, QString>& result) {
+        return result && *result == OverlayInstance::Ownership::Owner;
+    }
     void startForwarder(QProcess& process, const QString& socket) {
         process.start(QCoreApplication::applicationFilePath(), {QStringLiteral("forward"), socket});
     }
@@ -45,10 +48,9 @@ namespace {
         check(directory.isValid(), "temporary directory");
         const QString   socket = directory.filePath("events.sock");
         OverlayInstance owner(socket);
-        QString         error;
-        check(owner.acquire(false, &error) == OverlayInstance::Result::Owner, "first instance owns lock");
+        check(isOwner(owner.acquire(OverlayInstance::Command::Start)), "first instance owns lock");
         OverlayInstance duplicate(socket);
-        check(duplicate.acquire(false, &error) == OverlayInstance::Result::Error, "plain duplicate rejected");
+        check(!duplicate.acquire(OverlayInstance::Command::Start), "plain duplicate rejected");
 
         QLocalServer plugin;
         check(plugin.listen(socket), "mock plugin listening");
@@ -110,10 +112,9 @@ namespace {
     void testUnavailableAndCleanup() {
         QTemporaryDir directory;
         const QString socket = directory.filePath("missing.sock");
-        QString       error;
         {
             OverlayInstance owner(socket);
-            check(owner.acquire(false, &error) == OverlayInstance::Result::Owner, "owner without plugin");
+            check(isOwner(owner.acquire(OverlayInstance::Command::Start)), "owner without plugin");
             IpcClient         ipc(socket);
             CaptureController capture(ipc);
             QObject::connect(&owner, &OverlayInstance::toggleRequested, &capture, &CaptureController::toggle);
@@ -130,13 +131,13 @@ namespace {
         check(QFile::exists(socket + ".overlay"), "stale socket remains");
         {
             OverlayInstance replacement(socket);
-            check(replacement.acquire(false, &error) == OverlayInstance::Result::Owner, "stale lock and socket recovered");
+            check(isOwner(replacement.acquire(OverlayInstance::Command::Start)), "stale lock and socket recovered");
         }
         QFile obstruction(socket + ".overlay");
         check(obstruction.open(QIODevice::WriteOnly), "create non-socket obstruction");
         obstruction.close();
         OverlayInstance blocked(socket);
-        check(blocked.acquire(false, &error) == OverlayInstance::Result::Error, "never unlink non-socket");
+        check(!blocked.acquire(OverlayInstance::Command::Start), "never unlink non-socket");
         check(QFile::exists(obstruction.fileName()), "obstruction preserved");
     }
 }
@@ -145,13 +146,12 @@ int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     if (app.arguments().size() == 3) {
         OverlayInstance instance(app.arguments().at(2));
-        QString         error;
         const bool      crash  = app.arguments().at(1) == "crash";
-        auto            result = instance.acquire(!crash, &error);
-        if (crash && result == OverlayInstance::Result::Owner) {
+        const auto      result = instance.acquire(crash ? OverlayInstance::Command::Start : OverlayInstance::Command::Toggle);
+        if (crash && isOwner(result)) {
             std::_Exit(0);
         }
-        return result == OverlayInstance::Result::Forwarded ? 0 : 1;
+        return result && *result == OverlayInstance::Ownership::Forwarded ? 0 : 1;
     }
     testLifecycle();
     testUnavailableAndCleanup();

@@ -19,9 +19,15 @@ namespace Hyprcast::Overlay {
     };
 
     struct HeldKey {
-        QString kind;
-        QString identity;
-        QString text;
+        enum class Kind {
+            Modifier,
+            Text,
+            Key,
+        };
+
+        Kind    kind = Kind::Key;
+        QString identity; // Modifier or key label; empty for Text.
+        QString text;     // Produced text; Text only.
     };
 
     struct InterpretedAction {

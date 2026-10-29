@@ -17,13 +17,24 @@ namespace Hyprcast::Overlay {
         QVariantList result;
         const auto&  symbols = m_history.presentationOptions();
         for (const HeldKey& item : m_interpreter.heldKeyItems()) {
-            QString label = item.kind == QStringLiteral("text") ? item.text : item.identity;
-            if (item.kind == QStringLiteral("modifier")) {
-                label = symbols.modifierSymbols.value(item.identity, item.identity).toString();
-            } else if (item.kind == QStringLiteral("key")) {
-                label = symbols.keySymbols.value(item.identity, item.identity).toString();
+            // QML sees the kind as a string; these names are part of the theme API.
+            QString kind;
+            QString label;
+            switch (item.kind) {
+                case HeldKey::Kind::Modifier:
+                    kind  = QStringLiteral("modifier");
+                    label = symbols.modifierSymbols.value(item.identity, item.identity).toString();
+                    break;
+                case HeldKey::Kind::Text:
+                    kind  = QStringLiteral("text");
+                    label = item.text;
+                    break;
+                case HeldKey::Kind::Key:
+                    kind  = QStringLiteral("key");
+                    label = symbols.keySymbols.value(item.identity, item.identity).toString();
+                    break;
             }
-            result.push_back(QVariantMap{{QStringLiteral("kind"), item.kind}, {QStringLiteral("identity"), item.identity}, {QStringLiteral("label"), label}});
+            result.push_back(QVariantMap{{QStringLiteral("kind"), kind}, {QStringLiteral("identity"), item.identity}, {QStringLiteral("label"), label}});
         }
         return result;
     }

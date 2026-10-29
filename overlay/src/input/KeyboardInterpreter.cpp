@@ -422,7 +422,7 @@ namespace Hyprcast::Overlay {
         QStringList heldKeys() const {
             QStringList labels;
             for (const HeldKey& item : heldKeyItems()) {
-                labels.push_back(item.kind == QStringLiteral("text") ? item.text : item.identity);
+                labels.push_back(item.kind == HeldKey::Kind::Text ? item.text : item.identity);
             }
             return labels;
         }
@@ -432,11 +432,11 @@ namespace Hyprcast::Overlay {
             for (const auto& keyboard : keyboards | std::views::values) {
                 for (const auto& key : keyboard.pressed | std::views::values) {
                     if (key.modifier) {
-                        items.push_back({QStringLiteral("modifier"), key.modifierLabel, {}});
+                        items.push_back({.kind = HeldKey::Kind::Modifier, .identity = key.modifierLabel});
                     } else if (key.action.kind == InterpretedActionKind::Text) {
-                        items.push_back({QStringLiteral("text"), {}, key.action.text});
+                        items.push_back({.kind = HeldKey::Kind::Text, .text = key.action.text});
                     } else if (!key.action.key.isEmpty()) {
-                        items.push_back({QStringLiteral("key"), key.action.key, {}});
+                        items.push_back({.kind = HeldKey::Kind::Key, .identity = key.action.key});
                     }
                 }
             }

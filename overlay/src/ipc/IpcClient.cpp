@@ -31,6 +31,8 @@ namespace Hyprcast::Overlay {
         connect(&m_stableConnectionTimer, &QTimer::timeout, this, [this] { m_nextReconnectDelayMs = InitialReconnectDelayMs; });
     }
 
+    // Not rule-of-zero on purpose: destroying m_socket can emit disconnected/errorOccurred,
+    // and our handlers would then touch members that are already destroyed. Detach first.
     IpcClient::~IpcClient() {
         m_started = false;
         m_reconnectTimer.stop();

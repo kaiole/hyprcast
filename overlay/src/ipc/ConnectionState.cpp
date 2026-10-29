@@ -81,6 +81,8 @@ namespace Hyprcast::Overlay {
                     keyboard.repeatDelay = event.delay;
                     m_lastEventSummary   = QStringLiteral("Repeat settings updated · keyboard #%1").arg(event.keyboardId);
                     return true;
+                } else {
+                    static_assert(false, "unhandled ProtocolMessage alternative");
                 }
             },
             message);

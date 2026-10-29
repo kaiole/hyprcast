@@ -41,11 +41,13 @@ namespace Hyprcast::Overlay {
         using Clock = std::chrono::steady_clock;
 
         KeyboardInterpreter();
+        // Defined out of line, where Impl is complete (required for the pimpl's unique_ptr).
         ~KeyboardInterpreter();
-        KeyboardInterpreter(KeyboardInterpreter&&) noexcept;
-        KeyboardInterpreter& operator=(KeyboardInterpreter&&) noexcept;
-        KeyboardInterpreter(const KeyboardInterpreter&)                                    = delete;
-        KeyboardInterpreter&                         operator=(const KeyboardInterpreter&) = delete;
+        // Never moved, so no moved-from (null m_impl) state needs to be handled.
+        KeyboardInterpreter(const KeyboardInterpreter&)                               = delete;
+        KeyboardInterpreter& operator=(const KeyboardInterpreter&)                    = delete;
+        KeyboardInterpreter(KeyboardInterpreter&&)                                    = delete;
+        KeyboardInterpreter&                         operator=(KeyboardInterpreter&&) = delete;
 
         [[nodiscard]] std::vector<InterpretedAction> process(const ProtocolMessage& message, Clock::time_point now, QString* error = nullptr);
         [[nodiscard]] std::vector<InterpretedAction> advance(Clock::time_point now);

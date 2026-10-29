@@ -8,36 +8,28 @@
 #include <limits>
 #include <map>
 #include <optional>
+#include <ranges>
 #include <type_traits>
 #include <utility>
 
 namespace Hyprcast::Overlay {
     namespace {
-        struct ContextDeleter {
-            void operator()(xkb_context* value) const noexcept {
-                if (value) {
-                    xkb_context_unref(value);
-                }
-            }
-        };
-        struct KeymapDeleter {
-            void operator()(xkb_keymap* value) const noexcept {
-                if (value) {
-                    xkb_keymap_unref(value);
-                }
-            }
-        };
-        struct StateDeleter {
-            void operator()(xkb_state* value) const noexcept {
-                if (value) {
-                    xkb_state_unref(value);
-                }
+        // Stateless deleter calling an xkbcommon unref function. unique_ptr never
+        // invokes its deleter on null, so no null check is needed here.
+        template <auto Unref>
+        struct XkbDeleter {
+            template <typename T>
+            void operator()(T* value) const noexcept {
+                Unref(value);
             }
         };
 
-        using ContextPtr = std::unique_ptr<xkb_context, ContextDeleter>;
-        using KeymapPtr  = std::unique_ptr<xkb_keymap, KeymapDeleter>;
-        using StatePtr   = std::unique_ptr<xkb_state, StateDeleter>;
+        using ContextPtr = std::unique_ptr<xkb_context, XkbDeleter<&xkb_context_unref>>;
+        using KeymapPtr  = std::unique_ptr<xkb_keymap, XkbDeleter<&xkb_keymap_unref>>;
+        using StatePtr   = std::unique_ptr<xkb_state, XkbDeleter<&xkb_state_unref>>;
+
+        // Hyprland forwards evdev keycodes; XKB keycodes are offset by 8.
+        constexpr std::uint32_t EvdevToXkbOffset = 8;
 
         struct ModifierDefinition {
             const char* xkbName;
@@ -313,14 +305,14 @@ namespace Hyprcast::Overlay {
             if (!keyboard.state || !keyboard.keymap) {
                 return actions;
             }
-            if (event.keycode > std::numeric_limits<xkb_keycode_t>::max() - 8) {
+            if (event.keycode > std::numeric_limits<xkb_keycode_t>::max() - EvdevToXkbOffset) {
                 if (error) {
                     *error = QStringLiteral("keycode overflows the XKB evdev-to-keycode offset");
                 }
                 return actions;
             }
 
-            const auto xkbKey = static_cast<xkb_keycode_t>(event.keycode + 8);
+            const xkb_keycode_t xkbKey = event.keycode + EvdevToXkbOffset;
             if (xkbKey < xkb_keymap_min_keycode(keyboard.keymap.get()) || xkbKey > xkb_keymap_max_keycode(keyboard.keymap.get())) {
                 if (error) {
                     *error = QStringLiteral("keycode %1 is outside the active XKB keymap").arg(event.keycode);
@@ -333,7 +325,6 @@ namespace Hyprcast::Overlay {
                     return actions;
                 }
 
-                // Hyprland forwards the evdev keycode; XKB keycodes are evdev + 8.
                 // Apply the key locally, then reconcile with the compositor's authoritative
                 // modifier masks when its following modifiers event arrives.
                 xkb_state_update_key(keyboard.state.get(), xkbKey, XKB_KEY_DOWN);
@@ -352,8 +343,7 @@ namespace Hyprcast::Overlay {
                     pressed.action.kind   = InterpretedActionKind::Key;
                     pressed.action.key    = mod;
                 } else {
-                    for (auto& [heldKeycode, held] : keyboard.pressed) {
-                        Q_UNUSED(heldKeycode);
+                    for (auto& held : keyboard.pressed | std::views::values) {
                         if (held.modifier) {
                             held.used = true;
                         }
@@ -406,10 +396,8 @@ namespace Hyprcast::Overlay {
         std::vector<InterpretedAction> advance(TimePoint now) {
             std::vector<InterpretedAction> actions;
             constexpr int                  MaxCatchUpRepeats = 32;
-            for (auto& [keyboardId, keyboard] : keyboards) {
-                Q_UNUSED(keyboardId);
-                for (auto& [keycode, key] : keyboard.pressed) {
-                    Q_UNUSED(keycode);
+            for (auto& keyboard : keyboards | std::views::values) {
+                for (auto& key : keyboard.pressed | std::views::values) {
                     if (!key.repeatDeadline || now < *key.repeatDeadline) {
                         continue;
                     }
@@ -435,10 +423,8 @@ namespace Hyprcast::Overlay {
 
         TimePoint nextRepeatDeadline() const noexcept {
             auto next = TimePoint::max();
-            for (const auto& [keyboardId, keyboard] : keyboards) {
-                Q_UNUSED(keyboardId);
-                for (const auto& [keycode, key] : keyboard.pressed) {
-                    Q_UNUSED(keycode);
+            for (const auto& keyboard : keyboards | std::views::values) {
+                for (const auto& key : keyboard.pressed | std::views::values) {
                     if (key.repeatDeadline && *key.repeatDeadline < next) {
                         next = *key.repeatDeadline;
                     }
@@ -449,10 +435,8 @@ namespace Hyprcast::Overlay {
 
         QString heldModifiers() const {
             QStringList labels;
-            for (const auto& [keyboardId, keyboard] : keyboards) {
-                Q_UNUSED(keyboardId);
-                for (const auto& [keycode, key] : keyboard.pressed) {
-                    Q_UNUSED(keycode);
+            for (const auto& keyboard : keyboards | std::views::values) {
+                for (const auto& key : keyboard.pressed | std::views::values) {
                     if (key.modifier && !labels.contains(key.modifierLabel)) {
                         labels.push_back(key.modifierLabel);
                     }
@@ -471,10 +455,8 @@ namespace Hyprcast::Overlay {
 
         std::vector<HeldKey> heldKeyItems() const {
             std::vector<HeldKey> items;
-            for (const auto& [keyboardId, keyboard] : keyboards) {
-                Q_UNUSED(keyboardId);
-                for (const auto& [keycode, key] : keyboard.pressed) {
-                    Q_UNUSED(keycode);
+            for (const auto& keyboard : keyboards | std::views::values) {
+                for (const auto& key : keyboard.pressed | std::views::values) {
                     if (key.modifier) {
                         items.push_back({QStringLiteral("modifier"), key.modifierLabel, {}});
                     } else if (key.action.kind == InterpretedActionKind::Text) {
@@ -489,15 +471,13 @@ namespace Hyprcast::Overlay {
     };
 
     KeyboardInterpreter::KeyboardInterpreter() : m_impl(std::make_unique<Impl>()) {}
-    KeyboardInterpreter::~KeyboardInterpreter()                                                   = default;
-    KeyboardInterpreter::KeyboardInterpreter(KeyboardInterpreter&&) noexcept                      = default;
-    KeyboardInterpreter&           KeyboardInterpreter::operator=(KeyboardInterpreter&&) noexcept = default;
+    KeyboardInterpreter::~KeyboardInterpreter() = default;
 
     std::vector<InterpretedAction> KeyboardInterpreter::process(const ProtocolMessage& message, Clock::time_point now, QString* error) {
         if (error) {
             error->clear();
         }
-        if (!m_impl || !m_impl->context) {
+        if (!m_impl->context) {
             if (error) {
                 *error = QStringLiteral("cannot initialize XKB context");
             }
@@ -510,8 +490,7 @@ namespace Hyprcast::Overlay {
                 if constexpr (std::is_same_v<T, CastingStateMessage>) {
                     m_impl->paused = event.paused;
                     if (event.paused) {
-                        for (auto& [id, keyboard] : m_impl->keyboards) {
-                            Q_UNUSED(id);
+                        for (auto& keyboard : m_impl->keyboards | std::views::values) {
                             m_impl->resetPressed(keyboard);
                         }
                     }
@@ -549,11 +528,12 @@ namespace Hyprcast::Overlay {
                     if (keyboard != m_impl->keyboards.end()) {
                         keyboard->second.repeatRate  = event.rate;
                         keyboard->second.repeatDelay = event.delay;
-                        for (auto& [keycode, key] : keyboard->second.pressed) {
-                            Q_UNUSED(keycode);
+                        for (auto& key : keyboard->second.pressed | std::views::values) {
                             Impl::configureRepeat(keyboard->second, key, now, m_impl->repeatsEnabled);
                         }
                     }
+                } else {
+                    static_assert(false, "unhandled ProtocolMessage alternative");
                 }
                 return {};
             },
@@ -561,43 +541,38 @@ namespace Hyprcast::Overlay {
     }
 
     std::vector<InterpretedAction> KeyboardInterpreter::advance(Clock::time_point now) {
-        return m_impl ? m_impl->advance(now) : std::vector<InterpretedAction>{};
+        return m_impl->advance(now);
     }
 
     KeyboardInterpreter::Clock::time_point KeyboardInterpreter::nextRepeatDeadline() const noexcept {
-        return m_impl ? m_impl->nextRepeatDeadline() : Clock::time_point::max();
+        return m_impl->nextRepeatDeadline();
     }
 
     QString KeyboardInterpreter::heldModifiers() const {
-        return m_impl ? m_impl->heldModifiers() : QString{};
+        return m_impl->heldModifiers();
     }
 
     QStringList KeyboardInterpreter::heldKeys() const {
-        return m_impl ? m_impl->heldKeys() : QStringList{};
+        return m_impl->heldKeys();
     }
 
     std::vector<HeldKey> KeyboardInterpreter::heldKeyItems() const {
-        return m_impl ? m_impl->heldKeyItems() : std::vector<HeldKey>{};
+        return m_impl->heldKeyItems();
     }
 
     void KeyboardInterpreter::setRepeatsEnabled(bool enabled, Clock::time_point now) {
-        if (!m_impl || m_impl->repeatsEnabled == enabled) {
+        if (m_impl->repeatsEnabled == enabled) {
             return;
         }
         m_impl->repeatsEnabled = enabled;
-        for (auto& [keyboardId, keyboard] : m_impl->keyboards) {
-            Q_UNUSED(keyboardId);
-            for (auto& [keycode, key] : keyboard.pressed) {
-                Q_UNUSED(keycode);
+        for (auto& keyboard : m_impl->keyboards | std::views::values) {
+            for (auto& key : keyboard.pressed | std::views::values) {
                 Impl::configureRepeat(keyboard, key, now, enabled);
             }
         }
     }
 
     void KeyboardInterpreter::reset() noexcept {
-        if (!m_impl) {
-            return;
-        }
         m_impl->keyboards.clear();
         m_impl->paused = false;
     }

@@ -15,12 +15,13 @@
 namespace Hyprcast {
     class CEventServer {
       public:
-        using RegistrySnapshotCB = std::function<void()>;
+        using ConnectedCB    = std::function<void()>; // A client connected and needs a full snapshot.
+        using CaptureCB      = std::function<void(bool enabled)>;
+        using DisconnectedCB = std::function<void()>;
 
-        using CaptureCB = std::function<void(bool)>;
-        explicit CEventServer(RegistrySnapshotCB callback, CaptureCB capture, RegistrySnapshotCB disconnected);
-        ~CEventServer() = default;
+        CEventServer(ConnectedCB onConnected, CaptureCB onCapture, DisconnectedCB onDisconnected);
 
+        // `this` is registered with the Wayland event loop, so the object must never move.
         CEventServer(const CEventServer&)            = delete;
         CEventServer& operator=(const CEventServer&) = delete;
         CEventServer(CEventServer&&)                 = delete;
@@ -38,21 +39,24 @@ namespace Hyprcast {
             std::filesystem::path lockFile;
         };
 
-        static SSockPaths       initSockPaths();
-        static CUniqueFd        createSocket();
+        static SSockPaths initSockPaths();
+        static CUniqueFd  createSocket();
 
-        static int              onSocketReadable(int sockFd, std::uint32_t mask, void* data);
-        static int              onClientWritable(int clientFd, std::uint32_t mask, void* data);
+        static int        onSocketReadable(int sockFd, std::uint32_t mask, void* data);
+        static int        onClientEvent(int clientFd, std::uint32_t mask, void* data);
 
-        void                    readCommands();
-        void                    flushMessages();
-        void                    updateWlDispatchEvent(std::uint32_t mask);
+        void              readCommands();
+        void              flushMessages();
+        void              updateWlDispatchEvent(std::uint32_t mask);
 
-        RegistrySnapshotCB      m_registrySnapshotCb;
-        CaptureCB               m_captureCb;
-        RegistrySnapshotCB      m_disconnectedCb;
-        std::string             m_commandBuffer;
+        ConnectedCB       m_onConnected;
+        CaptureCB         m_onCapture;
+        DisconnectedCB    m_onDisconnected;
+        std::string       m_commandBuffer;
 
+        // Members are destroyed in reverse order: event sources are removed first, then the
+        // client and listening descriptors close, the socket file is unlinked, and the
+        // lock is released last. Keep this order when adding members.
         SSockPaths              m_sockPaths;
         CFileLock               m_sockLock;
         CUniqueFd               m_sockFd;
@@ -60,8 +64,8 @@ namespace Hyprcast {
 
         CUniqueFd               m_clientFd;
 
-        CWlEventSource          m_wlSocketReadable = nullptr;
-        CWlEventSource          m_wlClientWritable = nullptr;
+        CWlEventSource          m_wlSocketReadable;
+        CWlEventSource          m_wlClientEvents;
 
         std::deque<std::string> m_messageQueue;
         std::size_t             m_messageOffset = 0;

@@ -43,31 +43,33 @@ int main() {
     check(state.accepted().filterSetting == eKeyboardFilterSetting::INCLUDE);
     check(state.accepted().filteredKeyboards == std::vector<std::string>({" Foo ", "foo", "not connected"}));
     const auto  previous  = state.accepted();
-    const char* invalid[] = {"configure()",
-                             "configure({}, {})",
-                             "configure(nil)",
-                             "configure(1)",
-                             "configure('include')",
-                             "configure({wat=true})",
-                             "configure({capture_keyboards='all'})",
-                             "configure({include={}})",
-                             "configure({exclude={}})",
-                             "configure({[1]='x'})",
-                             "configure({filter=1})",
-                             "configure({filter='INCLUDE'})",
-                             "configure({filter='include\\0bad'})",
-                             "configure({keyboards='x'})",
-                             "configure({keyboards={1}})",
-                             "configure({keyboards={''}})",
-                             "configure({keyboards={'a\\0b'}})",
-                             "configure({keyboards={[1]='a',[3]='b'}})",
-                             "configure({keyboards={[0]='a'}})",
-                             "configure({keyboards={[-1]='a'}})",
-                             "configure({keyboards={[1.5]='a'}})",
-                             "configure({keyboards={x='a'}})",
-                             "configure(setmetatable({}, {__index=function() error('must not execute') end}))",
-                             "configure({keyboards=setmetatable({}, {})})",
-                             "configure({['keyboards\\0x']={}})"};
+    const char* invalid[] = {
+        "configure()",
+        "configure({}, {})",
+        "configure(nil)",
+        "configure(1)",
+        "configure('include')",
+        "configure({wat=true})",
+        "configure({capture_keyboards='all'})",
+        "configure({include={}})",
+        "configure({exclude={}})",
+        "configure({[1]='x'})",
+        "configure({filter=1})",
+        "configure({filter='INCLUDE'})",
+        "configure({filter='include\\0bad'})",
+        "configure({keyboards='x'})",
+        "configure({keyboards={1}})",
+        "configure({keyboards={''}})",
+        "configure({keyboards={'a\\0b'}})",
+        "configure({keyboards={[1]='a',[3]='b'}})",
+        "configure({keyboards={[0]='a'}})",
+        "configure({keyboards={[-1]='a'}})",
+        "configure({keyboards={[1.5]='a'}})",
+        "configure({keyboards={x='a'}})",
+        "configure(setmetatable({}, {__index=function() error('must not execute') end}))",
+        "configure({keyboards=setmetatable({}, {})})",
+        "configure({['keyboards\\0x']={}})",
+    };
     for (auto code : invalid) {
         state.beginReload();
         run(code, false);
@@ -107,12 +109,13 @@ int main() {
     run("configure({})");
     state.finishReload(true);
     check(state.accepted() == SConfig{});
-    for (const auto& [code, expected] :
-         std::vector<std::pair<std::string, std::string>>{{"configure({wat=true})", "unknown configuration field \"wat\"; expected filter or keyboards"},
-                                                          {"configure({keyboards='x'})", "keyboards must be a table"},
-                                                          {"configure({keyboards={'ok', 1}})", "keyboards[2] must be a string"},
-                                                          {"configure({keyboards={''}})", "keyboards[1] must not be empty"},
-                                                          {"configure({keyboards={'a\\0b'}})", "keyboards[1] must not contain NUL bytes"}}) {
+    for (const auto& [code, expected] : std::vector<std::pair<std::string, std::string>>{
+             {"configure({wat=true})", "unknown configuration field \"wat\"; expected filter or keyboards"},
+             {"configure({keyboards='x'})", "keyboards must be a table"},
+             {"configure({keyboards={'ok', 1}})", "keyboards[2] must be a string"},
+             {"configure({keyboards={''}})", "keyboards[1] must not be empty"},
+             {"configure({keyboards={'a\\0b'}})", "keyboards[1] must not contain NUL bytes"},
+         }) {
         state.beginReload();
         check(luaL_dostring(L, code.c_str()) != LUA_OK);
         check(std::string(lua_tostring(L, -1)).contains("hyprcast.configure: " + expected));

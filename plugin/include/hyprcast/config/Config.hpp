@@ -9,7 +9,7 @@ struct lua_State;
 namespace Hyprcast {
     enum class eKeyboardFilterSetting : std::uint8_t {
         INCLUDE,
-        EXCLUDE
+        EXCLUDE,
     };
 
     struct SConfig {

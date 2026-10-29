@@ -21,6 +21,7 @@ namespace Hyprcast {
         };
 
         explicit CPluginConfig(SCallbacks callbacks);
+        // Unregisters hyprcast.configure, whose C callback reaches this object.
         ~CPluginConfig();
 
         CPluginConfig(const CPluginConfig&)            = delete;
@@ -42,9 +43,9 @@ namespace Hyprcast {
             Hyprcast::runGuarded(context, std::forward<Function>(function), m_callbacks.onException);
         }
 
+        // Callbacks are declared before the listeners that invoke them.
+        SCallbacks          m_callbacks;
         CConfig             m_config;
         CHyprSignalListener m_preReload, m_reloaded;
-
-        SCallbacks          m_callbacks;
     };
 }

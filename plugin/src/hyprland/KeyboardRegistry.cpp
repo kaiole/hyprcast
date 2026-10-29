@@ -117,13 +117,14 @@ namespace Hyprcast {
             });
 
             keyboardInfo->repeatInfoListener = keyboard->m_keyboardEvents.repeatInfo.listen([this, keyboardId, weakKeyboard = keyboardInfo->keyboard]() {
-                auto keyboard = weakKeyboard.lock();
-                if (!keyboard) {
+                auto lockedKeyboard = weakKeyboard.lock();
+                if (!lockedKeyboard) {
                     return;
                 }
 
-                runGuarded("Cannot process repeat settings update; disconnecting client",
-                           [this, keyboardId, &keyboard] { m_callbacks.onRepeatInfoEvent(keyboardId, toHyprcastType(keyboard->m_repeatRate, keyboard->m_repeatDelay)); });
+                runGuarded("Cannot process repeat settings update; disconnecting client", [this, keyboardId, &lockedKeyboard] {
+                    m_callbacks.onRepeatInfoEvent(keyboardId, toHyprcastType(lockedKeyboard->m_repeatRate, lockedKeyboard->m_repeatDelay));
+                });
             });
 
             keyboardInfo->subscribed = true;

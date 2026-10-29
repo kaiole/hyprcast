@@ -384,10 +384,8 @@ namespace Hyprcast::Overlay {
             if (entry.size() > 1024 || entry.contains(QChar::Null)) {
                 return fail(error, QStringLiteral("theme.entry must be at most 1024 characters and contain no NUL"));
             }
-            if (const auto* name = theme->get("name")) {
-                if (!readString(*theme, "name", &result.name, error)) {
-                    return false;
-                }
+            if (!readString(*theme, "name", &result.name, error)) {
+                return false;
             }
             if (result.name.isEmpty()) {
                 result.name = result.id;
@@ -455,11 +453,8 @@ namespace Hyprcast::Overlay {
                     if (!readTomlOptionValue(*defaultNode, option.type, &option.defaultValue, error, prefix + QStringLiteral(".default"))) {
                         return false;
                     }
-                    if (const auto* description = declaration->get("description")) {
-                        Q_UNUSED(description);
-                        if (!readString(*declaration, "description", &option.description, error)) {
-                            return false;
-                        }
+                    if (!readString(*declaration, "description", &option.description, error)) {
+                        return false;
                     }
                     if (const auto* minimum = declaration->get("minimum")) {
                         if (option.type != QStringLiteral("integer") && option.type != QStringLiteral("number")) {

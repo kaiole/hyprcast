@@ -16,7 +16,7 @@ namespace {
     using ogSetupKeyboard                                     = void (*)(void*, SP<IKeyboard>);
 
     void setupKeyboardHook(void* thisPtr, SP<IKeyboard> keyboard) {
-        (*(ogSetupKeyboard)g_pSetupKeyboardHook->m_original)(thisPtr, keyboard);
+        reinterpret_cast<ogSetupKeyboard>(g_pSetupKeyboardHook->m_original)(thisPtr, keyboard);
         g_pHyprcast->addKeyboard(keyboard);
     }
 
@@ -62,7 +62,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) try {
         throw std::runtime_error("Cannot find Hyprland setupKeyboard function");
     }
 
-    g_pSetupKeyboardHook = HyprlandAPI::createFunctionHook(handle, METHODS[0].address, (void*)&setupKeyboardHook);
+    g_pSetupKeyboardHook = HyprlandAPI::createFunctionHook(handle, METHODS[0].address, reinterpret_cast<void*>(&setupKeyboardHook));
     if (!g_pSetupKeyboardHook || !g_pSetupKeyboardHook->hook()) {
         throw std::runtime_error("Cannot install Hyprland setupKeyboard hook");
     }

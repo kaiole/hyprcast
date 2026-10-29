@@ -25,7 +25,7 @@ namespace Hyprcast {
 
     inline void notifyFailure(std::string_view message) noexcept {
         try {
-            HyprlandAPI::addNotification(PHANDLE, std::format("[hyprcast] {}", message), CHyprColor{1.0, 0.2, 0.2, 1.0}, 8000);
+            HyprlandAPI::addNotification(PHANDLE, std::format("[hyprcast] {}", message), CHyprColor{1.0F, 0.2F, 0.2F, 1.0F}, 8000);
         } catch (...) {
             // Best-effort logging.
         }

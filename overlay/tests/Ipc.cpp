@@ -241,7 +241,8 @@ namespace {
         std::vector<int> deliveredEvents;
         bool             rejected = false;
         QObject::connect(
-            &client, &IpcClient::protocolMessageReceived, &client, [&](const ProtocolMessage& message) { deliveredEvents.push_back(message.index()); }, Qt::DirectConnection);
+            &client, &IpcClient::protocolMessageReceived, &client, [&](const ProtocolMessage& message) { deliveredEvents.push_back(static_cast<int>(message.index())); },
+            Qt::DirectConnection);
         QObject::connect(&client, &IpcClient::protocolError, &client, [&](const QString&) { rejected = true; }, Qt::DirectConnection);
         client.start();
         check(waitUntil([&] { return rejected; }, 1000), "invalid connection-state transition is rejected");

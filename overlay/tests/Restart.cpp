@@ -167,7 +167,7 @@ namespace {
         check(f.peer->readLine() == "disable\n", "pause target");
         state(*f.peer, true);
         check(f.result(off) == 0, "pause confirmed");
-        const int fdCount = QDir(QStringLiteral("/proc/%1/fd").arg(pid)).entryList(QDir::AllEntries | QDir::NoDotAndDotDot).size();
+        const auto fdCount = QDir(QStringLiteral("/proc/%1/fd").arg(pid)).entryList(QDir::AllEntries | QDir::NoDotAndDotDot).size();
         for (int i = 0; i < 3; ++i) {
             QProcess again;
             f.command(again);
@@ -182,7 +182,7 @@ namespace {
             check(f.result(again) == 0, "paused restart complete");
             check(!f.peer->bytesAvailable(), "no stray enable intent");
         }
-        const int finalFdCount = QDir(QStringLiteral("/proc/%1/fd").arg(pid)).entryList(QDir::AllEntries | QDir::NoDotAndDotDot).size();
+        const auto finalFdCount = QDir(QStringLiteral("/proc/%1/fd").arg(pid)).entryList(QDir::AllEntries | QDir::NoDotAndDotDot).size();
         check(finalFdCount <= fdCount + 1, "repeated restarts do not leak descriptors");
 
         // Fail restoration, disconnect to pause, then do not replay on reconnect.
@@ -438,7 +438,7 @@ namespace {
         check(until([&] { return unsupported.state() == QProcess::NotRunning; }), "unsupported old resident response");
         check(unsupported.exitCode() == 1 && unsupported.readAllStandardError().contains("does not support restart"), "upgrade diagnostic without kill/takeover");
 
-        for (const QByteArray response : {QByteArray{}, QByteArray("ok\nextra\n")}) {
+        for (const QByteArray& response : {QByteArray{}, QByteArray("ok\nextra\n")}) {
             const QString badPath = dir.filePath(response.isEmpty() ? "disconnected.sock" : "malformed.sock");
             QLocalServer  bad;
             check(bad.listen(badPath + ".overlay"), "bad response fixture");

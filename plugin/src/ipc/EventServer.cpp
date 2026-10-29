@@ -142,7 +142,7 @@ namespace Hyprcast {
     }
 
     // wl_event_loop_add_fd requires a function ptr that returns an int
-    int CEventServer::onSocketReadable(int sockFd, std::uint32_t mask, void* data) {
+    int CEventServer::onSocketReadable(int sockFd, std::uint32_t /*mask*/, void* data) {
         auto* self = static_cast<CEventServer*>(data);
 
         int   clientFd = ::accept4(sockFd, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
@@ -202,7 +202,7 @@ namespace Hyprcast {
         return 0;
     }
 
-    int CEventServer::onClientWritable(int clientFd, std::uint32_t mask, void* data) {
+    int CEventServer::onClientWritable(int /*clientFd*/, std::uint32_t mask, void* data) {
         auto* self = static_cast<CEventServer*>(data);
 
         if (mask & (WL_EVENT_HANGUP | WL_EVENT_ERROR)) {

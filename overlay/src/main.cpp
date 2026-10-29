@@ -511,9 +511,9 @@ int main(int argc, char* argv[]) {
                          loadedTheme.applyAcceptedConfiguration(config);
                          view.resize(config.width, config.height);
                          layerWindow->setDesiredSize(QSize(config.width, config.height));
-                         LayerWindow::Anchors anchors;
-                         parseAnchor(config.anchor, &anchors); // The candidate was validated before it was accepted.
-                         layerWindow->setAnchors(anchors);
+                         LayerWindow::Anchors configuredAnchors;
+                         parseAnchor(config.anchor, &configuredAnchors); // The candidate was validated before it was accepted.
+                         layerWindow->setAnchors(configuredAnchors);
                          layerWindow->setMargins(config.margins);
 
                          if (config.backspaceMode != appliedConfig.backspaceMode || config.maxRetainedUtf16CodeUnits != appliedConfig.maxRetainedUtf16CodeUnits ||

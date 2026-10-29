@@ -35,7 +35,7 @@ namespace Hyprcast::Overlay {
             return m_state.paused();
         }
         [[nodiscard]] int keyboardCount() const noexcept {
-            return m_state.keyboards().size();
+            return static_cast<int>(m_state.keyboards().size());
         }
         [[nodiscard]] QString        statusText() const;
         [[nodiscard]] QString        detailsText() const;

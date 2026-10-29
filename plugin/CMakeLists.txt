@@ -36,11 +36,13 @@ add_library(hyprcast_config STATIC src/config/Config.cpp)
 set_target_properties(hyprcast_config PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(hyprcast_config
                            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_link_libraries(hyprcast_config PUBLIC PkgConfig::HYPRCAST_LUA)
+target_link_libraries(hyprcast_config PUBLIC PkgConfig::HYPRCAST_LUA
+                      PRIVATE hyprcast_warnings)
 
 if(BUILD_TESTING)
   add_executable(configuration_tests tests/Config.cpp)
-  target_link_libraries(configuration_tests PRIVATE hyprcast_config)
+  target_link_libraries(configuration_tests PRIVATE hyprcast_config
+                                                    hyprcast_warnings)
   add_test(NAME configuration COMMAND configuration_tests)
 endif()
 pkg_check_modules(
@@ -78,6 +80,7 @@ target_include_directories(
                    "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(
   hyprcast PRIVATE rt PkgConfig::HYPRLAND_DEPS hyprcast_config
-                   hyprcast::protocol libjson::libjson)
+                   hyprcast::protocol libjson::libjson
+                   hyprcast_warnings)
 
 install(TARGETS hyprcast LIBRARY DESTINATION lib)

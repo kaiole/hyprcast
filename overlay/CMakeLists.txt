@@ -28,7 +28,7 @@ add_library(
   src/ipc/Protocol.cpp)
 set_target_properties(hyprcast_overlay_ipc PROPERTIES AUTOMOC ON)
 target_include_directories(hyprcast_overlay_ipc PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(hyprcast_overlay_ipc PUBLIC Qt6::Core Qt6::Network)
+target_link_libraries(hyprcast_overlay_ipc PRIVATE hyprcast_warnings PUBLIC Qt6::Core Qt6::Network)
 
 add_library(
   hyprcast_overlay_history STATIC
@@ -36,7 +36,7 @@ add_library(
   src/history/InputHistory.hpp)
 set_target_properties(hyprcast_overlay_history PROPERTIES AUTOMOC ON)
 target_include_directories(hyprcast_overlay_history PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(hyprcast_overlay_history PUBLIC Qt6::Core)
+target_link_libraries(hyprcast_overlay_history PRIVATE hyprcast_warnings PUBLIC Qt6::Core)
 
 add_library(
   hyprcast_overlay_input STATIC
@@ -46,17 +46,17 @@ add_library(
   src/input/KeyboardPresenter.hpp)
 set_target_properties(hyprcast_overlay_input PROPERTIES AUTOMOC ON)
 target_include_directories(hyprcast_overlay_input PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(hyprcast_overlay_input PUBLIC Qt6::Core hyprcast_overlay_history PkgConfig::XKBCOMMON)
+target_link_libraries(hyprcast_overlay_input PRIVATE hyprcast_warnings PUBLIC Qt6::Core hyprcast_overlay_history PkgConfig::XKBCOMMON)
 
 add_library(hyprcast_overlay_config STATIC src/config/OverlayConfig.cpp src/config/OverlayConfig.hpp)
 set_target_properties(hyprcast_overlay_config PROPERTIES AUTOMOC ON)
 target_include_directories(hyprcast_overlay_config PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(hyprcast_overlay_config PUBLIC Qt6::Core Qt6::Gui tomlplusplus::tomlplusplus)
+target_link_libraries(hyprcast_overlay_config PRIVATE hyprcast_warnings PUBLIC Qt6::Core Qt6::Gui tomlplusplus::tomlplusplus)
 
 add_library(hyprcast_overlay_theme STATIC src/theme/Theme.cpp src/theme/Theme.hpp)
 set_target_properties(hyprcast_overlay_theme PROPERTIES AUTOMOC ON)
 target_include_directories(hyprcast_overlay_theme PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(hyprcast_overlay_theme PUBLIC Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick hyprcast_overlay_config hyprcast_overlay_input tomlplusplus::tomlplusplus)
+target_link_libraries(hyprcast_overlay_theme PRIVATE hyprcast_warnings PUBLIC Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick hyprcast_overlay_config hyprcast_overlay_input tomlplusplus::tomlplusplus)
 
 add_executable(hyprcast-overlay src/main.cpp)
 qt_add_resources(
@@ -66,41 +66,41 @@ qt_add_resources(
         qml/themes/default/theme.toml qml/themes/default/Main.qml)
 
 target_link_libraries(
-  hyprcast-overlay PRIVATE hyprcast_overlay_ipc hyprcast_overlay_input hyprcast_overlay_config hyprcast_overlay_theme Qt6::Core
+  hyprcast-overlay PRIVATE hyprcast_warnings hyprcast_overlay_ipc hyprcast_overlay_input hyprcast_overlay_config hyprcast_overlay_theme Qt6::Core
                            Qt6::Gui Qt6::Qml Qt6::Quick LayerShellQt::Interface)
 
 install(DIRECTORY examples/themes/ DESTINATION share/hyprcast/themes)
 
 if(BUILD_TESTING)
   add_executable(overlay_restart_tests tests/Restart.cpp)
-  target_link_libraries(overlay_restart_tests PRIVATE hyprcast_overlay_ipc PkgConfig::XKBCOMMON)
+  target_link_libraries(overlay_restart_tests PRIVATE hyprcast_warnings hyprcast_overlay_ipc PkgConfig::XKBCOMMON)
   add_dependencies(overlay_restart_tests hyprcast-overlay)
   add_test(NAME overlay-restart COMMAND overlay_restart_tests $<TARGET_FILE:hyprcast-overlay>)
   set_tests_properties(overlay-restart PROPERTIES TIMEOUT 90)
 
   add_executable(overlay_lifecycle_tests tests/Lifecycle.cpp)
-  target_link_libraries(overlay_lifecycle_tests PRIVATE hyprcast_overlay_ipc)
+  target_link_libraries(overlay_lifecycle_tests PRIVATE hyprcast_warnings hyprcast_overlay_ipc)
   add_test(NAME overlay-lifecycle COMMAND overlay_lifecycle_tests)
 
   add_executable(overlay_ipc_tests tests/Ipc.cpp)
-  target_link_libraries(overlay_ipc_tests PRIVATE hyprcast_overlay_ipc Qt6::Network)
+  target_link_libraries(overlay_ipc_tests PRIVATE hyprcast_warnings hyprcast_overlay_ipc Qt6::Network)
   add_test(NAME overlay-ipc COMMAND overlay_ipc_tests)
 
   add_executable(overlay_input_tests tests/Input.cpp)
-  target_link_libraries(overlay_input_tests PRIVATE hyprcast_overlay_input)
+  target_link_libraries(overlay_input_tests PRIVATE hyprcast_warnings hyprcast_overlay_input)
   add_test(NAME overlay-input COMMAND overlay_input_tests)
 
   add_executable(overlay_history_tests tests/History.cpp)
-  target_link_libraries(overlay_history_tests PRIVATE hyprcast_overlay_history)
+  target_link_libraries(overlay_history_tests PRIVATE hyprcast_warnings hyprcast_overlay_history)
   add_test(NAME overlay-history COMMAND overlay_history_tests)
 
   add_executable(overlay_config_tests tests/Config.cpp)
-  target_link_libraries(overlay_config_tests PRIVATE hyprcast_overlay_config)
+  target_link_libraries(overlay_config_tests PRIVATE hyprcast_warnings hyprcast_overlay_config)
   add_test(NAME overlay-config COMMAND overlay_config_tests)
 
   add_executable(overlay_theme_tests tests/Theme.cpp)
   target_compile_definitions(overlay_theme_tests PRIVATE HYPRCAST_OVERLAY_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
-  target_link_libraries(overlay_theme_tests PRIVATE hyprcast_overlay_theme)
+  target_link_libraries(overlay_theme_tests PRIVATE hyprcast_warnings hyprcast_overlay_theme)
   add_test(NAME overlay-theme COMMAND overlay_theme_tests)
   set_tests_properties(overlay-theme PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 

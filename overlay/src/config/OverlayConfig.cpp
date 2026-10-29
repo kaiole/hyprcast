@@ -183,14 +183,14 @@ namespace Hyprcast::Overlay {
             for (const auto& [key, node] : *options) {
                 const QString name = QString::fromUtf8(key.str().data(), static_cast<qsizetype>(key.str().size()));
                 QVariant      value;
-                if (const auto item = node.value_exact<std::string>()) {
-                    value = QString::fromUtf8(item->data(), static_cast<qsizetype>(item->size()));
-                } else if (const auto item = node.value_exact<bool>()) {
-                    value = *item;
-                } else if (const auto item = node.value_exact<std::int64_t>()) {
-                    value = QVariant::fromValue<qlonglong>(*item);
-                } else if (const auto item = node.value_exact<double>()) {
-                    value = *item;
+                if (const auto text = node.value_exact<std::string>()) {
+                    value = QString::fromUtf8(text->data(), static_cast<qsizetype>(text->size()));
+                } else if (const auto flag = node.value_exact<bool>()) {
+                    value = *flag;
+                } else if (const auto integer = node.value_exact<std::int64_t>()) {
+                    value = QVariant::fromValue<qlonglong>(*integer);
+                } else if (const auto number = node.value_exact<double>()) {
+                    value = *number;
                 } else {
                     return fail(error, QStringLiteral("'theme.options.%1' must be a string, boolean, integer, or number").arg(name));
                 }

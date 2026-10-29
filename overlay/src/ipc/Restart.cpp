@@ -57,7 +57,7 @@ namespace Hyprcast::Overlay {
             return false;
         }
         QByteArray bytes(int(st.st_size), '\0');
-        const auto count = ::pread(fd, bytes.data(), bytes.size(), 0);
+        const auto count = ::pread(fd, bytes.data(), static_cast<std::size_t>(bytes.size()), 0);
         ::close(fd);
         const QJsonObject object = QJsonDocument::fromJson(bytes).object();
         RestartContext    c;
@@ -110,7 +110,7 @@ namespace Hyprcast::Overlay {
             object.insert("target", *c.target);
         }
         const QByteArray bytes    = QJsonDocument(object).toJson(QJsonDocument::Compact);
-        bool             prepared = bytes.size() <= MaxContextBytes && ::write(state, bytes.constData(), bytes.size()) == bytes.size() &&
+        bool             prepared = bytes.size() <= MaxContextBytes && ::write(state, bytes.constData(), static_cast<std::size_t>(bytes.size())) == bytes.size() &&
             ::fcntl(state, F_ADD_SEALS, F_SEAL_SEAL | F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_WRITE) == 0 && inheritable(state) && inheritable(reply) && inheritable(lockFd);
         std::vector<QByteArray> storage{QFile::encodeName(executable)};
         for (const auto& arg : c.arguments) {
@@ -217,7 +217,7 @@ namespace Hyprcast::Overlay {
         clean.replace('\n', ' ');
         clean.replace('\r', ' ');
         QByteArray response = error.isEmpty() ? QByteArray("ok\n") : QByteArray("error: ") + clean.toUtf8().left(1000) + '\n';
-        ::send(m_context->replyFd, response.constData(), response.size(), MSG_NOSIGNAL | MSG_DONTWAIT);
+        ::send(m_context->replyFd, response.constData(), static_cast<std::size_t>(response.size()), MSG_NOSIGNAL | MSG_DONTWAIT);
         ::close(m_context->replyFd);
         m_context.reset();
     }

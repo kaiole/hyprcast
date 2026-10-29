@@ -13,6 +13,20 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(CTest)
 
+# Warning set for project-owned targets only; dependencies keep their own flags.
+add_library(hyprcast_warnings INTERFACE)
+target_compile_options(
+  hyprcast_warnings
+  INTERFACE -Wall
+            -Wextra
+            -Wno-missing-field-initializers # designated initializers rely on defaults
+            -Wshadow
+            -Wconversion
+            -Wsign-conversion
+            -Wold-style-cast
+            -Wnon-virtual-dtor
+            -Woverloaded-virtual)
+
 option(HYPRCAST_BUILD_PLUGIN "Build the Hyprland plugin" ON)
 option(HYPRCAST_BUILD_OVERLAY "Build the Qt Quick overlay" ON)
 

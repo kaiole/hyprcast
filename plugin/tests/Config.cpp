@@ -19,7 +19,7 @@ int main() {
     check(L != nullptr);
     luaL_openlibs(L);
     lua_pushlightuserdata(L, &state);
-    lua_pushcclosure(L, [](lua_State* L) { return static_cast<CConfig*>(lua_touserdata(L, lua_upvalueindex(1)))->configure(L); }, 1);
+    lua_pushcclosure(L, [](lua_State* luaState) { return static_cast<CConfig*>(lua_touserdata(luaState, lua_upvalueindex(1)))->configure(luaState); }, 1);
     lua_setglobal(L, "configure");
     auto run = [&](const std::string& code, bool success = true) {
         const int top    = lua_gettop(L);

@@ -5,7 +5,6 @@ set(HYPRCAST_PLUGIN_SOURCES
     src/hyprland/KeyboardRegistry.cpp
     src/ipc/EventServer.cpp
     src/os/FileLock.cpp
-    src/os/UniqueFd.cpp
     src/wayland/WlEventSource.cpp)
 
 include(FetchContent)
@@ -80,7 +79,7 @@ target_include_directories(
                    "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(
   hyprcast PRIVATE rt PkgConfig::HYPRLAND_DEPS hyprcast_config
-                   hyprcast::protocol libjson::libjson
+                   hyprcast::common hyprcast::protocol libjson::libjson
                    hyprcast_warnings)
 
 install(TARGETS hyprcast LIBRARY DESTINATION lib)

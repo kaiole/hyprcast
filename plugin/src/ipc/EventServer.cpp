@@ -30,7 +30,7 @@ namespace Hyprcast {
 
     CEventServer::CEventServer(RegistrySnapshotCB callback, CaptureCB capture, RegistrySnapshotCB disconnected) :
         m_registrySnapshotCb(std::move(callback)), m_captureCb(std::move(capture)), m_disconnectedCb(std::move(disconnected)), m_sockPaths(initSockPaths()),
-        m_sockLock(m_sockPaths.lockFile), m_sockFd(CUniqueFd{createSocket()}), m_sockFile(m_sockPaths.sockFile) {
+        m_sockLock(m_sockPaths.lockFile), m_sockFd(createSocket()), m_sockFile(m_sockPaths.sockFile) {
         std::error_code errorCode;
         const auto      sockStatus = std::filesystem::symlink_status(m_sockPaths.sockFile, errorCode);
         if (errorCode && errorCode != std::errc::no_such_file_or_directory) {
@@ -51,7 +51,7 @@ namespace Hyprcast {
         sockAddress.sun_family = AF_UNIX;
         std::memcpy(sockAddress.sun_path, m_sockPaths.sockFile.c_str(), m_sockPaths.sockFile.native().size() + 1);
 
-        int bindStatus = ::bind(m_sockFd.getFd(), reinterpret_cast<const ::sockaddr*>(&sockAddress), sizeof(sockAddress));
+        int bindStatus = ::bind(m_sockFd.get(), reinterpret_cast<const ::sockaddr*>(&sockAddress), sizeof(sockAddress));
         if (bindStatus == -1) {
             throw std::system_error(errno, std::generic_category(), "Cannot bind IPC socket '" + m_sockPaths.sockFile.string() + "'");
         }
@@ -59,12 +59,12 @@ namespace Hyprcast {
         m_sockFile.markBound();
 
         // TODO: if multiple clients is needed we need to increase BACKLOG_SIZE
-        int listenStatus = ::listen(m_sockFd.getFd(), BACKLOG_SIZE);
+        int listenStatus = ::listen(m_sockFd.get(), BACKLOG_SIZE);
         if (listenStatus == -1) {
             throw std::system_error(errno, std::generic_category(), "Cannot listen on IPC socket '" + m_sockPaths.sockFile.string() + "'");
         }
 
-        m_wlSocketReadable.reset(::wl_event_loop_add_fd(g_pCompositor->m_wlEventLoop, m_sockFd.getFd(), WL_EVENT_READABLE, &onSocketReadable, this));
+        m_wlSocketReadable.reset(::wl_event_loop_add_fd(g_pCompositor->m_wlEventLoop, m_sockFd.get(), WL_EVENT_READABLE, &onSocketReadable, this));
         if (!m_wlSocketReadable) {
             throw std::runtime_error("Cannot register IPC socket with Wayland event loop");
         }
@@ -72,7 +72,7 @@ namespace Hyprcast {
     }
 
     void CEventServer::queueMessage(std::string message) {
-        if (m_clientFd.getFd() == -1) {
+        if (!m_clientFd.valid()) {
             return;
         }
 
@@ -89,11 +89,11 @@ namespace Hyprcast {
     }
 
     void CEventServer::disconnectClient() noexcept {
-        if (m_clientFd.getFd() != -1) {
+        if (m_clientFd.valid()) {
             logMessage(Log::TRACE, "Client disconnected");
         }
 
-        const bool hadClient = m_clientFd.getFd() != -1;
+        const bool hadClient = m_clientFd.valid();
         m_commandBuffer.clear();
         m_messageOffset = 0;
         m_messageQueue.clear();
@@ -132,9 +132,9 @@ namespace Hyprcast {
         return {.sockDir = sockDir, .sockFile = sockFile, .lockFile = sockDir / LOCK_FILE};
     }
 
-    int CEventServer::createSocket() {
-        int sockFd = ::socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
-        if (sockFd == -1) {
+    CUniqueFd CEventServer::createSocket() {
+        CUniqueFd sockFd{::socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0)};
+        if (!sockFd) {
             throw std::system_error(errno, std::generic_category(), "Cannot create IPC socket");
         }
 
@@ -143,13 +143,13 @@ namespace Hyprcast {
 
     // wl_event_loop_add_fd requires a function ptr that returns an int
     int CEventServer::onSocketReadable(int sockFd, std::uint32_t /*mask*/, void* data) {
-        auto* self = static_cast<CEventServer*>(data);
+        auto*     self = static_cast<CEventServer*>(data);
 
-        int   clientFd = ::accept4(sockFd, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
+        CUniqueFd clientFd{::accept4(sockFd, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC)};
 
         // Ignore transient failures. Unexpected failures disable the listener
         // to avoid repeatedly waking the compositor on a broken socket.
-        if (clientFd == -1) {
+        if (!clientFd) {
             const int error = errno;
 
             // These are expected, recoverable accept4() failures:
@@ -182,15 +182,15 @@ namespace Hyprcast {
             return 0;
         }
 
-        if (self->m_clientFd.getFd() != -1) {
+        if (self->m_clientFd.valid()) {
             logMessage(Log::TRACE, "Replacing existing client with new connection");
         }
         self->disconnectClient();
 
-        self->m_clientFd.reset(clientFd);
+        self->m_clientFd = std::move(clientFd);
         logMessage(Log::TRACE, "Client connected");
 
-        self->m_wlClientWritable.reset(::wl_event_loop_add_fd(g_pCompositor->m_wlEventLoop, self->m_clientFd.getFd(), WL_EVENT_READABLE, &onClientWritable, self));
+        self->m_wlClientWritable.reset(::wl_event_loop_add_fd(g_pCompositor->m_wlEventLoop, self->m_clientFd.get(), WL_EVENT_READABLE, &onClientWritable, self));
         if (!self->m_wlClientWritable) {
             logError("Cannot register client with Wayland event loop; disconnecting client");
             self->disconnectClient();
@@ -217,7 +217,7 @@ namespace Hyprcast {
         if (mask & WL_EVENT_READABLE) {
             runGuarded("Cannot process capture command", [self] { self->readCommands(); }, [self] noexcept { self->disconnectClient(); });
         }
-        if (self->m_clientFd.getFd() == -1) {
+        if (!self->m_clientFd.valid()) {
             return 0;
         }
         if (mask & WL_EVENT_WRITABLE) {
@@ -230,7 +230,7 @@ namespace Hyprcast {
     void CEventServer::readCommands() {
         // Bound work per compositor dispatch as well as per command.
         char       buffer[64];
-        const auto size = ::recv(m_clientFd.getFd(), buffer, sizeof(buffer), 0);
+        const auto size = ::recv(m_clientFd.get(), buffer, sizeof(buffer), 0);
         if (size < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) {
             return;
         }
@@ -254,7 +254,7 @@ namespace Hyprcast {
                 return;
             }
             m_captureCb(command == "enable");
-            if (m_clientFd.getFd() == -1) {
+            if (!m_clientFd.valid()) {
                 return;
             }
         }
@@ -273,7 +273,7 @@ namespace Hyprcast {
 
             message = message.substr(m_messageOffset);
 
-            auto bytesSent = ::send(m_clientFd.getFd(), message.data(), message.size(), MSG_NOSIGNAL);
+            auto bytesSent = ::send(m_clientFd.get(), message.data(), message.size(), MSG_NOSIGNAL);
             if (bytesSent == -1) {
                 const int error = errno;
 

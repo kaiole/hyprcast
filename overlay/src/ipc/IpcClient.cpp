@@ -1,6 +1,7 @@
 #include "IpcClient.hpp"
 
 #include "Protocol.hpp"
+#include "hyprcast/protocol/Wire.hpp"
 
 #include <QDebug>
 #include <QIODevice>
@@ -8,6 +9,7 @@
 #include <QStringList>
 
 #include <algorithm>
+#include <string_view>
 #include <utility>
 
 namespace Hyprcast::Overlay {
@@ -58,7 +60,8 @@ namespace Hyprcast::Overlay {
         if (!m_connected || !m_state.hasCastingState()) {
             return false;
         }
-        const QByteArray command = enabled ? QByteArrayLiteral("enable\n") : QByteArrayLiteral("disable\n");
+        const std::string_view name    = enabled ? Wire::COMMAND_ENABLE : Wire::COMMAND_DISABLE;
+        const QByteArray       command = QByteArray(name.data(), static_cast<qsizetype>(name.size())) + '\n';
         return m_socket.write(command) == command.size();
     }
 
@@ -154,14 +157,13 @@ namespace Hyprcast::Overlay {
                 return;
             }
 
-            QList<QByteArray> frames;
-            QString           error;
-            if (!m_framer.append(chunk, &frames, &error)) {
-                failConnection(error);
+            const auto frames = m_framer.append(chunk);
+            if (!frames) {
+                failConnection(frames.error());
                 return;
             }
 
-            for (const auto& frame : frames) {
+            for (const auto& frame : *frames) {
                 handleFrame(frame);
                 if (!m_connected) {
                     return;
@@ -171,19 +173,18 @@ namespace Hyprcast::Overlay {
     }
 
     void IpcClient::handleFrame(const QByteArray& frame) {
-        ProtocolMessage message;
-        QString         error;
-        if (!parseMessage(frame, &message, &error)) {
-            failConnection(QStringLiteral("Invalid IPC message: %1").arg(error));
+        const auto message = parseMessage(frame);
+        if (!message) {
+            failConnection(QStringLiteral("Invalid IPC message: %1").arg(message.error()));
             return;
         }
-        if (!m_state.apply(message, &error)) {
-            failConnection(QStringLiteral("Invalid IPC state transition: %1").arg(error));
+        if (const auto applied = m_state.apply(*message); !applied) {
+            failConnection(QStringLiteral("Invalid IPC state transition: %1").arg(applied.error()));
             return;
         }
         // The state transition is committed before consumers interpret the event. This is
         // emitted synchronously on the socket's thread so event order is preserved.
-        emit protocolMessageReceived(message);
+        emit protocolMessageReceived(*message);
         emit stateChanged();
     }
 

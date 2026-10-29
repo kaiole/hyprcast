@@ -1,9 +1,14 @@
 #pragma once
 
+#include "hyprcast/protocol/KeyboardId.hpp"
+#include "hyprcast/protocol/Modifiers.hpp"
+#include "hyprcast/protocol/RepeatInfo.hpp"
+
 #include <QByteArray>
 #include <QString>
 
 #include <cstdint>
+#include <expected>
 #include <variant>
 
 namespace Hyprcast::Overlay {
@@ -12,48 +17,41 @@ namespace Hyprcast::Overlay {
     };
 
     struct KeyboardSnapshotMessage {
-        std::uint32_t id = 0;
-        QString       name;
-        std::uint32_t depressed = 0;
-        std::uint32_t latched   = 0;
-        std::uint32_t locked    = 0;
-        std::uint32_t group     = 0;
-        QString       keymap;
-        std::uint32_t repeatRate  = 0;
-        std::uint32_t repeatDelay = 0;
+        KeyboardId  id = 0;
+        QString     name;
+        SModifiers  modifiers;
+        QString     keymap;
+        SRepeatInfo repeatInfo;
     };
 
     struct UnsubscribeKeyboardMessage {
-        std::uint32_t id = 0;
+        KeyboardId id = 0;
     };
 
     struct KeyMessage {
-        std::uint32_t keyboardId = 0;
+        KeyboardId    keyboardId = 0;
         std::uint32_t timeMs     = 0;
         std::uint32_t keycode    = 0;
         bool          pressed    = false;
     };
 
     struct ModifiersMessage {
-        std::uint32_t keyboardId = 0;
-        std::uint32_t depressed  = 0;
-        std::uint32_t latched    = 0;
-        std::uint32_t locked     = 0;
-        std::uint32_t group      = 0;
+        KeyboardId keyboardId = 0;
+        SModifiers modifiers;
     };
 
     struct KeymapMessage {
-        std::uint32_t keyboardId = 0;
-        QString       keymap;
+        KeyboardId keyboardId = 0;
+        QString    keymap;
     };
 
     struct RepeatInfoMessage {
-        std::uint32_t keyboardId = 0;
-        std::uint32_t rate       = 0;
-        std::uint32_t delay      = 0;
+        KeyboardId  keyboardId = 0;
+        SRepeatInfo repeatInfo;
     };
 
     using ProtocolMessage = std::variant<CastingStateMessage, KeyboardSnapshotMessage, UnsubscribeKeyboardMessage, KeyMessage, ModifiersMessage, KeymapMessage, RepeatInfoMessage>;
 
-    [[nodiscard]] bool parseMessage(const QByteArray& jsonLine, ProtocolMessage* message, QString* error);
+    // Parses one JSON line from the plugin, or explains why it is invalid.
+    [[nodiscard]] std::expected<ProtocolMessage, QString> parseMessage(const QByteArray& jsonLine);
 } // namespace Hyprcast::Overlay

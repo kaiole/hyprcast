@@ -28,40 +28,39 @@ namespace {
     }
 
     ProtocolMessage parse(const QByteArray& json) {
-        ProtocolMessage message;
-        QString         error;
-        check(parseMessage(json, &message, &error), "expected valid protocol message");
-        return message;
+        auto message = parseMessage(json);
+        check(message.has_value(), "expected valid protocol message");
+        return message.value_or(ProtocolMessage{});
     }
 
     void testLineFraming() {
-        LineFramer        framer;
-        QList<QByteArray> lines;
-        QString           error;
+        LineFramer framer;
 
-        check(framer.append(QByteArrayLiteral("one\ntw"), &lines, &error), "first fragmented append succeeds");
+        auto       lines = framer.append(QByteArrayLiteral("one\ntw"));
+        check(lines.has_value(), "first fragmented append succeeds");
         check(lines == QList<QByteArray>{QByteArrayLiteral("one")}, "first complete frame extracted");
-        check(framer.append(QByteArrayLiteral("o\r\nthree\nfour"), &lines, &error), "second fragmented append succeeds");
+        lines = framer.append(QByteArrayLiteral("o\r\nthree\nfour"));
+        check(lines.has_value(), "second fragmented append succeeds");
         check(lines == QList<QByteArray>{QByteArrayLiteral("two"), QByteArrayLiteral("three")}, "coalesced frames and CRLF parsed");
-        check(framer.append(QByteArrayLiteral("\n"), &lines, &error), "final fragment completes");
+        lines = framer.append(QByteArrayLiteral("\n"));
+        check(lines.has_value(), "final fragment completes");
         check(lines == QList<QByteArray>{QByteArrayLiteral("four")}, "final frame extracted");
 
         const QByteArray oversized(LineFramer::MaxFrameBytes + 1, 'x');
-        check(!framer.append(oversized, &lines, &error), "oversized frame rejected");
-        check(lines.isEmpty(), "no frames applied after oversized input");
-        check(!error.isEmpty(), "oversize error reported");
+        lines = framer.append(oversized);
+        check(!lines.has_value(), "oversized frame rejected, so no frames are applied");
+        check(!lines.error().isEmpty(), "oversize error reported");
     }
 
     void testMessageParsing() {
-        ProtocolMessage message;
-        QString         error;
-        check(parseMessage(QByteArrayLiteral("{\"event\":\"casting_state\",\"keyboard_id\":0,\"paused\":true}"), &message, &error), "casting state accepted");
-        check(std::get<CastingStateMessage>(message).paused, "casting state parsed");
+        const auto castingState = parseMessage(QByteArrayLiteral("{\"event\":\"casting_state\",\"keyboard_id\":0,\"paused\":true}"));
+        check(castingState.has_value(), "casting state accepted");
+        check(std::get<CastingStateMessage>(*castingState).paused, "casting state parsed");
 
         const auto snapshot = parse(QByteArrayLiteral("{\"event\":\"subscribe_keyboard\",\"keyboard_id\":7,\"name\":\"kbd\",\"depressed\":1,\"latched\":2,\"locked\":3,\"group\":4,"
                                                       "\"keymap\":\"xkb_keymap\",\"rate\":25,\"delay\":600}"));
         check(std::get<KeyboardSnapshotMessage>(snapshot).id == 7, "keyboard snapshot id parsed");
-        check(std::get<KeyboardSnapshotMessage>(snapshot).repeatDelay == 600, "keyboard repeat delay parsed");
+        check(std::get<KeyboardSnapshotMessage>(snapshot).repeatInfo.delay == 600, "keyboard repeat delay parsed");
 
         check(std::holds_alternative<UnsubscribeKeyboardMessage>(parse(QByteArrayLiteral("{\"event\":\"unsubscribe_keyboard\",\"keyboard_id\":7}"))),
               "keyboard unsubscribe accepted");
@@ -87,34 +86,35 @@ namespace {
                                       QByteArrayLiteral("{\"event\":\"repeat_info\",\"keyboard_id\":1,\"rate\":-1,\"delay\":0}"),
                                       QByteArrayLiteral("{\"event\":\"future_event\",\"keyboard_id\":1}")};
         for (const auto& json : invalid) {
-            check(!parseMessage(json, &message, &error), "malformed or out-of-range message rejected");
-            check(!error.isEmpty(), "parse failure has a diagnostic");
+            const auto message = parseMessage(json);
+            check(!message.has_value(), "malformed or out-of-range message rejected");
+            check(!message.has_value() && !message.error().isEmpty(), "parse failure has a diagnostic");
         }
     }
 
     void testConnectionState() {
         ConnectionState state;
-        QString         error;
-        check(state.apply(parse(QByteArrayLiteral("{\"event\":\"casting_state\",\"keyboard_id\":0,\"paused\":true}")), &error), "pause state applied");
+        check(state.apply(parse(QByteArrayLiteral("{\"event\":\"casting_state\",\"keyboard_id\":0,\"paused\":true}"))).has_value(), "pause state applied");
         check(state.hasCastingState() && state.paused(), "pause state retained");
-        check(state.apply(parse(QByteArrayLiteral("{\"event\":\"subscribe_keyboard\",\"keyboard_id\":1,\"name\":\"kbd\",\"depressed\":0,\"latched\":0,\"locked\":0,\"group\":0,"
-                                                  "\"keymap\":\"xkb\",\"rate\":30,\"delay\":500}")),
-                          &error),
+        check(state
+                  .apply(parse(QByteArrayLiteral("{\"event\":\"subscribe_keyboard\",\"keyboard_id\":1,\"name\":\"kbd\",\"depressed\":0,\"latched\":0,\"locked\":0,\"group\":0,"
+                                                 "\"keymap\":\"xkb\",\"rate\":30,\"delay\":500}")))
+                  .has_value(),
               "keyboard snapshot applied");
         check(state.keyboards().size() == 1, "keyboard subscription stored");
-        check(state.apply(parse(QByteArrayLiteral("{\"event\":\"modifiers\",\"keyboard_id\":1,\"depressed\":1,\"latched\":0,\"locked\":0,\"group\":0}")), &error),
+        check(state.apply(parse(QByteArrayLiteral("{\"event\":\"modifiers\",\"keyboard_id\":1,\"depressed\":1,\"latched\":0,\"locked\":0,\"group\":0}"))).has_value(),
               "modifier update applied");
-        check(state.keyboards().value(1).depressed == 1, "modifier state updated");
-        check(state.apply(parse(QByteArrayLiteral("{\"event\":\"keymap\",\"keyboard_id\":1,\"keymap\":\"updated\"}")), &error), "keymap update applied");
+        check(state.keyboards().value(1).modifiers.depressed == 1, "modifier state updated");
+        check(state.apply(parse(QByteArrayLiteral("{\"event\":\"keymap\",\"keyboard_id\":1,\"keymap\":\"updated\"}"))).has_value(), "keymap update applied");
         check(state.keyboards().value(1).keymap == QStringLiteral("updated"), "keymap state updated");
-        check(state.apply(parse(QByteArrayLiteral("{\"event\":\"repeat_info\",\"keyboard_id\":1,\"rate\":60,\"delay\":700}")), &error), "repeat update applied");
-        check(state.keyboards().value(1).repeatRate == 60, "repeat state updated");
-        check(state.apply(parse(QByteArrayLiteral("{\"event\":\"key\",\"keyboard_id\":1,\"time_ms\":1,\"keycode\":30,\"state\":\"pressed\"}")), &error),
+        check(state.apply(parse(QByteArrayLiteral("{\"event\":\"repeat_info\",\"keyboard_id\":1,\"rate\":60,\"delay\":700}"))).has_value(), "repeat update applied");
+        check(state.keyboards().value(1).repeatInfo.rate == 60, "repeat state updated");
+        check(state.apply(parse(QByteArrayLiteral("{\"event\":\"key\",\"keyboard_id\":1,\"time_ms\":1,\"keycode\":30,\"state\":\"pressed\"}"))).has_value(),
               "key event accepted for subscribed keyboard");
         check(state.lastEventSummary().contains(QStringLiteral("pressed")), "key event summarized for diagnostics");
-        check(state.apply(parse(QByteArrayLiteral("{\"event\":\"unsubscribe_keyboard\",\"keyboard_id\":1}")), &error), "keyboard unsubscribe applied");
+        check(state.apply(parse(QByteArrayLiteral("{\"event\":\"unsubscribe_keyboard\",\"keyboard_id\":1}"))).has_value(), "keyboard unsubscribe applied");
         check(state.keyboards().isEmpty(), "keyboard unsubscription removes state");
-        check(!state.apply(parse(QByteArrayLiteral("{\"event\":\"key\",\"keyboard_id\":1,\"time_ms\":2,\"keycode\":30,\"state\":\"released\"}")), &error),
+        check(!state.apply(parse(QByteArrayLiteral("{\"event\":\"key\",\"keyboard_id\":1,\"time_ms\":2,\"keycode\":30,\"state\":\"released\"}"))).has_value(),
               "events for unsubscribed keyboards rejected");
 
         state.reset();

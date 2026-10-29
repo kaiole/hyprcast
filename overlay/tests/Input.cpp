@@ -56,13 +56,11 @@ namespace {
     using TimePoint = KeyboardInterpreter::Clock::time_point;
 
     void send(KeyboardInterpreter& interpreter, const ProtocolMessage& message, TimePoint now) {
-        QString                     error;
-        [[maybe_unused]] const auto actions = interpreter.process(message, now, &error);
-        check(error.isEmpty(), "valid keyboard message interpreted without error");
+        check(interpreter.process(message, now).has_value(), "valid keyboard message interpreted without error");
     }
 
     KeyboardSnapshotMessage snapshot(const KeymapFixture& keymap, std::uint32_t id = 1, std::uint32_t rate = 0, std::uint32_t delay = 0) {
-        return {.id = id, .name = QStringLiteral("test keyboard"), .keymap = keymap.text, .repeatRate = rate, .repeatDelay = delay};
+        return {.id = id, .name = QStringLiteral("test keyboard"), .keymap = keymap.text, .repeatInfo = {.rate = rate, .delay = delay}};
     }
 
     KeyMessage key(std::uint32_t id, std::uint32_t code, bool pressed, std::uint32_t timeMs = 1) {
@@ -70,10 +68,9 @@ namespace {
     }
 
     std::vector<InterpretedAction> process(KeyboardInterpreter& interpreter, const ProtocolMessage& message, TimePoint now) {
-        QString error;
-        auto    actions = interpreter.process(message, now, &error);
-        check(error.isEmpty(), "keyboard message interpreted without error");
-        return actions;
+        auto actions = interpreter.process(message, now);
+        check(actions.has_value(), "keyboard message interpreted without error");
+        return actions.value_or(std::vector<InterpretedAction>{});
     }
 
     void testTextAndXkbOffset() {
@@ -97,7 +94,7 @@ namespace {
 
         check(process(interpreter, key(1, 42, true), now).empty(), "modifier press is held rather than appended");
         check(interpreter.heldModifiers() == QStringLiteral("Shift"), "held modifier is exposed immediately");
-        send(interpreter, ModifiersMessage{.keyboardId = 1, .depressed = keymap.shiftMask}, now);
+        send(interpreter, ModifiersMessage{.keyboardId = 1, .modifiers = {.depressed = keymap.shiftMask}}, now);
         const auto shifted = process(interpreter, key(1, 30, true, 2), now);
         check(shifted.size() == 1 && shifted.front().kind == InterpretedActionKind::Text && shifted.front().text == QStringLiteral("A"),
               "Shift+A produces text A instead of a modifier chord");
@@ -108,7 +105,7 @@ namespace {
         check(interpreter.heldModifiers().isEmpty(), "released modifier is no longer held");
 
         process(interpreter, key(1, 42, true, 5), now);
-        send(interpreter, ModifiersMessage{.keyboardId = 1, .depressed = keymap.shiftMask}, now);
+        send(interpreter, ModifiersMessage{.keyboardId = 1, .modifiers = {.depressed = keymap.shiftMask}}, now);
         const auto shiftedNavigation = process(interpreter, key(1, 102, true, 6), now);
         check(shiftedNavigation.size() == 1 && shiftedNavigation.front().kind == InterpretedActionKind::Chord &&
                   shiftedNavigation.front().modifiers == QStringList{QStringLiteral("Shift")} && shiftedNavigation.front().key == QStringLiteral("Home"),
@@ -132,7 +129,7 @@ namespace {
         send(interpreter, snapshot(keymap, 2), now);
 
         check(process(interpreter, key(1, 29, true), now).empty(), "Control held on first keyboard");
-        send(interpreter, ModifiersMessage{.keyboardId = 1, .depressed = keymap.controlMask}, now);
+        send(interpreter, ModifiersMessage{.keyboardId = 1, .modifiers = {.depressed = keymap.controlMask}}, now);
         const auto otherKeyboard = process(interpreter, key(2, 46, true), now);
         check(otherKeyboard.size() == 1 && otherKeyboard.front().kind == InterpretedActionKind::Text && otherKeyboard.front().text == QStringLiteral("c"),
               "modifier state on one keyboard does not leak to another");
@@ -401,7 +398,7 @@ namespace {
         repeated = interpreter.advance(start + std::chrono::milliseconds(600));
         check(repeated.size() == 1 && repeated.front().repeatCount == 2, "repeat interval follows configured rate");
 
-        send(interpreter, RepeatInfoMessage{.keyboardId = 1, .rate = 20, .delay = 300}, start + std::chrono::milliseconds(650));
+        send(interpreter, RepeatInfoMessage{.keyboardId = 1, .repeatInfo = {.rate = 20, .delay = 300}}, start + std::chrono::milliseconds(650));
         check(interpreter.advance(start + std::chrono::milliseconds(949)).empty(), "repeat setting changes restart the delay for held keys");
         repeated = interpreter.advance(start + std::chrono::milliseconds(950));
         check(repeated.size() == 1 && repeated.front().repeatCount == 3, "updated repeat settings are applied to held keys");

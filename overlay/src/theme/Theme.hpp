@@ -2,8 +2,10 @@
 
 #include "../config/OverlayConfig.hpp"
 #include "../input/KeyboardPresenter.hpp"
+#include "../util/QObjectOwner.hpp"
 
 #include <QObject>
+#include <QQmlContext>
 #include <QHash>
 #include <QQuickItem>
 #include <QQuickView>
@@ -11,10 +13,9 @@
 #include <QVariant>
 #include <QVariantMap>
 
+#include <expected>
 #include <memory>
 #include <optional>
-
-class QQmlContext;
 
 namespace Hyprcast::Overlay {
     struct ThemeOption {
@@ -122,7 +123,6 @@ namespace Hyprcast::Overlay {
 
       public:
         ThemeRuntime(const ThemeCatalog& catalog, QQuickView& view, KeyboardPresenter& presenter, QObject* parent = nullptr);
-        ~ThemeRuntime() override;
 
         [[nodiscard]] bool    loadInitial(const OverlayConfig& config, QString* error = nullptr);
         [[nodiscard]] bool    prepareSwitch(const OverlayConfig& config, QString* error = nullptr);
@@ -130,23 +130,25 @@ namespace Hyprcast::Overlay {
         [[nodiscard]] QString activeThemeId() const;
 
       private:
+        // One loaded theme. Members are destroyed in reverse order, so the visual tree
+        // (slot and the theme root parented to it) goes before the context its bindings use.
+        // The slot is also a QObject child of the host so the scene stays discoverable.
         struct Instance {
-            QString      id;
-            QQuickItem*  slot    = nullptr;
-            QQuickItem*  root    = nullptr;
-            QQmlContext* context = nullptr;
-            ThemeApi*    api     = nullptr;
+            QString                      id;
+            std::unique_ptr<QQmlContext> context;
+            QObjectOwner<QQuickItem>     slot;
+            QQuickItem*                  root = nullptr; // Owned by slot.
+            ThemeApi*                    api  = nullptr; // Owned by context.
         };
 
-        [[nodiscard]] std::unique_ptr<Instance> createInstance(const OverlayConfig& config, QString* error);
-        void                                    destroyInstance(std::unique_ptr<Instance> instance);
-        void                                    resizeSlots();
+        [[nodiscard]] std::expected<std::unique_ptr<Instance>, QString> createInstance(const OverlayConfig& config);
+        void                                                            resizeSlots();
 
-        const ThemeCatalog&                     m_catalog;
-        QQuickView&                             m_view;
-        KeyboardPresenter&                      m_presenter;
-        QQuickItem*                             m_host = nullptr;
-        std::unique_ptr<Instance>               m_active;
-        std::unique_ptr<Instance>               m_staged;
+        const ThemeCatalog&                                             m_catalog;
+        QQuickView&                                                     m_view;
+        KeyboardPresenter&                                              m_presenter;
+        QQuickItem*                                                     m_host = nullptr;
+        std::unique_ptr<Instance>                                       m_active;
+        std::unique_ptr<Instance>                                       m_staged;
     };
 } // namespace Hyprcast::Overlay

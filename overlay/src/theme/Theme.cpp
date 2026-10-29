@@ -606,21 +606,16 @@ namespace Hyprcast::Overlay {
         }
     }
 
-    ThemeRuntime::~ThemeRuntime() {
-        destroyInstance(std::move(m_staged));
-        destroyInstance(std::move(m_active));
-    }
-
     bool ThemeRuntime::loadInitial(const OverlayConfig& config, QString* error) {
         if (!m_host) {
             return fail(error, QStringLiteral("theme host QML root is not a QQuickItem"));
         }
-        auto instance = createInstance(config, error);
+        auto instance = createInstance(config);
         if (!instance) {
-            return false;
+            return fail(error, instance.error());
         }
-        instance->slot->setVisible(true);
-        m_active = std::move(instance);
+        (*instance)->slot->setVisible(true);
+        m_active = std::move(*instance);
         return true;
     }
 
@@ -633,12 +628,11 @@ namespace Hyprcast::Overlay {
         }
         // This only stages detectable component creation failures. QML is trusted code and may
         // already have performed side effects; staging is not a security or rollback boundary.
-        auto candidate = createInstance(config, error);
+        auto candidate = createInstance(config);
         if (!candidate) {
-            return false;
+            return fail(error, candidate.error());
         }
-        destroyInstance(std::move(m_staged));
-        m_staged = std::move(candidate);
+        m_staged = std::move(*candidate);
         return true;
     }
 
@@ -648,8 +642,7 @@ namespace Hyprcast::Overlay {
             if (m_active) {
                 m_active->slot->setVisible(false);
             }
-            destroyInstance(std::move(m_active));
-            m_active = std::move(m_staged);
+            m_active = std::move(m_staged); // Destroys the previous theme.
         }
         if (!m_active || m_active->id != config.themeId) {
             qWarning().noquote() << QStringLiteral("hyprcast-overlay: accepted config references theme '%1' but no matching theme instance is active").arg(config.themeId);
@@ -668,67 +661,42 @@ namespace Hyprcast::Overlay {
         return m_active ? m_active->id : QString{};
     }
 
-    std::unique_ptr<ThemeRuntime::Instance> ThemeRuntime::createInstance(const OverlayConfig& config, QString* error) {
+    std::expected<std::unique_ptr<ThemeRuntime::Instance>, QString> ThemeRuntime::createInstance(const OverlayConfig& config) {
         ThemeDescriptor descriptor;
-        if (!m_catalog.resolve(config.themeId, &descriptor, error)) {
-            return {};
+        QVariantMap     effectiveOptions;
+        QString         error;
+        if (!m_catalog.resolve(config.themeId, &descriptor, &error) || !m_catalog.validateOptions(config.themeId, config.themeOptions, &effectiveOptions, &error)) {
+            return std::unexpected(error);
         }
-        QVariantMap effectiveOptions;
-        if (!m_catalog.validateOptions(config.themeId, config.themeOptions, &effectiveOptions, error)) {
-            return {};
-        }
-        auto instance  = std::make_unique<Instance>();
-        instance->id   = config.themeId;
-        instance->slot = new QQuickItem(m_host);
+        auto instance     = std::make_unique<Instance>();
+        instance->id      = config.themeId;
+        instance->context = std::make_unique<QQmlContext>(m_view.rootContext());
+        instance->api     = new ThemeApi(m_presenter, config, config.themeId, std::move(effectiveOptions), instance->context.get());
+        instance->context->setContextProperty(QStringLiteral("hyprcast"), instance->api);
+        instance->slot = QObjectOwner<QQuickItem>(new QQuickItem(m_host));
         instance->slot->setObjectName(QStringLiteral("hyprcastThemeSlot"));
         instance->slot->setParentItem(m_host);
         instance->slot->setSize(m_host->size());
         instance->slot->setVisible(false);
-        instance->context = new QQmlContext(m_view.rootContext(), this);
-        instance->api     = new ThemeApi(m_presenter, config, config.themeId, std::move(effectiveOptions), instance->context);
-        instance->context->setContextProperty(QStringLiteral("hyprcast"), instance->api);
 
         QQmlComponent component(m_view.engine(), descriptor.entryUrl, QQmlComponent::PreferSynchronous);
         if (component.isError()) {
-            const QString message = componentErrors(component).join(QLatin1Char('\n'));
-            destroyInstance(std::move(instance));
-            fail(error, QStringLiteral("theme '%1' failed to load '%2':\n%3").arg(config.themeId, descriptor.entryUrl.toString(), message));
-            return {};
+            return std::unexpected(
+                QStringLiteral("theme '%1' failed to load '%2':\n%3").arg(config.themeId, descriptor.entryUrl.toString(), componentErrors(component).join(QLatin1Char('\n'))));
         }
         // Creation evaluates theme QML (including Component.onCompleted handlers).
-        QObject*    object = component.create(instance->context);
-        QQuickItem* root   = qobject_cast<QQuickItem*>(object);
+        std::unique_ptr<QObject> object{component.create(instance->context.get())};
+        auto*                    root = qobject_cast<QQuickItem*>(object.get());
         if (component.isError() || !root) {
             const QString message = componentErrors(component).join(QLatin1Char('\n'));
-            if (object) {
-                delete object;
-            }
-            destroyInstance(std::move(instance));
-            fail(error,
-                 QStringLiteral("theme '%1' must create a QQuickItem root; loading '%2' failed%3")
-                     .arg(config.themeId, descriptor.entryUrl.toString(), message.isEmpty() ? QString{} : QStringLiteral(":\n") + message));
-            return {};
+            return std::unexpected(QStringLiteral("theme '%1' must create a QQuickItem root; loading '%2' failed%3")
+                                       .arg(config.themeId, descriptor.entryUrl.toString(), message.isEmpty() ? QString{} : QStringLiteral(":\n") + message));
         }
-        root->setParent(instance->slot);
-        root->setParentItem(instance->slot);
+        root->setParent(instance->slot.get());
+        root->setParentItem(instance->slot.get());
         instance->root = root;
+        object.release(); // Now owned by the slot.
         return instance;
-    }
-
-    void ThemeRuntime::destroyInstance(std::unique_ptr<Instance> instance) {
-        if (!instance) {
-            return;
-        }
-        if (instance->slot) {
-            delete instance->slot;
-            instance->slot = nullptr;
-            instance->root = nullptr;
-        }
-        if (instance->context) {
-            delete instance->context;
-            instance->context = nullptr;
-            instance->api     = nullptr;
-        }
     }
 
     void ThemeRuntime::resizeSlots() {

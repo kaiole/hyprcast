@@ -348,8 +348,6 @@ namespace Hyprcast::Overlay {
         refreshPresentation();
     }
 
-    HistoryListModel::~HistoryListModel() = default;
-
     int HistoryListModel::rowCount(const QModelIndex& parent) const {
         return parent.isValid() ? 0 : static_cast<int>(m_entries.size());
     }

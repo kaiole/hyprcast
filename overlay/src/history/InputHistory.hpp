@@ -116,7 +116,6 @@ namespace Hyprcast::Overlay {
         Q_ENUM(Role)
 
         explicit HistoryListModel(QObject* parent = nullptr);
-        ~HistoryListModel() override;
 
         [[nodiscard]] HistoryProjectionModel& presentationModel() noexcept {
             return *m_presentation;

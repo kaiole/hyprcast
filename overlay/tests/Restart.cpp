@@ -24,11 +24,12 @@
 using namespace Hyprcast::Overlay;
 namespace {
     QString executable;
-    void check(bool value, const char *message) {
-        if (!value)
+    void    check(bool value, const char* message) {
+        if (!value) {
             throw std::runtime_error(message);
+        }
     }
-    bool until(const std::function<bool()> &predicate, int budget = 4000) {
+    bool until(const std::function<bool()>& predicate, int budget = 4000) {
         QElapsedTimer timer;
         timer.start();
         while (!predicate() && timer.elapsed() < budget) {
@@ -37,25 +38,24 @@ namespace {
         }
         return predicate();
     }
-    void write(const QString &path, const QByteArray &bytes) {
+    void write(const QString& path, const QByteArray& bytes) {
         QFile file(path);
         check(file.open(QIODevice::WriteOnly | QIODevice::Truncate), "open fixture file");
         check(file.write(bytes) == bytes.size(), "write fixture file");
     }
-    void state(QLocalSocket &peer, bool paused) {
-        peer.write(paused ? "{\"event\":\"casting_state\",\"keyboard_id\":0,\"paused\":true}\n"
-                          : "{\"event\":\"casting_state\",\"keyboard_id\":0,\"paused\":false}\n");
+    void state(QLocalSocket& peer, bool paused) {
+        peer.write(paused ? "{\"event\":\"casting_state\",\"keyboard_id\":0,\"paused\":true}\n" : "{\"event\":\"casting_state\",\"keyboard_id\":0,\"paused\":false}\n");
         peer.flush();
     }
     struct Fixture {
-        QTemporaryDir directory;
-        QString socket = directory.filePath("events.sock");
-        QString config = directory.filePath("overlay.toml");
-        QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
-        QProcess resident;
-        QLocalServer plugin;
+        QTemporaryDir                 directory;
+        QString                       socket      = directory.filePath("events.sock");
+        QString                       config      = directory.filePath("overlay.toml");
+        QProcessEnvironment           environment = QProcessEnvironment::systemEnvironment();
+        QProcess                      resident;
+        QLocalServer                  plugin;
         std::unique_ptr<QLocalSocket> peer;
-        QByteArray log;
+        QByteArray                    log;
         Fixture() {
             check(directory.isValid(), "temporary directory");
             environment.insert("QT_QPA_PLATFORM", "offscreen");
@@ -73,13 +73,15 @@ namespace {
             resident.waitForFinished();
         }
         void start(bool active = false, bool available = true, bool acknowledge = true) {
-            if (available)
+            if (available) {
                 check(plugin.listen(socket), "mock plugin listen");
+            }
             resident.setProcessEnvironment(environment);
             resident.setWorkingDirectory(directory.path());
             QStringList args{"--socket", socket, "--config", config, "--width", "777"};
-            if (active)
+            if (active) {
                 args << "toggle";
+            }
             resident.start(executable, args);
             check(resident.waitForStarted(), "start overlay");
             if (available) {
@@ -88,8 +90,9 @@ namespace {
                 if (active) {
                     check(until([&] { return peer->canReadLine(); }), "first activation");
                     check(peer->readLine() == "enable\n", "initial enable");
-                    if (acknowledge)
+                    if (acknowledge) {
                         state(*peer, false);
+                    }
                 }
             }
             check(until([&] {
@@ -102,16 +105,17 @@ namespace {
             check(until([&] { return plugin.hasPendingConnections(); }), "plugin connection");
             peer.reset(plugin.nextPendingConnection());
         }
-        void command(QProcess &process, const QStringList &extra = {}, QString name = "restart") {
+        void command(QProcess& process, const QStringList& extra = {}, QString name = "restart") {
             process.setProcessEnvironment(environment);
             process.setWorkingDirectory("/");
             process.start(executable, QStringList{name, "--socket", socket} + extra);
             check(process.waitForStarted(), "start caller");
         }
-        int result(QProcess &process, int budget = RestartReplyMs + 4000) {
+        int result(QProcess& process, int budget = RestartReplyMs + 4000) {
             check(until([&] { return process.state() == QProcess::NotRunning; }, budget), "bounded command reply");
-            if (process.exitCode() != 0)
+            if (process.exitCode() != 0) {
                 std::cerr << process.readAllStandardError().constData();
+            }
             return process.exitCode();
         }
         void replacement() {
@@ -123,7 +127,7 @@ namespace {
         Fixture f;
         f.start(true);
         const auto pid = f.resident.processId();
-        QProcess caller;
+        QProcess   caller;
         f.command(caller);
         f.replacement();
         state(*f.peer, true);
@@ -254,8 +258,7 @@ namespace {
         check(f.peer->state() == QLocalSocket::ConnectedState, "missing required config does not exec");
         const QString theme = f.directory.filePath("hyprcast/themes/fresh");
         check(QDir().mkpath(theme), "theme package directory");
-        write(theme + "/theme.toml",
-              "[theme]\nid = 'fresh'\nname = 'Fresh'\napi_version = 1\nentry = 'Main.qml'\n[options.word]\ntype = 'string'\ndefault = 'one'\n");
+        write(theme + "/theme.toml", "[theme]\nid = 'fresh'\nname = 'Fresh'\napi_version = 1\nentry = 'Main.qml'\n[options.word]\ntype = 'string'\ndefault = 'one'\n");
         write(theme + "/asset.ppm", "P3\n1 1\n255\n255 0 0\n");
         write(theme + "/Helper.qml", "import QtQuick\nItem { property string word: 'helper-one' }\n");
         write(theme + "/Main.qml",
@@ -274,8 +277,7 @@ namespace {
               "fresh package instantiated");
         check(f.log.contains("777x"), "original CLI overrides survive different caller cwd");
         // Same ID/path changes must load new QML, helper and manifest defaults.
-        write(theme + "/theme.toml",
-              "[theme]\nid = 'fresh'\nname = 'Fresh'\napi_version = 1\nentry = 'Main.qml'\n[options.word]\ntype = 'string'\ndefault = 'two'\n");
+        write(theme + "/theme.toml", "[theme]\nid = 'fresh'\nname = 'Fresh'\napi_version = 1\nentry = 'Main.qml'\n[options.word]\ntype = 'string'\ndefault = 'two'\n");
         write(theme + "/Helper.qml", "import QtQuick\nItem { property string word: 'helper-two' }\n");
         write(theme + "/asset.ppm", "P3\n2 1\n255\n0 255 0 0 0 255\n");
         write(theme + "/Main.qml",
@@ -308,7 +310,7 @@ namespace {
         check(f.result(monitor) == 1 && f.peer->state() == QLocalSocket::ConnectedState, "unavailable output rejected without exec");
     }
     void testHistoryAndSpaceReload() {
-        Fixture f;
+        Fixture       f;
         const QString theme = f.directory.filePath("hyprcast/themes/input-test");
         check(QDir().mkpath(theme), "input test theme directory");
         write(theme + "/theme.toml", "[theme]\nid='input-test'\nname='Input test'\napi_version=1\nentry='Main.qml'\n");
@@ -319,26 +321,19 @@ namespace {
         const QByteArray base = "[theme]\nid='input-test'\n[expiration]\nafter_ms=0\n";
         write(f.config, base);
         f.start(true);
-        xkb_context *context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+        xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
         check(context, "XKB context");
         xkb_rule_names names{};
-        names.rules = "evdev";
-        names.model = "pc105";
-        names.layout = "us";
-        xkb_keymap *keymap = xkb_keymap_new_from_names(context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
+        names.rules        = "evdev";
+        names.model        = "pc105";
+        names.layout       = "us";
+        xkb_keymap* keymap = xkb_keymap_new_from_names(context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
         check(keymap, "XKB keymap");
-        char *text = xkb_keymap_get_as_string(keymap, XKB_KEYMAP_FORMAT_TEXT_V1);
+        char* text = xkb_keymap_get_as_string(keymap, XKB_KEYMAP_FORMAT_TEXT_V1);
         check(text, "serialize keymap");
-        QJsonObject snapshot{{"event", "subscribe_keyboard"},
-                             {"keyboard_id", 1},
-                             {"name", "test"},
-                             {"depressed", 0},
-                             {"latched", 0},
-                             {"locked", 0},
-                             {"group", 0},
-                             {"rate", 0},
-                             {"delay", 0},
-                             {"keymap", QString::fromUtf8(text)}};
+        QJsonObject snapshot{
+            {"event", "subscribe_keyboard"},    {"keyboard_id", 1}, {"name", "test"}, {"depressed", 0}, {"latched", 0}, {"locked", 0}, {"group", 0}, {"rate", 0}, {"delay", 0},
+            {"keymap", QString::fromUtf8(text)}};
         std::free(text);
         xkb_keymap_unref(keymap);
         xkb_context_unref(context);
@@ -379,7 +374,7 @@ namespace {
         check(!f.log.contains("HELD 1") && !f.log.contains("HISTORY <space>"), "snapshot does not reconstruct old held keys/history");
     }
     void testUnavailable() {
-        Fixture f;
+        Fixture  f;
         QProcess absent;
         f.command(absent);
         check(f.result(absent) == 1 && !QFile::exists(f.socket + ".overlay"), "no resident restart does not start one");
@@ -396,22 +391,21 @@ namespace {
         check(!f.peer->bytesAvailable(), "unavailable plugin restart has no pending enable");
     }
     void testFailedExecAndMigration() {
-        QTemporaryDir dir;
-        const QString path = dir.filePath("event.sock");
+        QTemporaryDir   dir;
+        const QString   path = dir.filePath("event.sock");
         OverlayInstance owner(path);
-        QString error;
+        QString         error;
         check(owner.acquire(false, &error) == OverlayInstance::Result::Owner, "fixture owner");
         QLocalSocket requester;
         requester.connectToServer(path + ".overlay");
         check(requester.waitForConnected(), "handoff requester connects");
-        QObject::connect(&owner, &OverlayInstance::restartRequested, &owner, [&](QLocalSocket *client) {
+        QObject::connect(&owner, &OverlayInstance::restartRequested, &owner, [&](QLocalSocket* client) {
             RestartContext context;
             context.socketPath = path;
             context.configPath = dir.filePath("config");
-            context.deadline = monotonicMilliseconds() + RestartBudgetMs;
+            context.deadline   = monotonicMilliseconds() + RestartBudgetMs;
             RestartHandoff handoff;
-            check(!handoff.execute(context, owner.lockDescriptor(), int(client->socketDescriptor()), dir.filePath("not-an-executable"), &error),
-                  "exec failure returns");
+            check(!handoff.execute(context, owner.lockDescriptor(), int(client->socketDescriptor()), dir.filePath("not-an-executable"), &error), "exec failure returns");
             OverlayInstance::reply(client, error);
         });
         requester.write("restart\n");
@@ -423,13 +417,13 @@ namespace {
 
         // Old servers need not hold the new flock. A live socket is never stale.
         const QString oldPath = dir.filePath("old.sock");
-        QLocalServer old;
+        QLocalServer  old;
         check(old.listen(oldPath + ".overlay"), "old resident fixture");
         OverlayInstance newLaunch(oldPath);
         check(newLaunch.acquire(false, &error) == OverlayInstance::Result::Error, "legacy live socket not taken over");
         check(QFile::exists(oldPath + ".overlay"), "legacy socket remains");
         QObject::connect(&old, &QLocalServer::newConnection, &old, [&] {
-            while (auto *client = old.nextPendingConnection()) {
+            while (auto* client = old.nextPendingConnection()) {
                 QObject::connect(client, &QLocalSocket::disconnected, client, &QObject::deleteLater);
                 QObject::connect(client, &QLocalSocket::readyRead, client, [client] {
                     client->readAll();
@@ -437,20 +431,19 @@ namespace {
                 });
             }
         });
-        Fixture environment;
+        Fixture  environment;
         QProcess unsupported;
         unsupported.setProcessEnvironment(environment.environment);
         unsupported.start(executable, {"restart", "--socket", oldPath});
         check(until([&] { return unsupported.state() == QProcess::NotRunning; }), "unsupported old resident response");
-        check(unsupported.exitCode() == 1 && unsupported.readAllStandardError().contains("does not support restart"),
-              "upgrade diagnostic without kill/takeover");
+        check(unsupported.exitCode() == 1 && unsupported.readAllStandardError().contains("does not support restart"), "upgrade diagnostic without kill/takeover");
 
         for (const QByteArray response : {QByteArray{}, QByteArray("ok\nextra\n")}) {
             const QString badPath = dir.filePath(response.isEmpty() ? "disconnected.sock" : "malformed.sock");
-            QLocalServer bad;
+            QLocalServer  bad;
             check(bad.listen(badPath + ".overlay"), "bad response fixture");
             QObject::connect(&bad, &QLocalServer::newConnection, &bad, [&] {
-                while (auto *client = bad.nextPendingConnection()) {
+                while (auto* client = bad.nextPendingConnection()) {
                     QObject::connect(client, &QLocalSocket::disconnected, client, &QObject::deleteLater);
                     QObject::connect(client, &QLocalSocket::readyRead, client, [client, response] {
                         client->readAll();
@@ -467,7 +460,7 @@ namespace {
         }
     }
 } // namespace
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     try {
         check(app.arguments().size() == 2, "overlay executable argument");
@@ -480,7 +473,7 @@ int main(int argc, char **argv) {
         testUnavailable();
         testFailedExecAndMigration();
         return 0;
-    } catch (const std::exception &error) {
+    } catch (const std::exception& error) {
         std::cerr << "check failed: " << error.what() << '\n';
         return 1;
     }

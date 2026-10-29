@@ -273,8 +273,7 @@ namespace {
         interleavedRuns.apply(text(QStringLiteral("b"), 1, 48));
         interleavedRuns.apply(text(QStringLiteral("a"), 1, 30));
         interleavedRuns.apply(text(QStringLiteral("a"), 1, 30));
-        check(interleavedRuns.presentationModel().displayText() == QStringLiteral("a…2x b a…2x "),
-              "matching inputs on opposite sides of another key form separate counted groups");
+        check(interleavedRuns.presentationModel().displayText() == QStringLiteral("a…2x b a…2x "), "matching inputs on opposite sides of another key form separate counted groups");
 
         InputHistory changed({.presentation = {.countedRepeats = true, .repeatThreshold = 2}});
         auto         changedAction = text(QStringLiteral("x"));
@@ -411,8 +410,7 @@ namespace {
     }
 
     void testDisplayOnlySpaces() {
-        InputHistory history({.maxRetainedUtf16CodeUnits = 64,
-                              .presentation = {.countedRepeats = true, .repeatThreshold = 2, .spaceSymbol = QStringLiteral("␣")}});
+        InputHistory history({.maxRetainedUtf16CodeUnits = 64, .presentation = {.countedRepeats = true, .repeatThreshold = 2, .spaceSymbol = QStringLiteral("␣")}});
         history.apply(text(QStringLiteral("a b")));
         history.apply(key(QStringLiteral("Enter")));
         history.apply(text(QStringLiteral(" "), 1, 57));
@@ -420,17 +418,16 @@ namespace {
         auto& projection = history.presentationModel();
         check(history.displayText() == QStringLiteral("a b [Enter]   ") && history.retainedUtf16CodeUnits() == 14,
               "space substitution does not change semantic text or retention accounting");
-        check(projection.displayText() == QStringLiteral("a␣b Enter ␣…2x "),
-              "only input spaces change, not the separator before a key or counted suffix");
+        check(projection.displayText() == QStringLiteral("a␣b Enter ␣…2x "), "only input spaces change, not the separator before a key or counted suffix");
         check(projection.data(projection.index(0, 0), HistoryProjectionModel::TextRole).toString() == QStringLiteral("a b") &&
                   projection.data(projection.index(0, 0), HistoryProjectionModel::DisplayLabelRole).toString() == QStringLiteral("a␣b") &&
                   projection.data(projection.index(2, 0), HistoryProjectionModel::DisplayLabelRole).toString() == QStringLiteral("␣"),
               "themes can choose canonical text or mapped display labels");
         history.apply(key(QStringLiteral("Backspace")));
         check(history.entries().back().action.text == QStringLiteral(" "), "Backspace still deletes one actual space occurrence");
-        const qsizetype budget = history.retainedUtf16CodeUnits();
-        auto options = history.presentationOptions();
-        options.spaceSymbol = QStringLiteral("<&>");
+        const qsizetype budget  = history.retainedUtf16CodeUnits();
+        auto            options = history.presentationOptions();
+        options.spaceSymbol     = QStringLiteral("<&>");
         history.setOptions({.maxRetainedUtf16CodeUnits = 64, .presentation = options});
         check(history.retainedUtf16CodeUnits() == budget && projection.displayRichText().contains(QStringLiteral("&lt;&amp;&gt;")),
               "live space-label updates preserve retention and HTML-escape rich text");

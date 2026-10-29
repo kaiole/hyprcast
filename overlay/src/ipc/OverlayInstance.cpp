@@ -30,30 +30,42 @@ namespace Hyprcast::Overlay {
             while (auto* client = m_server.nextPendingConnection()) {
                 client->setReadBufferSize(32);
                 connect(client, &QLocalSocket::disconnected, client, &QObject::deleteLater);
-                QTimer::singleShot(RestartReplyMs + 1000, client, [client] { client->abort(); client->deleteLater(); });
+                QTimer::singleShot(RestartReplyMs + 1000, client, [client] {
+                    client->abort();
+                    client->deleteLater();
+                });
                 connect(client, &QLocalSocket::readyRead, this, [this, client] {
-                    if (client->property("handled").toBool()) return;
-                    if (!client->canReadLine() && client->bytesAvailable() < 32) return;
+                    if (client->property("handled").toBool()) {
+                        return;
+                    }
+                    if (!client->canReadLine() && client->bytesAvailable() < 32) {
+                        return;
+                    }
                     client->setProperty("handled", true);
                     const QByteArray request = client->readAll();
-                    if (request == "toggle\n") emit toggleRequested(client);
-                    else if (request == "restart\n") emit restartRequested(client);
-                    else reply(client, QStringLiteral("Invalid overlay command"));
+                    if (request == "toggle\n") {
+                        emit toggleRequested(client);
+                    } else if (request == "restart\n") {
+                        emit restartRequested(client);
+                    } else {
+                        reply(client, QStringLiteral("Invalid overlay command"));
+                    }
                 });
             }
         });
     }
     OverlayInstance::~OverlayInstance() {
         m_server.close();
-        if (m_lockFd >= 0) ::close(m_lockFd);
+        if (m_lockFd >= 0) {
+            ::close(m_lockFd);
+        }
     }
     OverlayInstance::Result OverlayInstance::acquire(Command command, QString* error, int inheritedLock) {
         const QString lockPath = m_path + QStringLiteral(".owner-lock");
         if (inheritedLock >= 0) {
             struct stat fdInfo{}, pathInfo{};
-            if (::fstat(inheritedLock, &fdInfo) || ::lstat(lockPath.toLocal8Bit().constData(), &pathInfo) || !S_ISREG(fdInfo.st_mode) ||
-                fdInfo.st_uid != ::getuid() || fdInfo.st_dev != pathInfo.st_dev || fdInfo.st_ino != pathInfo.st_ino ||
-                ::flock(inheritedLock, LOCK_EX | LOCK_NB)) {
+            if (::fstat(inheritedLock, &fdInfo) || ::lstat(lockPath.toLocal8Bit().constData(), &pathInfo) || !S_ISREG(fdInfo.st_mode) || fdInfo.st_uid != ::getuid() ||
+                fdInfo.st_dev != pathInfo.st_dev || fdInfo.st_ino != pathInfo.st_ino || ::flock(inheritedLock, LOCK_EX | LOCK_NB)) {
                 *error = QStringLiteral("Cannot adopt restart ownership lock");
                 return Result::Error;
             }
@@ -73,23 +85,28 @@ namespace Hyprcast::Overlay {
             // A pre-feature owner uses QLockFile, not flock. Never unlink its live server.
             const bool live = locked && liveServer(m_path);
             if (!locked || live || command == Command::Restart) {
-                if (locked) { ::close(m_lockFd); m_lockFd = -1; }
+                if (locked) {
+                    ::close(m_lockFd);
+                    m_lockFd = -1;
+                }
                 if (command == Command::Start) {
                     *error = QStringLiteral("An overlay is already running for this session; use 'toggle'");
                     return Result::Error;
                 }
-                QLocalSocket client;
+                QLocalSocket  client;
                 QElapsedTimer deadline;
                 deadline.start();
                 do {
                     client.abort();
                     client.connectToServer(m_path);
-                    if (client.waitForConnected(100)) break;
+                    if (client.waitForConnected(100)) {
+                        break;
+                    }
                     QThread::msleep(25);
                 } while (deadline.elapsed() < 3000);
                 if (client.state() != QLocalSocket::ConnectedState) {
                     *error = locked && !live ? QStringLiteral("No overlay is running for this session; use toggle to start it.") :
-                                              QStringLiteral("Overlay is starting or unresponsive; try again");
+                                               QStringLiteral("Overlay is starting or unresponsive; try again");
                     return Result::Error;
                 }
                 client.write(command == Command::Restart ? "restart\n" : "toggle\n");
@@ -98,16 +115,21 @@ namespace Hyprcast::Overlay {
                 deadline.restart();
                 const int allowance = command == Command::Restart ? RestartReplyMs : 4000;
                 while (!response.contains('\n') && response.size() < 1024 && deadline.elapsed() < allowance) {
-                    if (!client.bytesAvailable() && !client.waitForReadyRead(allowance - int(deadline.elapsed()))) break;
+                    if (!client.bytesAvailable() && !client.waitForReadyRead(allowance - int(deadline.elapsed()))) {
+                        break;
+                    }
                     response += client.readAll();
                 }
-                if (response == "ok\n") return Result::Forwarded;
+                if (response == "ok\n") {
+                    return Result::Forwarded;
+                }
                 if (command == Command::Restart && response == "error: Invalid overlay command\n") {
                     *error = QStringLiteral("Resident does not support restart; manually close/relaunch the overlay once after upgrading");
                     return Result::Error;
                 }
-                *error = response.startsWith("error: ") && response.endsWith('\n') && response.size() <= 1024 ? QString::fromUtf8(response).trimmed() :
-                         QStringLiteral("Overlay did not confirm completion; outcome unknown. Do not automatically retry.");
+                *error = response.startsWith("error: ") && response.endsWith('\n') && response.size() <= 1024 ?
+                    QString::fromUtf8(response).trimmed() :
+                    QStringLiteral("Overlay did not confirm completion; outcome unknown. Do not automatically retry.");
                 return Result::Error;
             }
         }
@@ -120,7 +142,7 @@ namespace Hyprcast::Overlay {
             return Result::Error;
         }
         struct stat info{};
-        const auto path = m_path.toLocal8Bit();
+        const auto  path = m_path.toLocal8Bit();
         if (::lstat(path.constData(), &info) == 0) {
             if (!S_ISSOCK(info.st_mode)) {
                 *error = QStringLiteral("Refusing to remove non-socket entry: %1").arg(m_path);
@@ -134,11 +156,16 @@ namespace Hyprcast::Overlay {
             *error = QStringLiteral("Cannot inspect overlay socket");
             return Result::Error;
         }
-        if (!m_server.listen(m_path)) { *error = m_server.errorString(); return Result::Error; }
+        if (!m_server.listen(m_path)) {
+            *error = m_server.errorString();
+            return Result::Error;
+        }
         return Result::Owner;
     }
     void OverlayInstance::reply(QLocalSocket* client, const QString& error) {
-        if (!client) return;
+        if (!client) {
+            return;
+        }
         QString clean = error;
         clean.replace('\n', ' ');
         clean.replace('\r', ' ');

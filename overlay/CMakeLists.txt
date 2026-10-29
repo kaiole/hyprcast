@@ -28,7 +28,7 @@ add_library(
   src/ipc/Protocol.cpp)
 set_target_properties(hyprcast_overlay_ipc PROPERTIES AUTOMOC ON)
 target_include_directories(hyprcast_overlay_ipc PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(hyprcast_overlay_ipc PRIVATE hyprcast_warnings PUBLIC hyprcast::common Qt6::Core Qt6::Network)
+target_link_libraries(hyprcast_overlay_ipc PRIVATE hyprcast_warnings PUBLIC hyprcast::common hyprcast::protocol Qt6::Core Qt6::Network)
 
 add_library(
   hyprcast_overlay_history STATIC
@@ -36,7 +36,7 @@ add_library(
   src/history/InputHistory.hpp)
 set_target_properties(hyprcast_overlay_history PROPERTIES AUTOMOC ON)
 target_include_directories(hyprcast_overlay_history PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(hyprcast_overlay_history PRIVATE hyprcast_warnings PUBLIC Qt6::Core)
+target_link_libraries(hyprcast_overlay_history PRIVATE hyprcast_warnings PUBLIC hyprcast::protocol Qt6::Core)
 
 add_library(
   hyprcast_overlay_input STATIC

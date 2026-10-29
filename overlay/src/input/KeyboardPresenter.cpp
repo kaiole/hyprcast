@@ -30,13 +30,12 @@ namespace Hyprcast::Overlay {
 
     void KeyboardPresenter::processMessage(const ProtocolMessage& message, Clock::time_point now) {
         const QStringList previousHeldKeys = m_interpreter.heldKeys();
-        QString           error;
-        const auto        actions = m_interpreter.process(message, now, &error);
-        if (!error.isEmpty()) {
-            qWarning().noquote() << QStringLiteral("hyprcast-overlay: keyboard interpretation failed: %1").arg(error);
-        }
-        for (const auto& action : actions) {
-            append(action, now);
+        if (const auto actions = m_interpreter.process(message, now); !actions) {
+            qWarning().noquote() << QStringLiteral("hyprcast-overlay: keyboard interpretation failed: %1").arg(actions.error());
+        } else {
+            for (const auto& action : *actions) {
+                append(action, now);
+            }
         }
         if (previousHeldKeys != m_interpreter.heldKeys()) {
             emit heldKeysChanged();

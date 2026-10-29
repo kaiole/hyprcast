@@ -139,14 +139,8 @@ namespace Hyprcast::Overlay {
         };
 
         struct Keyboard {
-            std::uint32_t                       id = 0;
-            QString                             name;
-            std::uint32_t                       depressed   = 0;
-            std::uint32_t                       latched     = 0;
-            std::uint32_t                       locked      = 0;
-            std::uint32_t                       group       = 0;
-            std::uint32_t                       repeatRate  = 0;
-            std::uint32_t                       repeatDelay = 0;
+            SModifiers                          modifiers;
+            SRepeatInfo                         repeatInfo;
             KeymapPtr                           keymap;
             StatePtr                            state;
             std::map<std::uint32_t, PressedKey> pressed;
@@ -162,49 +156,38 @@ namespace Hyprcast::Overlay {
                 return;
             }
 
-            const auto layoutCount = xkb_keymap_num_layouts(keyboard.keymap.get());
-            const auto layout      = layoutCount > 0 ? keyboard.group % layoutCount : 0;
-            xkb_state_update_mask(keyboard.state.get(), keyboard.depressed, keyboard.latched, keyboard.locked, 0, 0, layout);
+            const auto  layoutCount = xkb_keymap_num_layouts(keyboard.keymap.get());
+            const auto& mods        = keyboard.modifiers;
+            const auto  layout      = layoutCount > 0 ? mods.group % layoutCount : 0;
+            xkb_state_update_mask(keyboard.state.get(), mods.depressed, mods.latched, mods.locked, 0, 0, layout);
         }
 
-        static bool installKeymap(xkb_context* context, Keyboard& keyboard, const QString& text, QString* error) {
+        static std::expected<void, QString> installKeymap(xkb_context* context, Keyboard& keyboard, const QString& text) {
             keyboard.pressed.clear();
             keyboard.state.reset();
             keyboard.keymap.reset();
 
             if (!context) {
-                if (error) {
-                    *error = QStringLiteral("cannot create XKB context");
-                }
-                return false;
+                return std::unexpected(QStringLiteral("cannot create XKB context"));
             }
             if (text.contains(QChar::Null)) {
-                if (error) {
-                    *error = QStringLiteral("keymap contains a NUL character");
-                }
-                return false;
+                return std::unexpected(QStringLiteral("keymap contains a NUL character"));
             }
 
             const QByteArray utf8 = text.toUtf8();
             keyboard.keymap.reset(xkb_keymap_new_from_string(context, utf8.constData(), XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS));
             if (!keyboard.keymap) {
-                if (error) {
-                    *error = QStringLiteral("XKB rejected the keyboard keymap");
-                }
-                return false;
+                return std::unexpected(QStringLiteral("XKB rejected the keyboard keymap"));
             }
 
             keyboard.state.reset(xkb_state_new(keyboard.keymap.get()));
             if (!keyboard.state) {
                 keyboard.keymap.reset();
-                if (error) {
-                    *error = QStringLiteral("cannot create XKB state for the keyboard keymap");
-                }
-                return false;
+                return std::unexpected(QStringLiteral("cannot create XKB state for the keyboard keymap"));
             }
 
             applyMask(keyboard);
-            return true;
+            return {};
         }
 
         static KeyboardInterpreter::Clock::duration repeatInterval(std::uint32_t rate) {
@@ -216,13 +199,13 @@ namespace Hyprcast::Overlay {
         }
 
         static void configureRepeat(Keyboard& keyboard, PressedKey& key, TimePoint now, bool enabled) {
-            if (!enabled || !key.repeatable || keyboard.repeatRate == 0 || !keyboard.state) {
+            if (!enabled || !key.repeatable || keyboard.repeatInfo.rate == 0 || !keyboard.state) {
                 key.repeatDeadline.reset();
                 key.repeatInterval = KeyboardInterpreter::Clock::duration::zero();
                 return;
             }
-            key.repeatInterval = repeatInterval(keyboard.repeatRate);
-            key.repeatDeadline = now + std::chrono::milliseconds(keyboard.repeatDelay);
+            key.repeatInterval = repeatInterval(keyboard.repeatInfo.rate);
+            key.repeatDeadline = now + std::chrono::milliseconds(keyboard.repeatInfo.delay);
         }
 
         static xkb_mod_mask_t modifierMask(xkb_keymap* keymap, const char* name) {
@@ -276,10 +259,7 @@ namespace Hyprcast::Overlay {
         }
 
         static void applyAuthoritativeModifiers(Keyboard& keyboard, const ModifiersMessage& event) {
-            keyboard.depressed = event.depressed;
-            keyboard.latched   = event.latched;
-            keyboard.locked    = event.locked;
-            keyboard.group     = event.group;
+            keyboard.modifiers = event.modifiers;
             applyMask(keyboard);
         }
 
@@ -291,7 +271,7 @@ namespace Hyprcast::Overlay {
             }
         }
 
-        std::vector<InterpretedAction> onKey(const KeyMessage& event, TimePoint now, QString* error) {
+        std::expected<std::vector<InterpretedAction>, QString> onKey(const KeyMessage& event, TimePoint now) {
             std::vector<InterpretedAction> actions;
             if (paused) {
                 return actions;
@@ -306,18 +286,12 @@ namespace Hyprcast::Overlay {
                 return actions;
             }
             if (event.keycode > std::numeric_limits<xkb_keycode_t>::max() - EvdevToXkbOffset) {
-                if (error) {
-                    *error = QStringLiteral("keycode overflows the XKB evdev-to-keycode offset");
-                }
-                return actions;
+                return std::unexpected(QStringLiteral("keycode overflows the XKB evdev-to-keycode offset"));
             }
 
             const xkb_keycode_t xkbKey = event.keycode + EvdevToXkbOffset;
             if (xkbKey < xkb_keymap_min_keycode(keyboard.keymap.get()) || xkbKey > xkb_keymap_max_keycode(keyboard.keymap.get())) {
-                if (error) {
-                    *error = QStringLiteral("keycode %1 is outside the active XKB keymap").arg(event.keycode);
-                }
-                return actions;
+                return std::unexpected(QStringLiteral("keycode %1 is outside the active XKB keymap").arg(event.keycode));
             }
 
             if (event.pressed) {
@@ -473,19 +447,14 @@ namespace Hyprcast::Overlay {
     KeyboardInterpreter::KeyboardInterpreter() : m_impl(std::make_unique<Impl>()) {}
     KeyboardInterpreter::~KeyboardInterpreter() = default;
 
-    std::vector<InterpretedAction> KeyboardInterpreter::process(const ProtocolMessage& message, Clock::time_point now, QString* error) {
-        if (error) {
-            error->clear();
-        }
+    std::expected<std::vector<InterpretedAction>, QString> KeyboardInterpreter::process(const ProtocolMessage& message, Clock::time_point now) {
+        using Result = std::expected<std::vector<InterpretedAction>, QString>;
         if (!m_impl->context) {
-            if (error) {
-                *error = QStringLiteral("cannot initialize XKB context");
-            }
-            return {};
+            return std::unexpected(QStringLiteral("cannot initialize XKB context"));
         }
 
         return std::visit(
-            [this, now, error](const auto& event) -> std::vector<InterpretedAction> {
+            [this, now](const auto& event) -> Result {
                 using T = std::decay_t<decltype(event)>;
                 if constexpr (std::is_same_v<T, CastingStateMessage>) {
                     m_impl->paused = event.paused;
@@ -496,23 +465,15 @@ namespace Hyprcast::Overlay {
                     }
                 } else if constexpr (std::is_same_v<T, KeyboardSnapshotMessage>) {
                     m_impl->keyboards.erase(event.id);
-                    Impl::Keyboard keyboard;
-                    keyboard.id          = event.id;
-                    keyboard.name        = event.name;
-                    keyboard.depressed   = event.depressed;
-                    keyboard.latched     = event.latched;
-                    keyboard.locked      = event.locked;
-                    keyboard.group       = event.group;
-                    keyboard.repeatRate  = event.repeatRate;
-                    keyboard.repeatDelay = event.repeatDelay;
-                    if (!Impl::installKeymap(m_impl->context.get(), keyboard, event.keymap, error)) {
-                        return {};
+                    Impl::Keyboard keyboard{.modifiers = event.modifiers, .repeatInfo = event.repeatInfo};
+                    if (auto installed = Impl::installKeymap(m_impl->context.get(), keyboard, event.keymap); !installed) {
+                        return std::unexpected(installed.error());
                     }
                     m_impl->keyboards.insert_or_assign(event.id, std::move(keyboard));
                 } else if constexpr (std::is_same_v<T, UnsubscribeKeyboardMessage>) {
                     m_impl->keyboards.erase(event.id);
                 } else if constexpr (std::is_same_v<T, KeyMessage>) {
-                    return m_impl->onKey(event, now, error);
+                    return m_impl->onKey(event, now);
                 } else if constexpr (std::is_same_v<T, ModifiersMessage>) {
                     const auto keyboard = m_impl->keyboards.find(event.keyboardId);
                     if (keyboard != m_impl->keyboards.end()) {
@@ -521,13 +482,14 @@ namespace Hyprcast::Overlay {
                 } else if constexpr (std::is_same_v<T, KeymapMessage>) {
                     const auto keyboard = m_impl->keyboards.find(event.keyboardId);
                     if (keyboard != m_impl->keyboards.end()) {
-                        Impl::installKeymap(m_impl->context.get(), keyboard->second, event.keymap, error);
+                        if (auto installed = Impl::installKeymap(m_impl->context.get(), keyboard->second, event.keymap); !installed) {
+                            return std::unexpected(installed.error());
+                        }
                     }
                 } else if constexpr (std::is_same_v<T, RepeatInfoMessage>) {
                     const auto keyboard = m_impl->keyboards.find(event.keyboardId);
                     if (keyboard != m_impl->keyboards.end()) {
-                        keyboard->second.repeatRate  = event.rate;
-                        keyboard->second.repeatDelay = event.delay;
+                        keyboard->second.repeatInfo = event.repeatInfo;
                         for (auto& key : keyboard->second.pressed | std::views::values) {
                             Impl::configureRepeat(keyboard->second, key, now, m_impl->repeatsEnabled);
                         }

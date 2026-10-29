@@ -1,192 +1,176 @@
 #include "Protocol.hpp"
 
+#include "hyprcast/protocol/Wire.hpp"
+
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
 #include <QJsonValue>
+#include <QLatin1StringView>
 
 #include <cmath>
 #include <limits>
-#include <type_traits>
-#include <utility>
+#include <string_view>
 
 namespace Hyprcast::Overlay {
     namespace {
-        bool fail(QString* error, const QString& reason) {
-            if (error) {
-                *error = reason;
-            }
-            return false;
+        using namespace Wire;
+
+        QLatin1StringView latin1(std::string_view text) {
+            return QLatin1StringView(text.data(), static_cast<qsizetype>(text.size()));
         }
 
-        bool requiredString(const QJsonObject& object, const QString& name, QString* result, QString* error) {
-            const auto value = object.value(name);
-            if (!value.isString()) {
-                return fail(error, QStringLiteral("field '%1' must be a string").arg(name));
-            }
-            *result = value.toString();
-            return true;
-        }
+        // Reads typed fields from one message. The first failure is kept and later reads
+        // return defaults, so a whole message can be read in one expression and checked once.
+        class FieldReader {
+          public:
+            explicit FieldReader(const QJsonObject& object) : m_object(object) {}
 
-        bool requiredBoolean(const QJsonObject& object, const QString& name, bool* result, QString* error) {
-            const auto value = object.value(name);
-            if (!value.isBool()) {
-                return fail(error, QStringLiteral("field '%1' must be a boolean").arg(name));
+            [[nodiscard]] bool ok() const noexcept {
+                return m_error.isEmpty();
             }
-            *result = value.toBool();
-            return true;
-        }
-
-        bool requiredUint32(const QJsonObject& object, const QString& name, std::uint32_t* result, QString* error) {
-            const auto value = object.value(name);
-            if (!value.isDouble()) {
-                return fail(error, QStringLiteral("field '%1' must be an unsigned 32-bit integer").arg(name));
+            [[nodiscard]] const QString& error() const noexcept {
+                return m_error;
             }
 
-            const double number = value.toDouble();
-            if (!std::isfinite(number) || number < 0.0 || number > std::numeric_limits<std::uint32_t>::max() || std::floor(number) != number) {
-                return fail(error, QStringLiteral("field '%1' is outside the unsigned 32-bit integer range").arg(name));
+            QString string(std::string_view name) {
+                const auto value = m_object.value(latin1(name));
+                if (!value.isString()) {
+                    fail(QStringLiteral("field '%1' must be a string").arg(latin1(name)));
+                    return {};
+                }
+                return value.toString();
             }
 
-            *result = static_cast<std::uint32_t>(number);
-            return true;
-        }
+            QString nonEmptyString(std::string_view name) {
+                QString value = string(name);
+                if (ok() && value.isEmpty()) {
+                    fail(QStringLiteral("field '%1' must not be empty").arg(latin1(name)));
+                }
+                return value;
+            }
 
-        bool requiredKeyboardId(const QJsonObject& object, std::uint32_t* result, QString* error) {
-            if (!requiredUint32(object, QStringLiteral("keyboard_id"), result, error)) {
-                return false;
+            bool boolean(std::string_view name) {
+                const auto value = m_object.value(latin1(name));
+                if (!value.isBool()) {
+                    fail(QStringLiteral("field '%1' must be a boolean").arg(latin1(name)));
+                    return false;
+                }
+                return value.toBool();
             }
-            if (*result == 0) {
-                return fail(error, QStringLiteral("field 'keyboard_id' must be greater than zero for this event"));
-            }
-            return true;
-        }
 
-        bool requiredRepeatInfo(const QJsonObject& object, std::uint32_t* rate, std::uint32_t* delay, QString* error) {
-            if (!requiredUint32(object, QStringLiteral("rate"), rate, error) || !requiredUint32(object, QStringLiteral("delay"), delay, error)) {
-                return false;
+            std::uint32_t uint32(std::string_view name) {
+                const auto value = m_object.value(latin1(name));
+                if (!value.isDouble()) {
+                    fail(QStringLiteral("field '%1' must be an unsigned 32-bit integer").arg(latin1(name)));
+                    return 0;
+                }
+                const double number = value.toDouble();
+                if (!std::isfinite(number) || number < 0.0 || number > std::numeric_limits<std::uint32_t>::max() || std::floor(number) != number) {
+                    fail(QStringLiteral("field '%1' is outside the unsigned 32-bit integer range").arg(latin1(name)));
+                    return 0;
+                }
+                return static_cast<std::uint32_t>(number);
             }
-            if (*rate > static_cast<std::uint32_t>(std::numeric_limits<int>::max()) || *delay > static_cast<std::uint32_t>(std::numeric_limits<int>::max())) {
-                return fail(error, QStringLiteral("repeat settings exceed the signed integer range"));
+
+            KeyboardId keyboardId() {
+                const KeyboardId id = uint32(FIELD_KEYBOARD_ID);
+                if (ok() && id == GLOBAL_KEYBOARD_ID) {
+                    fail(QStringLiteral("field 'keyboard_id' must be greater than zero for this event"));
+                }
+                return id;
             }
-            return true;
+
+            SModifiers modifiers() {
+                return {.depressed = uint32(FIELD_DEPRESSED), .latched = uint32(FIELD_LATCHED), .locked = uint32(FIELD_LOCKED), .group = uint32(FIELD_GROUP)};
+            }
+
+            SRepeatInfo repeatInfo() {
+                const SRepeatInfo info{.rate = uint32(FIELD_RATE), .delay = uint32(FIELD_DELAY)};
+                constexpr auto    intMax = static_cast<std::uint32_t>(std::numeric_limits<int>::max());
+                if (ok() && (info.rate > intMax || info.delay > intMax)) {
+                    fail(QStringLiteral("repeat settings exceed the signed integer range"));
+                }
+                return info;
+            }
+
+          private:
+            void fail(QString message) {
+                if (m_error.isEmpty()) {
+                    m_error = std::move(message);
+                }
+            }
+
+            const QJsonObject& m_object;
+            QString            m_error;
+        };
+
+        // Braced initializers evaluate left to right, so the first invalid field is reported.
+        template <typename Message>
+        std::expected<ProtocolMessage, QString> finish(const FieldReader& reader, Message message) {
+            if (!reader.ok()) {
+                return std::unexpected(reader.error());
+            }
+            return ProtocolMessage{std::move(message)};
         }
     } // namespace
 
-    bool parseMessage(const QByteArray& jsonLine, ProtocolMessage* message, QString* error) {
-        if (error) {
-            error->clear();
-        }
-        if (!message) {
-            return fail(error, QStringLiteral("internal error: message output is null"));
-        }
-
+    std::expected<ProtocolMessage, QString> parseMessage(const QByteArray& jsonLine) {
         QJsonParseError parseError{};
         const auto      document = QJsonDocument::fromJson(jsonLine, &parseError);
         if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-            return fail(error, QStringLiteral("invalid JSON object: %1").arg(parseError.errorString()));
+            return std::unexpected(QStringLiteral("invalid JSON object: %1").arg(parseError.errorString()));
         }
 
         const QJsonObject object = document.object();
-        QString           event;
-        if (!requiredString(object, QStringLiteral("event"), &event, error)) {
-            return false;
+        FieldReader       read(object);
+        const QString     event = read.string(FIELD_EVENT);
+        if (!read.ok()) {
+            return std::unexpected(read.error());
         }
 
-        std::uint32_t keyboardId = 0;
-        if (event == QStringLiteral("casting_state")) {
-            if (!requiredUint32(object, QStringLiteral("keyboard_id"), &keyboardId, error)) {
-                return false;
+        if (event == latin1(EVENT_CASTING_STATE)) {
+            if (read.uint32(FIELD_KEYBOARD_ID) != GLOBAL_KEYBOARD_ID && read.ok()) {
+                return std::unexpected(QStringLiteral("casting_state requires keyboard_id 0"));
             }
-            if (keyboardId != 0) {
-                return fail(error, QStringLiteral("casting_state requires keyboard_id 0"));
-            }
-            bool paused = false;
-            if (!requiredBoolean(object, QStringLiteral("paused"), &paused, error)) {
-                return false;
-            }
-            *message = CastingStateMessage{.paused = paused};
-            return true;
+            return finish(read, CastingStateMessage{.paused = read.boolean(FIELD_PAUSED)});
+        }
+        if (event == latin1(EVENT_SUBSCRIBE_KEYBOARD)) {
+            return finish(read,
+                          KeyboardSnapshotMessage{
+                              .id         = read.keyboardId(),
+                              .name       = read.string(FIELD_NAME),
+                              .modifiers  = read.modifiers(),
+                              .keymap     = read.nonEmptyString(FIELD_KEYMAP),
+                              .repeatInfo = read.repeatInfo(),
+                          });
+        }
+        if (event == latin1(EVENT_UNSUBSCRIBE_KEYBOARD)) {
+            return finish(read, UnsubscribeKeyboardMessage{.id = read.keyboardId()});
         }
 
-        if (event == QStringLiteral("subscribe_keyboard")) {
-            KeyboardSnapshotMessage snapshot;
-            if (!requiredKeyboardId(object, &snapshot.id, error) || !requiredString(object, QStringLiteral("name"), &snapshot.name, error) ||
-                !requiredUint32(object, QStringLiteral("depressed"), &snapshot.depressed, error) || !requiredUint32(object, QStringLiteral("latched"), &snapshot.latched, error) ||
-                !requiredUint32(object, QStringLiteral("locked"), &snapshot.locked, error) || !requiredUint32(object, QStringLiteral("group"), &snapshot.group, error) ||
-                !requiredString(object, QStringLiteral("keymap"), &snapshot.keymap, error) || !requiredRepeatInfo(object, &snapshot.repeatRate, &snapshot.repeatDelay, error)) {
-                return false;
-            }
-            if (snapshot.keymap.isEmpty()) {
-                return fail(error, QStringLiteral("field 'keymap' must not be empty"));
-            }
-            *message = std::move(snapshot);
-            return true;
+        const KeyboardId keyboardId = read.keyboardId();
+        if (!read.ok()) {
+            return std::unexpected(read.error());
         }
-
-        if (event == QStringLiteral("unsubscribe_keyboard")) {
-            if (!requiredKeyboardId(object, &keyboardId, error)) {
-                return false;
+        if (event == latin1(EVENT_KEY)) {
+            KeyMessage    key{.keyboardId = keyboardId, .timeMs = read.uint32(FIELD_TIME_MS), .keycode = read.uint32(FIELD_KEYCODE)};
+            const QString state = read.string(FIELD_STATE);
+            if (read.ok() && state != latin1(STATE_PRESSED) && state != latin1(STATE_RELEASED)) {
+                return std::unexpected(QStringLiteral("field 'state' must be 'pressed' or 'released'"));
             }
-            *message = UnsubscribeKeyboardMessage{.id = keyboardId};
-            return true;
+            key.pressed = state == latin1(STATE_PRESSED);
+            return finish(read, key);
         }
-
-        if (!requiredKeyboardId(object, &keyboardId, error)) {
-            return false;
+        if (event == latin1(EVENT_MODIFIERS)) {
+            return finish(read, ModifiersMessage{.keyboardId = keyboardId, .modifiers = read.modifiers()});
         }
-
-        if (event == QStringLiteral("key")) {
-            KeyMessage key;
-            key.keyboardId = keyboardId;
-            QString state;
-            if (!requiredUint32(object, QStringLiteral("time_ms"), &key.timeMs, error) || !requiredUint32(object, QStringLiteral("keycode"), &key.keycode, error) ||
-                !requiredString(object, QStringLiteral("state"), &state, error)) {
-                return false;
-            }
-            if (state != QStringLiteral("pressed") && state != QStringLiteral("released")) {
-                return fail(error, QStringLiteral("field 'state' must be 'pressed' or 'released'"));
-            }
-            key.pressed = state == QStringLiteral("pressed");
-            *message    = key;
-            return true;
+        if (event == latin1(EVENT_KEYMAP)) {
+            return finish(read, KeymapMessage{.keyboardId = keyboardId, .keymap = read.nonEmptyString(FIELD_KEYMAP)});
         }
-
-        if (event == QStringLiteral("modifiers")) {
-            ModifiersMessage modifiers;
-            modifiers.keyboardId = keyboardId;
-            if (!requiredUint32(object, QStringLiteral("depressed"), &modifiers.depressed, error) ||
-                !requiredUint32(object, QStringLiteral("latched"), &modifiers.latched, error) || !requiredUint32(object, QStringLiteral("locked"), &modifiers.locked, error) ||
-                !requiredUint32(object, QStringLiteral("group"), &modifiers.group, error)) {
-                return false;
-            }
-            *message = modifiers;
-            return true;
+        if (event == latin1(EVENT_REPEAT_INFO)) {
+            return finish(read, RepeatInfoMessage{.keyboardId = keyboardId, .repeatInfo = read.repeatInfo()});
         }
-
-        if (event == QStringLiteral("keymap")) {
-            KeymapMessage keymap;
-            keymap.keyboardId = keyboardId;
-            if (!requiredString(object, QStringLiteral("keymap"), &keymap.keymap, error)) {
-                return false;
-            }
-            if (keymap.keymap.isEmpty()) {
-                return fail(error, QStringLiteral("field 'keymap' must not be empty"));
-            }
-            *message = std::move(keymap);
-            return true;
-        }
-
-        if (event == QStringLiteral("repeat_info")) {
-            RepeatInfoMessage repeatInfo;
-            repeatInfo.keyboardId = keyboardId;
-            if (!requiredRepeatInfo(object, &repeatInfo.rate, &repeatInfo.delay, error)) {
-                return false;
-            }
-            *message = repeatInfo;
-            return true;
-        }
-
-        return fail(error, QStringLiteral("unsupported event '%1'").arg(event));
+        return std::unexpected(QStringLiteral("unsupported event '%1'").arg(event));
     }
 } // namespace Hyprcast::Overlay

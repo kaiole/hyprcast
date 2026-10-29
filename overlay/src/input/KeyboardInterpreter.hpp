@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <expected>
 #include <memory>
 #include <vector>
 
@@ -44,19 +45,19 @@ namespace Hyprcast::Overlay {
         // Defined out of line, where Impl is complete (required for the pimpl's unique_ptr).
         ~KeyboardInterpreter();
         // Never moved, so no moved-from (null m_impl) state needs to be handled.
-        KeyboardInterpreter(const KeyboardInterpreter&)                               = delete;
-        KeyboardInterpreter& operator=(const KeyboardInterpreter&)                    = delete;
-        KeyboardInterpreter(KeyboardInterpreter&&)                                    = delete;
-        KeyboardInterpreter&                         operator=(KeyboardInterpreter&&) = delete;
+        KeyboardInterpreter(const KeyboardInterpreter&)                                                       = delete;
+        KeyboardInterpreter& operator=(const KeyboardInterpreter&)                                            = delete;
+        KeyboardInterpreter(KeyboardInterpreter&&)                                                            = delete;
+        KeyboardInterpreter&                                                 operator=(KeyboardInterpreter&&) = delete;
 
-        [[nodiscard]] std::vector<InterpretedAction> process(const ProtocolMessage& message, Clock::time_point now, QString* error = nullptr);
-        [[nodiscard]] std::vector<InterpretedAction> advance(Clock::time_point now);
-        [[nodiscard]] Clock::time_point              nextRepeatDeadline() const noexcept;
-        [[nodiscard]] QString                        heldModifiers() const;
-        [[nodiscard]] QStringList                    heldKeys() const;
-        [[nodiscard]] std::vector<HeldKey>           heldKeyItems() const;
-        void                                         setRepeatsEnabled(bool enabled, Clock::time_point now = Clock::now());
-        void                                         reset() noexcept;
+        [[nodiscard]] std::expected<std::vector<InterpretedAction>, QString> process(const ProtocolMessage& message, Clock::time_point now);
+        [[nodiscard]] std::vector<InterpretedAction>                         advance(Clock::time_point now);
+        [[nodiscard]] Clock::time_point                                      nextRepeatDeadline() const noexcept;
+        [[nodiscard]] QString                                                heldModifiers() const;
+        [[nodiscard]] QStringList                                            heldKeys() const;
+        [[nodiscard]] std::vector<HeldKey>                                   heldKeyItems() const;
+        void                                                                 setRepeatsEnabled(bool enabled, Clock::time_point now = Clock::now());
+        void                                                                 reset() noexcept;
 
       private:
         struct Impl;

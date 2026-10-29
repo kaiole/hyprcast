@@ -17,7 +17,9 @@ namespace {
 
     void setupKeyboardHook(void* thisPtr, SP<IKeyboard> keyboard) {
         reinterpret_cast<ogSetupKeyboard>(g_pSetupKeyboardHook->m_original)(thisPtr, keyboard);
-        g_pHyprcast->addKeyboard(keyboard);
+        if (g_pHyprcast) {
+            g_pHyprcast->addKeyboard(keyboard);
+        }
     }
 
     int toggleCasting(lua_State*) noexcept {
@@ -38,6 +40,16 @@ namespace {
         return 0;
     }
 
+    // Removes every entry point before destroying the state they use. Hyprland also
+    // cleans these up on unload, but doing it here keeps the teardown order explicit.
+    void teardown() noexcept {
+        if (g_pSetupKeyboardHook) {
+            HyprlandAPI::removeFunctionHook(Hyprcast::PHANDLE, g_pSetupKeyboardHook);
+            g_pSetupKeyboardHook = nullptr;
+        }
+        HyprlandAPI::removeLuaFunction(Hyprcast::PHANDLE, "hyprcast", "toggle");
+        g_pHyprcast.reset();
+    }
 }
 
 // Do NOT change this function.
@@ -57,12 +69,12 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) try {
 
     g_pHyprcast = std::make_unique<Hyprcast::CHyprcast>();
 
-    static const auto METHODS = HyprlandAPI::findFunctionsByName(Hyprcast::PHANDLE, "setupKeyboard");
-    if (METHODS.empty()) {
+    const auto methods = HyprlandAPI::findFunctionsByName(Hyprcast::PHANDLE, "setupKeyboard");
+    if (methods.empty()) {
         throw std::runtime_error("Cannot find Hyprland setupKeyboard function");
     }
 
-    g_pSetupKeyboardHook = HyprlandAPI::createFunctionHook(handle, METHODS[0].address, reinterpret_cast<void*>(&setupKeyboardHook));
+    g_pSetupKeyboardHook = HyprlandAPI::createFunctionHook(handle, methods[0].address, reinterpret_cast<void*>(&setupKeyboardHook));
     if (!g_pSetupKeyboardHook || !g_pSetupKeyboardHook->hook()) {
         throw std::runtime_error("Cannot install Hyprland setupKeyboard hook");
     }
@@ -77,17 +89,16 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) try {
 } catch (const std::exception& error) {
     Hyprcast::logError("Cannot load plugin: {}", error.what());
     Hyprcast::notifyFailure(error.what());
-    g_pHyprcast.reset();
+    teardown();
     throw;
 } catch (...) {
     Hyprcast::logError("Cannot load plugin: unknown exception");
     Hyprcast::notifyFailure("Cannot load plugin; see Hyprland logs for details.");
-    g_pHyprcast.reset();
+    teardown();
     throw;
 }
 
 APICALL EXPORT void PLUGIN_EXIT() {
-    HyprlandAPI::removeDispatcher(Hyprcast::PHANDLE, "hyprcast");
-    g_pHyprcast.reset();
+    teardown();
     Hyprcast::logMessage(Log::TRACE, "Plugin unloaded");
 }

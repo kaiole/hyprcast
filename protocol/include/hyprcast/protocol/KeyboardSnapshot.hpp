@@ -9,7 +9,7 @@
 
 namespace Hyprcast {
     struct SKeyboardSnapshot {
-        KeyboardId  id;
+        KeyboardId  id = 0;
         std::string name;
         SModifiers  modifiers;
         Keymap      keymap;

@@ -1,7 +1,7 @@
 #pragma once
 
+#include "hyprcast/os/UniqueFd.hpp"
 #include "os/FileLock.hpp"
-#include "os/UniqueFd.hpp"
 #include "SockFile.hpp"
 #include "wayland/WlEventSource.hpp"
 
@@ -39,7 +39,7 @@ namespace Hyprcast {
         };
 
         static SSockPaths       initSockPaths();
-        static int              createSocket();
+        static CUniqueFd        createSocket();
 
         static int              onSocketReadable(int sockFd, std::uint32_t mask, void* data);
         static int              onClientWritable(int clientFd, std::uint32_t mask, void* data);

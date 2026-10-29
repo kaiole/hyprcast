@@ -10,16 +10,16 @@ namespace Hyprcast {
     class CHyprcast {
       public:
         CHyprcast();
-        ~CHyprcast() = default;
 
-        CHyprcast(const CHyprcast&)                = delete;
-        CHyprcast& operator=(const CHyprcast&)     = delete;
-        CHyprcast(CHyprcast&&) noexcept            = delete;
-        CHyprcast& operator=(CHyprcast&&) noexcept = delete;
+        // Members hold callbacks that capture `this`, so the object must never move.
+        CHyprcast(const CHyprcast&)            = delete;
+        CHyprcast& operator=(const CHyprcast&) = delete;
+        CHyprcast(CHyprcast&&)                 = delete;
+        CHyprcast& operator=(CHyprcast&&)      = delete;
 
-        void       addKeyboard(SP<IKeyboard> keyboard);
+        void       addKeyboard(const SP<IKeyboard>& keyboard);
 
-        void       setPause(bool setPause);
+        void       setPause(bool paused);
         bool       isPaused() const noexcept;
 
       private:
@@ -29,9 +29,9 @@ namespace Hyprcast {
 
         void                          shutdown() noexcept;
 
-        Hyprcast::CEventServer        m_socket;
-        Hyprcast::CKeyboardRegistry   m_keyboardRegistry;
-        Hyprcast::CPluginConfig       m_config;
+        CEventServer                  m_server;
+        CKeyboardRegistry             m_keyboardRegistry;
+        CPluginConfig                 m_config;
 
         bool                          m_shutdown = false;
         bool                          m_paused   = true;

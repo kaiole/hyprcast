@@ -7,6 +7,6 @@ namespace Hyprcast {
     // https://wayland.app/protocols/wayland#wl_keyboard:enum:key_state
     enum class eKeyState : std::uint8_t {
         RELEASED = 0,
-        PRESSED  = 1
+        PRESSED  = 1,
     };
 }

@@ -52,7 +52,8 @@ namespace {
     }
 }
 
-// Do NOT change this function.
+// Do NOT change this function; Hyprland's ABI fixes its signature.
+// NOLINTNEXTLINE(modernize-use-string-view)
 APICALL EXPORT std::string PLUGIN_API_VERSION() {
     return HYPRLAND_API_VERSION;
 }
@@ -74,7 +75,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) try {
         throw std::runtime_error("Cannot find Hyprland setupKeyboard function");
     }
 
-    g_pSetupKeyboardHook = HyprlandAPI::createFunctionHook(handle, methods[0].address, reinterpret_cast<void*>(&setupKeyboardHook));
+    g_pSetupKeyboardHook = HyprlandAPI::createFunctionHook(handle, methods.front().address, reinterpret_cast<void*>(&setupKeyboardHook));
     if (!g_pSetupKeyboardHook || !g_pSetupKeyboardHook->hook()) {
         throw std::runtime_error("Cannot install Hyprland setupKeyboard hook");
     }

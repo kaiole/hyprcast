@@ -1,6 +1,8 @@
 #include "EventServer.hpp"
 #include "CallbackBoundary.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
@@ -26,10 +28,14 @@ namespace Hyprcast {
         constexpr std::string_view SOCK_DIR           = "hyprcast";
         constexpr std::string_view SOCK_FILE          = "events.sock";
         constexpr std::string_view LOCK_FILE          = "server.lock";
+        constexpr std::string_view ENABLE_COMMAND     = "enable";
+        constexpr std::string_view DISABLE_COMMAND    = "disable";
+        // A longer unterminated buffer can never become a valid command.
+        constexpr std::size_t MAX_COMMAND_LENGTH = std::max(ENABLE_COMMAND.size(), DISABLE_COMMAND.size());
     }
 
-    CEventServer::CEventServer(RegistrySnapshotCB callback, CaptureCB capture, RegistrySnapshotCB disconnected) :
-        m_registrySnapshotCb(std::move(callback)), m_captureCb(std::move(capture)), m_disconnectedCb(std::move(disconnected)), m_sockPaths(initSockPaths()),
+    CEventServer::CEventServer(ConnectedCB onConnected, CaptureCB onCapture, DisconnectedCB onDisconnected) :
+        m_onConnected(std::move(onConnected)), m_onCapture(std::move(onCapture)), m_onDisconnected(std::move(onDisconnected)), m_sockPaths(initSockPaths()),
         m_sockLock(m_sockPaths.lockFile), m_sockFd(createSocket()), m_sockFile(m_sockPaths.sockFile) {
         std::error_code errorCode;
         const auto      sockStatus = std::filesystem::symlink_status(m_sockPaths.sockFile, errorCode);
@@ -89,18 +95,18 @@ namespace Hyprcast {
     }
 
     void CEventServer::disconnectClient() noexcept {
-        if (m_clientFd.valid()) {
+        const bool hadClient = m_clientFd.valid();
+        if (hadClient) {
             logMessage(Log::TRACE, "Client disconnected");
         }
 
-        const bool hadClient = m_clientFd.valid();
         m_commandBuffer.clear();
         m_messageOffset = 0;
         m_messageQueue.clear();
-        m_wlClientWritable.reset();
+        m_wlClientEvents.reset();
         m_clientFd.reset();
         if (hadClient) {
-            runGuarded("Cannot pause disconnected capture", m_disconnectedCb, [] noexcept {});
+            runGuarded("Cannot pause disconnected capture", m_onDisconnected, [] noexcept {});
         }
     }
 
@@ -190,22 +196,22 @@ namespace Hyprcast {
         self->m_clientFd = std::move(clientFd);
         logMessage(Log::TRACE, "Client connected");
 
-        self->m_wlClientWritable.reset(::wl_event_loop_add_fd(g_pCompositor->m_wlEventLoop, self->m_clientFd.get(), WL_EVENT_READABLE, &onClientWritable, self));
-        if (!self->m_wlClientWritable) {
+        self->m_wlClientEvents.reset(::wl_event_loop_add_fd(g_pCompositor->m_wlEventLoop, self->m_clientFd.get(), WL_EVENT_READABLE, &onClientEvent, self));
+        if (!self->m_wlClientEvents) {
             logError("Cannot register client with Wayland event loop; disconnecting client");
             self->disconnectClient();
             return 0;
         }
 
-        runGuarded("Cannot prepare initial keyboard snapshot; disconnecting client", self->m_registrySnapshotCb, [self] noexcept { self->disconnectClient(); });
+        runGuarded("Cannot prepare initial keyboard snapshot; disconnecting client", self->m_onConnected, [self] noexcept { self->disconnectClient(); });
 
         return 0;
     }
 
-    int CEventServer::onClientWritable(int /*clientFd*/, std::uint32_t mask, void* data) {
+    int CEventServer::onClientEvent(int /*clientFd*/, std::uint32_t mask, void* data) {
         auto* self = static_cast<CEventServer*>(data);
 
-        if (mask & (WL_EVENT_HANGUP | WL_EVENT_ERROR)) {
+        if (mask & static_cast<std::uint32_t>(WL_EVENT_HANGUP | WL_EVENT_ERROR)) {
             if (mask & WL_EVENT_ERROR) {
                 logError("Wayland reported a client socket error; disconnecting client");
             }
@@ -229,8 +235,8 @@ namespace Hyprcast {
 
     void CEventServer::readCommands() {
         // Bound work per compositor dispatch as well as per command.
-        char       buffer[64];
-        const auto size = ::recv(m_clientFd.get(), buffer, sizeof(buffer), 0);
+        std::array<char, 64> buffer{};
+        const auto           size = ::recv(m_clientFd.get(), buffer.data(), buffer.size(), 0);
         if (size < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) {
             return;
         }
@@ -238,22 +244,23 @@ namespace Hyprcast {
             disconnectClient();
             return;
         }
-        m_commandBuffer.append(buffer, static_cast<std::size_t>(size));
+        m_commandBuffer.append(buffer.data(), static_cast<std::size_t>(size));
         while (true) {
             const auto end = m_commandBuffer.find('\n');
             if (end == std::string::npos) {
-                if (m_commandBuffer.size() > 7) {
+                if (m_commandBuffer.size() > MAX_COMMAND_LENGTH) {
                     disconnectClient();
                 }
                 return;
             }
-            const auto command = m_commandBuffer.substr(0, end);
-            m_commandBuffer.erase(0, end + 1);
-            if (command != "enable" && command != "disable") {
+            const std::string_view command{m_commandBuffer.data(), end};
+            if (command != ENABLE_COMMAND && command != DISABLE_COMMAND) {
                 disconnectClient();
                 return;
             }
-            m_captureCb(command == "enable");
+            const bool enable = command == ENABLE_COMMAND;
+            m_commandBuffer.erase(0, end + 1);
+            m_onCapture(enable);
             if (!m_clientFd.valid()) {
                 return;
             }
@@ -307,7 +314,7 @@ namespace Hyprcast {
     }
 
     void CEventServer::updateWlDispatchEvent(std::uint32_t mask) {
-        if (::wl_event_source_fd_update(m_wlClientWritable.get(), mask | WL_EVENT_READABLE) == -1) {
+        if (::wl_event_source_fd_update(m_wlClientEvents.get(), mask | WL_EVENT_READABLE) == -1) {
             logError("Cannot update client Wayland event source; disconnecting client");
             disconnectClient();
         }

@@ -36,8 +36,16 @@ namespace Hyprcast {
             return {.depressed = event.depressed, .latched = event.latched, .locked = event.locked, .group = event.group};
         }
 
+        // Stateless, so the unique_ptr stays pointer-sized (a function-pointer deleter would not).
+        struct SFreeDeleter {
+            void operator()(char* string) const noexcept {
+                // NOLINTNEXTLINE(cppcoreguidelines-no-malloc): libxkbcommon allocates this with malloc.
+                std::free(string);
+            }
+        };
+
         Keymap toHyprcastType(const IKeyboard::SKeymapEvent& event) {
-            std::unique_ptr<char, decltype(&std::free)> keymapString{::xkb_keymap_get_as_string(event.keymap, XKB_KEYMAP_FORMAT_TEXT_V1), &std::free};
+            const std::unique_ptr<char, SFreeDeleter> keymapString{::xkb_keymap_get_as_string(event.keymap, XKB_KEYMAP_FORMAT_TEXT_V1)};
             if (!keymapString) {
                 throw std::runtime_error("Cannot serialize XKB keymap");
             }
@@ -48,6 +56,24 @@ namespace Hyprcast {
         // Hyprland stores these as int; clamp so a bogus negative value cannot wrap.
         SRepeatInfo toHyprcastType(int repeatRate, int repeatDelay) noexcept {
             return {.rate = static_cast<std::uint32_t>(std::max(repeatRate, 0)), .delay = static_cast<std::uint32_t>(std::max(repeatDelay, 0))};
+        }
+
+        SKeyboardSnapshot getKeyboardSnapshot(const IKeyboard& keyboard, KeyboardId id, const std::string& name) {
+            return {
+                .id   = id,
+                .name = name,
+                .modifiers =
+                    {
+                        .depressed = keyboard.m_modifiersState.depressed,
+                        .latched   = keyboard.m_modifiersState.latched,
+                        .locked    = keyboard.m_modifiersState.locked,
+                        .group     = keyboard.m_modifiersState.group,
+                    },
+                // Keep subscription snapshots consistent with incremental keymap events and
+                // interoperable with Wayland clients: both use libxkbcommon text V1.
+                .keymap     = keyboard.m_xkbKeymapV1String,
+                .repeatInfo = toHyprcastType(keyboard.m_repeatRate, keyboard.m_repeatDelay),
+            };
         }
     }
 
@@ -63,14 +89,12 @@ namespace Hyprcast {
         });
     }
 
-    void CKeyboardRegistry::addKeyboard(SP<IKeyboard> keyboard) {
+    void CKeyboardRegistry::addKeyboard(const SP<IKeyboard>& keyboard) {
         auto keyboardInfo = std::make_unique<SKeyboardInfo>();
 
-        keyboardInfo->keyboard       = keyboard;
-        keyboardInfo->id             = m_nextId++;
-        keyboardInfo->name           = keyboard->m_hlName;
-        keyboardInfo->pendingRemoval = false;
-        keyboardInfo->subscribed     = false;
+        keyboardInfo->keyboard = keyboard;
+        keyboardInfo->id       = m_nextId++;
+        keyboardInfo->name     = keyboard->m_hlName;
 
         keyboardInfo->destroyListener = keyboard->m_events.destroy.listen([this, record = keyboardInfo.get()] { scheduleRemoval(*record); });
 
@@ -118,7 +142,7 @@ namespace Hyprcast {
                 });
             });
 
-            keyboardInfo->repeatInfoListener = keyboard->m_keyboardEvents.repeatInfo.listen([this, keyboardId, weakKeyboard = keyboardInfo->keyboard]() {
+            keyboardInfo->repeatInfoListener = keyboard->m_keyboardEvents.repeatInfo.listen([this, keyboardId, weakKeyboard = keyboardInfo->keyboard] {
                 auto lockedKeyboard = weakKeyboard.lock();
                 if (!lockedKeyboard) {
                     return;
@@ -221,7 +245,7 @@ namespace Hyprcast {
         }
     }
 
-    void CKeyboardRegistry::unsubscribeListeners(SKeyboardInfo& keyboardInfo) {
+    void CKeyboardRegistry::unsubscribeListeners(SKeyboardInfo& keyboardInfo) noexcept {
         if (!keyboardInfo.subscribed) {
             return;
         }
@@ -234,23 +258,5 @@ namespace Hyprcast {
         keyboardInfo.subscribed = false;
         logMessage(Log::TRACE, "Unsubscribed from keyboard {} ('{}')", keyboardInfo.id, keyboardInfo.name);
         runGuarded("Cannot prepare keyboard unsubscription; disconnecting client", [this, &keyboardInfo] { m_callbacks.onUnsubscribe(keyboardInfo.id); });
-    }
-
-    SKeyboardSnapshot CKeyboardRegistry::getKeyboardSnapshot(const IKeyboard& keyboard, KeyboardId id, const std::string& name) {
-        return {
-            .id   = id,
-            .name = name,
-            .modifiers =
-                {
-                    .depressed = keyboard.m_modifiersState.depressed,
-                    .latched   = keyboard.m_modifiersState.latched,
-                    .locked    = keyboard.m_modifiersState.locked,
-                    .group     = keyboard.m_modifiersState.group,
-                },
-            // Keep subscription snapshots consistent with incremental keymap events and
-            // interoperable with Wayland clients: both use libxkbcommon text V1.
-            .keymap     = keyboard.m_xkbKeymapV1String,
-            .repeatInfo = toHyprcastType(keyboard.m_repeatRate, keyboard.m_repeatDelay),
-        };
     }
 }

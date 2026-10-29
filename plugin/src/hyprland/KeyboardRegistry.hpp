@@ -21,8 +21,6 @@
 #include <utility>
 #include <vector>
 
-struct wl_event_source;
-
 namespace Hyprcast {
     class CKeyboardRegistry {
       public:
@@ -45,16 +43,17 @@ namespace Hyprcast {
         };
 
         explicit CKeyboardRegistry(SCallbacks callbacks);
-        ~CKeyboardRegistry() = default;
 
-        CKeyboardRegistry(const CKeyboardRegistry&)                   = delete;
-        CKeyboardRegistry& operator=(const CKeyboardRegistry&)        = delete;
-        CKeyboardRegistry(CKeyboardRegistry&&)                        = delete;
-        CKeyboardRegistry&             operator=(CKeyboardRegistry&&) = delete;
+        // Listeners capture `this` and per-keyboard record pointers, so the registry must never move.
+        CKeyboardRegistry(const CKeyboardRegistry&)            = delete;
+        CKeyboardRegistry& operator=(const CKeyboardRegistry&) = delete;
+        CKeyboardRegistry(CKeyboardRegistry&&)                 = delete;
+        CKeyboardRegistry& operator=(CKeyboardRegistry&&)      = delete;
 
-        void                           addKeyboard(SP<IKeyboard> keyboard);
-        void                           updateSubscriptions(const SConfig& acceptedConfig);
+        void               addKeyboard(const SP<IKeyboard>& keyboard);
+        void               updateSubscriptions(const SConfig& acceptedConfig);
 
+        // Snapshots every subscribed keyboard and records each keymap as sent.
         [[nodiscard]] RegistrySnapshot getRegistrySnapshot();
 
         void                           shutdown() noexcept;
@@ -67,9 +66,7 @@ namespace Hyprcast {
 
         void                                        syncKeymap(const SP<IKeyboard>& keyboard);
         void                                        scheduleRemoval(SKeyboardInfo& keyboardInfo) noexcept;
-        void                                        unsubscribeListeners(SKeyboardInfo& keyboardInfo);
-
-        [[nodiscard]] SKeyboardSnapshot             getKeyboardSnapshot(const IKeyboard& keyboard, KeyboardId id, const std::string& name);
+        void                                        unsubscribeListeners(SKeyboardInfo& keyboardInfo) noexcept;
 
         SCallbacks                                  m_callbacks;
         KeyboardId                                  m_nextId = 1;

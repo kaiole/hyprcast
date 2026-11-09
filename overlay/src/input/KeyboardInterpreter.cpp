@@ -31,15 +31,38 @@ namespace Hyprcast::Overlay {
         // Hyprland forwards evdev keycodes; XKB keycodes are offset by 8.
         constexpr std::uint32_t EvdevToXkbOffset = 8;
 
+        // The XKB modifiers reported on chords, in display order.
         struct ModifierDefinition {
-            const char* xkbName;
-            const char* label;
+            const char*       xkbName;
+            QLatin1StringView label;
         };
 
         constexpr std::array ModifierDefinitions{
-            ModifierDefinition{"Shift", "Shift"}, ModifierDefinition{"Control", "Ctrl"}, ModifierDefinition{"Mod1", "Alt"},
-            ModifierDefinition{"Mod4", "Super"},  ModifierDefinition{"Mod5", "AltGr"},
+            ModifierDefinition{"Shift", Modifier::Shift}, ModifierDefinition{"Control", Modifier::Ctrl}, ModifierDefinition{"Mod1", Modifier::Alt},
+            ModifierDefinition{"Mod4", Modifier::Super},  ModifierDefinition{"Mod5", Modifier::AltGr},
         };
+
+        using ModifierMasks = std::array<xkb_mod_mask_t, ModifierDefinitions.size()>;
+
+        // Identity of a key that acts as a modifier; empty for every other key.
+        QLatin1StringView modifierLabel(xkb_keysym_t symbol) {
+            switch (symbol) {
+                case XKB_KEY_Shift_L:
+                case XKB_KEY_Shift_R: return Modifier::Shift;
+                case XKB_KEY_Control_L:
+                case XKB_KEY_Control_R: return Modifier::Ctrl;
+                case XKB_KEY_Alt_L:
+                case XKB_KEY_Alt_R: return Modifier::Alt;
+                case XKB_KEY_Super_L:
+                case XKB_KEY_Super_R: return Modifier::Super;
+                case XKB_KEY_ISO_Level3_Shift: return Modifier::AltGr;
+                case XKB_KEY_Meta_L:
+                case XKB_KEY_Meta_R: return Modifier::Meta;
+                case XKB_KEY_Hyper_L:
+                case XKB_KEY_Hyper_R: return Modifier::Hyper;
+                default: return {};
+            }
+        }
 
         bool isControlText(const QString& text) {
             for (const QChar character : text) {
@@ -50,6 +73,7 @@ namespace Hyprcast::Overlay {
             return false;
         }
 
+        // Label of a non-modifier key; modifier keys are named by modifierLabel().
         QString keyLabel(xkb_keysym_t symbol) {
             switch (symbol) {
                 case XKB_KEY_Return: return QStringLiteral("Enter");
@@ -72,15 +96,6 @@ namespace Hyprcast::Overlay {
                 case XKB_KEY_Print: return QStringLiteral("Print Screen");
                 case XKB_KEY_Pause: return QStringLiteral("Pause");
                 case XKB_KEY_Menu: return QStringLiteral("Menu");
-                case XKB_KEY_Shift_L:
-                case XKB_KEY_Shift_R: return QStringLiteral("Shift");
-                case XKB_KEY_Control_L:
-                case XKB_KEY_Control_R: return QStringLiteral("Ctrl");
-                case XKB_KEY_Alt_L:
-                case XKB_KEY_Alt_R: return QStringLiteral("Alt");
-                case XKB_KEY_Super_L:
-                case XKB_KEY_Super_R: return QStringLiteral("Super");
-                case XKB_KEY_ISO_Level3_Shift: return QStringLiteral("AltGr");
                 default: break;
             }
 
@@ -143,6 +158,7 @@ namespace Hyprcast::Overlay {
             SRepeatInfo                         repeatInfo;
             KeymapPtr                           keymap;
             StatePtr                            state;
+            ModifierMasks                       modifierMasks{}; // Per ModifierDefinitions entry, for `keymap`.
             std::map<std::uint32_t, PressedKey> pressed;
         };
 
@@ -186,6 +202,9 @@ namespace Hyprcast::Overlay {
                 return std::unexpected(QStringLiteral("cannot create XKB state for the keyboard keymap"));
             }
 
+            for (std::size_t i = 0; i < ModifierDefinitions.size(); ++i) {
+                keyboard.modifierMasks[i] = modifierMask(keyboard.keymap.get(), ModifierDefinitions[i].xkbName);
+            }
             applyMask(keyboard);
             return {};
         }
@@ -216,41 +235,24 @@ namespace Hyprcast::Overlay {
             return static_cast<xkb_mod_mask_t>(xkb_mod_mask_t{1} << index);
         }
 
-        static QStringList activeModifiers(const Keyboard& keyboard, xkb_keycode_t key, bool includeConsumed) {
-            QStringList result;
-            if (!keyboard.state || !keyboard.keymap) {
-                return result;
-            }
+        struct ActiveModifiers {
+            QStringList all;
+            bool        anyUnconsumed = false; // A modifier the key's translation did not use up.
+        };
 
-            const auto effective = xkb_state_serialize_mods(keyboard.state.get(), XKB_STATE_MODS_EFFECTIVE);
-            const auto consumed  = xkb_state_key_get_consumed_mods2(keyboard.state.get(), key, XKB_CONSUMED_MODE_XKB);
-            for (const auto& definition : ModifierDefinitions) {
-                const auto mask = modifierMask(keyboard.keymap.get(), definition.xkbName);
-                if (mask == 0 || (effective & mask) == 0 || (!includeConsumed && (consumed & mask) != 0)) {
+        static ActiveModifiers activeModifiers(const Keyboard& keyboard, xkb_keycode_t key) {
+            ActiveModifiers result;
+            const auto      effective = xkb_state_serialize_mods(keyboard.state.get(), XKB_STATE_MODS_EFFECTIVE);
+            const auto      consumed  = xkb_state_key_get_consumed_mods2(keyboard.state.get(), key, XKB_CONSUMED_MODE_XKB);
+            for (std::size_t i = 0; i < ModifierDefinitions.size(); ++i) {
+                const auto mask = keyboard.modifierMasks[i];
+                if ((effective & mask) == 0) {
                     continue;
                 }
-                result.push_back(QString::fromLatin1(definition.label));
+                result.all.push_back(ModifierDefinitions[i].label);
+                result.anyUnconsumed = result.anyUnconsumed || (consumed & mask) == 0;
             }
             return result;
-        }
-
-        static QString modifierLabel(xkb_keysym_t symbol) {
-            switch (symbol) {
-                case XKB_KEY_Shift_L:
-                case XKB_KEY_Shift_R: return QStringLiteral("Shift");
-                case XKB_KEY_Control_L:
-                case XKB_KEY_Control_R: return QStringLiteral("Ctrl");
-                case XKB_KEY_Alt_L:
-                case XKB_KEY_Alt_R: return QStringLiteral("Alt");
-                case XKB_KEY_Super_L:
-                case XKB_KEY_Super_R: return QStringLiteral("Super");
-                case XKB_KEY_ISO_Level3_Shift: return QStringLiteral("AltGr");
-                case XKB_KEY_Meta_L:
-                case XKB_KEY_Meta_R: return QStringLiteral("Meta");
-                case XKB_KEY_Hyper_L:
-                case XKB_KEY_Hyper_R: return QStringLiteral("Hyper");
-                default: return {};
-            }
         }
 
         static QString textForKey(xkb_state* state, xkb_keycode_t key) {
@@ -302,10 +304,10 @@ namespace Hyprcast::Overlay {
                 // Apply the key locally, then reconcile with the compositor's authoritative
                 // modifier masks when its following modifiers event arrives.
                 xkb_state_update_key(keyboard.state.get(), xkbKey, XKB_KEY_DOWN);
-                const auto symbol = xkb_state_key_get_one_sym(keyboard.state.get(), xkbKey);
-                const auto mod    = modifierLabel(symbol);
+                const auto    symbol = xkb_state_key_get_one_sym(keyboard.state.get(), xkbKey);
+                const QString mod    = modifierLabel(symbol);
 
-                PressedKey pressed;
+                PressedKey    pressed;
                 pressed.action.keyboardId  = event.keyboardId;
                 pressed.action.keycode     = event.keycode;
                 pressed.action.eventTimeMs = event.timeMs;
@@ -322,25 +324,20 @@ namespace Hyprcast::Overlay {
                             held.used = true;
                         }
                     }
-                    const auto    allModifiers   = activeModifiers(keyboard, xkbKey, true);
-                    const auto    unconsumedMods = activeModifiers(keyboard, xkbKey, false);
-                    const QString key            = keyLabel(symbol);
-                    const QString text           = textForKey(keyboard.state.get(), xkbKey);
-                    pressed.action.modifiers     = allModifiers;
-                    if (!text.isEmpty() && unconsumedMods.isEmpty()) {
-                        pressed.action.kind = InterpretedActionKind::Text;
-                        pressed.action.text = text;
-                    } else if (!allModifiers.isEmpty()) {
-                        pressed.action.kind = InterpretedActionKind::Chord;
-                        pressed.action.key  = key;
-                    } else if (!text.isEmpty()) {
+                    // Text wins when every active modifier went into producing it (Shift+a is
+                    // "A"); otherwise active modifiers make a chord (Ctrl+c), and a bare key
+                    // falls back to its text or its name.
+                    auto          modifiers = activeModifiers(keyboard, xkbKey);
+                    const QString text      = textForKey(keyboard.state.get(), xkbKey);
+                    if (!text.isEmpty() && !modifiers.anyUnconsumed) {
                         pressed.action.kind = InterpretedActionKind::Text;
                         pressed.action.text = text;
                     } else {
-                        pressed.action.kind = InterpretedActionKind::Key;
-                        pressed.action.key  = key;
+                        pressed.action.kind = modifiers.all.isEmpty() ? InterpretedActionKind::Key : InterpretedActionKind::Chord;
+                        pressed.action.key  = keyLabel(symbol);
                     }
-                    pressed.repeatable = xkb_keymap_key_repeats(keyboard.keymap.get(), xkbKey) != 0;
+                    pressed.action.modifiers = std::move(modifiers.all);
+                    pressed.repeatable       = xkb_keymap_key_repeats(keyboard.keymap.get(), xkbKey) != 0;
                     configureRepeat(keyboard, pressed, now, repeatsEnabled);
                     actions.push_back(pressed.action);
                 }
@@ -405,26 +402,6 @@ namespace Hyprcast::Overlay {
                 }
             }
             return next;
-        }
-
-        QString heldModifiers() const {
-            QStringList labels;
-            for (const auto& keyboard : keyboards | std::views::values) {
-                for (const auto& key : keyboard.pressed | std::views::values) {
-                    if (key.modifier && !labels.contains(key.modifierLabel)) {
-                        labels.push_back(key.modifierLabel);
-                    }
-                }
-            }
-            return labels.join(QStringLiteral(" + "));
-        }
-
-        QStringList heldKeys() const {
-            QStringList labels;
-            for (const HeldKey& item : heldKeyItems()) {
-                labels.push_back(item.kind == HeldKey::Kind::Text ? item.text : item.identity);
-            }
-            return labels;
         }
 
         std::vector<HeldKey> heldKeyItems() const {
@@ -509,14 +486,6 @@ namespace Hyprcast::Overlay {
 
     KeyboardInterpreter::Clock::time_point KeyboardInterpreter::nextRepeatDeadline() const noexcept {
         return m_impl->nextRepeatDeadline();
-    }
-
-    QString KeyboardInterpreter::heldModifiers() const {
-        return m_impl->heldModifiers();
-    }
-
-    QStringList KeyboardInterpreter::heldKeys() const {
-        return m_impl->heldKeys();
     }
 
     std::vector<HeldKey> KeyboardInterpreter::heldKeyItems() const {

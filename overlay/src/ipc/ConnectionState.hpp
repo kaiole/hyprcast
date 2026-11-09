@@ -2,14 +2,15 @@
 
 #include "Protocol.hpp"
 
-#include <QMap>
+#include <QSet>
 #include <QString>
 
 #include <expected>
 #include <optional>
 
 namespace Hyprcast::Overlay {
-    // Connection-scoped view of the plugin's state, validated message by message.
+    // Connection-scoped view of the plugin's state, validated message by message. It tracks
+    // only what validation needs; the keyboards themselves live in the interpreter.
     class ConnectionState {
       public:
         [[nodiscard]] std::expected<void, QString> apply(const ProtocolMessage& message);
@@ -21,27 +22,12 @@ namespace Hyprcast::Overlay {
         [[nodiscard]] bool paused() const noexcept {
             return m_paused.value_or(false);
         }
-        [[nodiscard]] const QMap<KeyboardId, KeyboardSnapshotMessage>& keyboards() const noexcept {
-            return m_keyboards;
-        }
-        [[nodiscard]] const QString& lastEventSummary() const noexcept {
-            return m_lastEventSummary;
+        [[nodiscard]] int keyboardCount() const noexcept {
+            return static_cast<int>(m_keyboards.size());
         }
 
       private:
-        // One overload per message type; std::visit fails to compile if one is missing.
-        std::expected<void, QString>              applyEvent(const CastingStateMessage& event);
-        std::expected<void, QString>              applyEvent(const KeyboardSnapshotMessage& event);
-        std::expected<void, QString>              applyEvent(const UnsubscribeKeyboardMessage& event);
-        std::expected<void, QString>              applyEvent(const KeyMessage& event);
-        std::expected<void, QString>              applyEvent(const ModifiersMessage& event);
-        std::expected<void, QString>              applyEvent(const KeymapMessage& event);
-        std::expected<void, QString>              applyEvent(const RepeatInfoMessage& event);
-
-        [[nodiscard]] KeyboardSnapshotMessage*    subscribed(KeyboardId id);
-
-        std::optional<bool>                       m_paused;
-        QMap<KeyboardId, KeyboardSnapshotMessage> m_keyboards;
-        QString                                   m_lastEventSummary;
+        std::optional<bool> m_paused;
+        QSet<KeyboardId>    m_keyboards; // Subscribed keyboards; never contains the reserved id 0.
     };
 } // namespace Hyprcast::Overlay

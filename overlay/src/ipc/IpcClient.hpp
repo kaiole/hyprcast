@@ -12,10 +12,6 @@
 namespace Hyprcast::Overlay {
     class IpcClient final : public QObject {
         Q_OBJECT
-        Q_PROPERTY(bool connected READ connected NOTIFY stateChanged)
-        Q_PROPERTY(QString statusText READ statusText NOTIFY stateChanged)
-        Q_PROPERTY(QString detailsText READ detailsText NOTIFY stateChanged)
-        Q_PROPERTY(QString lastEventText READ lastEventText NOTIFY stateChanged)
 
       public:
         explicit IpcClient(QString socketPath, QObject* parent = nullptr);
@@ -35,19 +31,13 @@ namespace Hyprcast::Overlay {
             return m_state.paused();
         }
         [[nodiscard]] int keyboardCount() const noexcept {
-            return static_cast<int>(m_state.keyboards().size());
-        }
-        [[nodiscard]] QString        statusText() const;
-        [[nodiscard]] QString        detailsText() const;
-        [[nodiscard]] QString        lastEventText() const;
-        [[nodiscard]] const QString& socketPath() const noexcept {
-            return m_socketPath;
+            return m_state.keyboardCount();
         }
 
       signals:
-        void stateChanged();
-        void protocolError(const QString& reason);
+        // The connection dropped or was rejected; everything learned from it is void.
         void connectionReset();
+        // A validated message, delivered synchronously in wire order.
         void protocolMessageReceived(const ProtocolMessage& message);
 
       private:
@@ -74,10 +64,8 @@ namespace Hyprcast::Overlay {
         QTimer                  m_stableConnectionTimer;
         LineFramer              m_framer;
         ConnectionState         m_state;
-        QString                 m_lastError;
         int                     m_nextReconnectDelayMs = InitialReconnectDelayMs;
         bool                    m_started              = false;
-        bool                    m_connecting           = false;
         bool                    m_connected            = false;
     };
 } // namespace Hyprcast::Overlay

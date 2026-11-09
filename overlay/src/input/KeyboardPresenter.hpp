@@ -9,6 +9,7 @@
 
 #include <chrono>
 #include <optional>
+#include <vector>
 
 namespace Hyprcast::Overlay {
     class KeyboardPresenter final : public QObject {
@@ -28,12 +29,10 @@ namespace Hyprcast::Overlay {
         [[nodiscard]] QString outputText() const {
             return m_history.displayText();
         }
-        [[nodiscard]] QStringList heldKeys() const {
-            return m_interpreter.heldKeys();
-        }
+        [[nodiscard]] QStringList  heldKeys() const;
         [[nodiscard]] QVariantList heldKeyItems() const;
-        [[nodiscard]] int          heldKeyCount() const {
-            return static_cast<int>(m_interpreter.heldKeys().size());
+        [[nodiscard]] int          heldKeyCount() const noexcept {
+            return static_cast<int>(m_heldKeys.size());
         }
         [[nodiscard]] bool fading() const noexcept {
             return m_fading;
@@ -64,6 +63,7 @@ namespace Hyprcast::Overlay {
 
       private:
         void                             append(const InterpretedAction& action, Clock::time_point now);
+        void                             refreshHeldKeys();
         void                             noteHistoryActivity(Clock::time_point now);
         void                             beginExpiration(Clock::time_point now);
         void                             finishFade();
@@ -72,6 +72,7 @@ namespace Hyprcast::Overlay {
         void                             onTimer();
 
         KeyboardInterpreter              m_interpreter;
+        std::vector<HeldKey>             m_heldKeys; // Interpreter's held keys as last announced to QML.
         QTimer                           m_timer;
         InputHistory                     m_history;
         HistoryListModel                 m_fadingHistory;

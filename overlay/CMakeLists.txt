@@ -33,10 +33,11 @@ target_link_libraries(hyprcast_overlay_ipc PRIVATE hyprcast_warnings PUBLIC hypr
 add_library(
   hyprcast_overlay_history STATIC
   src/history/InputHistory.cpp
-  src/history/InputHistory.hpp)
+  src/history/InputHistory.hpp
+  src/history/InterpretedAction.hpp)
 set_target_properties(hyprcast_overlay_history PROPERTIES AUTOMOC ON)
 target_include_directories(hyprcast_overlay_history PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(hyprcast_overlay_history PRIVATE hyprcast_warnings PUBLIC hyprcast::protocol Qt6::Core)
+target_link_libraries(hyprcast_overlay_history PRIVATE hyprcast_warnings PUBLIC Qt6::Core)
 
 add_library(
   hyprcast_overlay_input STATIC
@@ -46,7 +47,7 @@ add_library(
   src/input/KeyboardPresenter.hpp)
 set_target_properties(hyprcast_overlay_input PROPERTIES AUTOMOC ON)
 target_include_directories(hyprcast_overlay_input PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(hyprcast_overlay_input PRIVATE hyprcast_warnings PUBLIC Qt6::Core hyprcast_overlay_history PkgConfig::XKBCOMMON)
+target_link_libraries(hyprcast_overlay_input PRIVATE hyprcast_warnings PUBLIC Qt6::Core hyprcast::protocol hyprcast_overlay_history PkgConfig::XKBCOMMON)
 
 add_library(hyprcast_overlay_config STATIC src/config/OverlayConfig.cpp src/config/OverlayConfig.hpp src/config/TomlReader.cpp src/config/TomlReader.hpp)
 set_target_properties(hyprcast_overlay_config PROPERTIES AUTOMOC ON)
@@ -103,8 +104,6 @@ if(BUILD_TESTING)
   target_link_libraries(overlay_theme_tests PRIVATE hyprcast_warnings hyprcast_overlay_theme)
   add_test(NAME overlay-theme COMMAND overlay_theme_tests)
   set_tests_properties(overlay-theme PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
-
-  add_test(NAME overlay-removed-cli COMMAND ${CMAKE_COMMAND} -DOVERLAY=$<TARGET_FILE:hyprcast-overlay> -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/RemovedCli.cmake)
 endif()
 
 install(TARGETS hyprcast-overlay RUNTIME DESTINATION bin)

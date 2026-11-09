@@ -99,16 +99,22 @@ namespace Hyprcast::Overlay {
     }
 
     QString HistoryProjectionModel::mappedText(const QString& text) const {
+        const QString& space = m_source.presentationOptions().spaceSymbol;
+        if (space == QLatin1Char(' ') || !text.contains(QLatin1Char(' '))) {
+            return text; // Shares the entry's string instead of allocating a copy per row.
+        }
         QString result = text;
-        result.replace(QLatin1Char(' '), m_source.presentationOptions().spaceSymbol);
+        result.replace(QLatin1Char(' '), space);
         return result;
     }
 
     QString HistoryProjectionModel::mappedKey(const QString& identity) const {
+        if (identity.isEmpty()) {
+            return identity; // Text rows have no key; identities in the symbol maps are never empty.
+        }
         // Unused modifiers enter history as Key actions on release. Resolve them
         // through the same mapping used by chord modifiers and live held feedback.
-        static const QStringList modifierKeys{QStringLiteral("Shift"), QStringLiteral("Ctrl"), QStringLiteral("Alt"), QStringLiteral("Super"), QStringLiteral("AltGr")};
-        if (modifierKeys.contains(identity)) {
+        if (Modifier::isIdentity(identity)) {
             return mappedModifier(identity);
         }
         return m_source.presentationOptions().keySymbols.value(identity, identity).toString();
@@ -176,40 +182,37 @@ namespace Hyprcast::Overlay {
                 {RepeatCountRole, "repeatCount"}};
     }
 
+    QString HistoryProjectionModel::displayText() const {
+        if (!m_displayText) {
+            m_displayText = formatText(false);
+        }
+        return *m_displayText;
+    }
+
+    QString HistoryProjectionModel::displayRichText() const {
+        if (!m_displayRichText) {
+            m_displayRichText = formatText(true);
+        }
+        return *m_displayRichText;
+    }
+
     QString HistoryProjectionModel::formatText(bool rich) const {
-        QString       result;
-        const QString symbolFont = m_source.presentationOptions().symbolFontFamily;
+        QString result;
         for (const Row& row : m_rows) {
-            const auto& action       = row.source.action;
-            const auto  visibleCount = row.counted ? std::min(row.occurrences, static_cast<std::uint32_t>(m_source.presentationOptions().repeatThreshold - 1)) : 1u;
-            if (action.kind == InterpretedActionKind::Text) {
-                if (row.counted && !result.isEmpty() && !result.endsWith(QLatin1Char(' '))) {
-                    result.append(QLatin1Char(' '));
-                }
-                const QString label = rich ? row.displayLabel.toHtmlEscaped() : row.displayLabel;
-                for (std::uint32_t i = 0; i < visibleCount; ++i) {
-                    result.append(label);
-                }
-                if (row.counted) {
-                    const QString suffix = QStringLiteral("…%1x").arg(row.occurrences);
-                    result.append(rich ? QStringLiteral("<sub><small>%1</small></sub>").arg(suffix) : suffix);
-                    result.append(QLatin1Char(' '));
-                }
-                continue;
+            const bool isText       = row.source.action.kind == InterpretedActionKind::Text;
+            const auto visibleCount = row.counted ? std::min(row.occurrences, static_cast<std::uint32_t>(m_repeatThreshold - 1)) : 1u;
+            QString    label        = rich ? row.displayLabel.toHtmlEscaped() : row.displayLabel;
+            if (rich && !isText && !m_symbolFontFamily.isEmpty()) {
+                label = QStringLiteral("<font face=\"%1\">%2</font>").arg(m_symbolFontFamily.toHtmlEscaped(), label);
             }
 
-            if (!result.isEmpty() && !result.endsWith(QLatin1Char(' '))) {
+            // Plain text flows into its neighbours; keys, chords and counted runs stand apart.
+            const bool separated = !isText || row.counted;
+            if (separated && !result.isEmpty() && !result.endsWith(QLatin1Char(' '))) {
                 result.append(QLatin1Char(' '));
             }
-            QString label = row.displayLabel;
-            if (rich) {
-                label = label.toHtmlEscaped();
-                if (action.kind != InterpretedActionKind::Text && !symbolFont.isEmpty()) {
-                    label = QStringLiteral("<font face=\"%1\">%2</font>").arg(symbolFont.toHtmlEscaped(), label);
-                }
-            }
             for (std::uint32_t i = 0; i < visibleCount; ++i) {
-                if (i != 0) {
+                if (!isText && i != 0) {
                     result.append(QLatin1Char(' '));
                 }
                 result.append(label);
@@ -218,7 +221,9 @@ namespace Hyprcast::Overlay {
                 const QString suffix = QStringLiteral("…%1x").arg(row.occurrences);
                 result.append(rich ? QStringLiteral("<sub><small>%1</small></sub>").arg(suffix) : suffix);
             }
-            result.append(QLatin1Char(' '));
+            if (separated) {
+                result.append(QLatin1Char(' '));
+            }
         }
         return result;
     }
@@ -244,17 +249,10 @@ namespace Hyprcast::Overlay {
     }
 
     QSet<quint64> HistoryProjectionModel::refresh(const QSet<quint64>& collapsedRuns) {
-        const auto&   entries = m_source.entries();
-        const auto&   options = m_source.presentationOptions();
-        QSet<quint64> presentRuns;
-        for (const auto& entry : entries) {
-            if (entry.repeatGroupId != 0) {
-                presentRuns.insert(static_cast<quint64>(entry.repeatGroupId));
-            }
-        }
-        // Forget collapsed runs whose entries are gone.
-        QSet<quint64> collapsed = collapsedRuns;
-        collapsed.intersect(presentRuns);
+        const auto& entries = m_source.entries();
+        const auto& options = m_source.presentationOptions();
+        // Carries over only the collapsed runs that still have entries; the rest are forgotten.
+        QSet<quint64>    collapsed;
 
         std::vector<Row> nextRows;
         nextRows.reserve(entries.size());
@@ -262,6 +260,9 @@ namespace Hyprcast::Overlay {
             const auto& action = entries[i].action;
             std::size_t end    = i + 1;
             const auto  runId  = static_cast<quint64>(entries[i].repeatGroupId);
+            if (runId != 0 && collapsedRuns.contains(runId)) {
+                collapsed.insert(runId);
+            }
             if (options.countedRepeats && runId != 0) {
                 while (end < entries.size() && entries[end].repeatGroupId == runId && sameCountedInput(action, entries[end].action)) {
                     ++end;
@@ -283,13 +284,20 @@ namespace Hyprcast::Overlay {
             }
         }
 
-        applyRows(std::move(nextRows));
+        const bool formattingChanged = options.symbolFontFamily != m_symbolFontFamily || options.repeatThreshold != m_repeatThreshold;
+        m_symbolFontFamily           = options.symbolFontFamily;
+        m_repeatThreshold            = options.repeatThreshold;
+        if (applyRows(std::move(nextRows)) || formattingChanged) {
+            m_displayText.reset();
+            m_displayRichText.reset();
+            emit displayTextChanged();
+        }
         return collapsed;
     }
 
     // Applies `nextRows` as minimal model changes: keeps the longest run of rows common to
     // both versions (by entry id), removes/inserts around it, and updates changed rows.
-    void HistoryProjectionModel::applyRows(std::vector<Row> nextRows) {
+    bool HistoryProjectionModel::applyRows(std::vector<Row> nextRows) {
         QHash<quint64, std::size_t> newPositions;
         newPositions.reserve(static_cast<qsizetype>(nextRows.size()));
         for (std::size_t i = 0; i < nextRows.size(); ++i) {
@@ -331,6 +339,7 @@ namespace Hyprcast::Overlay {
             }
         }
 
+        const bool reshaped = bestLength != m_rows.size() || bestLength != nextRows.size();
         if (bestOld + bestLength < m_rows.size()) {
             beginRemoveRows({}, static_cast<int>(bestOld + bestLength), rowCount() - 1);
             m_rows.erase(m_rows.begin() + static_cast<std::ptrdiff_t>(bestOld + bestLength), m_rows.end());
@@ -356,14 +365,7 @@ namespace Hyprcast::Overlay {
             m_rows[row] = std::move(nextRows[row]);
             emit dataChanged(index(static_cast<int>(row)), index(static_cast<int>(row)));
         }
-
-        QString text     = formatText(false);
-        QString richText = formatText(true);
-        if (text != m_displayText || richText != m_displayRichText) {
-            m_displayText     = std::move(text);
-            m_displayRichText = std::move(richText);
-            emit displayTextChanged();
-        }
+        return reshaped || !changed.empty();
     }
 
     HistoryListModel::HistoryListModel(QObject* parent) : QAbstractListModel(parent) {
@@ -529,12 +531,12 @@ namespace Hyprcast::Overlay {
             return;
         }
 
-        const QString previousText = displayText();
-        m_options                  = options;
-        m_presentationOptions      = options.presentation;
-        trimRetention();
+        m_options             = options;
+        m_presentationOptions = options.presentation;
+        // The raw text ignores presentation options, so only trimming can change it.
+        const bool trimmed = trimRetention();
         refreshPresentation();
-        if (displayText() != previousText) {
+        if (trimmed) {
             emit displayTextChanged();
         }
     }
@@ -604,17 +606,21 @@ namespace Hyprcast::Overlay {
         removeTextSuffix(run.size() - boundary, m_entries.size() - firstTextEntry);
     }
 
-    void InputHistory::trimRetention() {
+    bool InputHistory::trimRetention() {
         if (m_options.maxRetainedUtf16CodeUnits == 0) {
-            if (!m_entries.empty()) {
-                beginRemoveRows({}, 0, rowCount() - 1);
-                m_entries.clear();
-                endRemoveRows();
+            if (m_entries.empty()) {
+                return false;
             }
-            return;
+            beginRemoveRows({}, 0, rowCount() - 1);
+            m_entries.clear();
+            endRemoveRows();
+            return true;
         }
 
-        while (retainedUtf16CodeUnits() > m_options.maxRetainedUtf16CodeUnits && !m_entries.empty()) {
+        bool trimmed = false;
+        // Each pass removes something, so the size is rescanned once per pass rather than per use.
+        for (qsizetype retained = retainedUtf16CodeUnits(); retained > m_options.maxRetainedUtf16CodeUnits && !m_entries.empty(); retained = retainedUtf16CodeUnits()) {
+            trimmed = true;
             if (m_entries.front().action.kind != InterpretedActionKind::Text) {
                 beginRemoveRows({}, 0, 0);
                 m_entries.pop_front();
@@ -622,11 +628,20 @@ namespace Hyprcast::Overlay {
                 continue;
             }
 
-            std::size_t firstNonText = 0;
-            QString     leadingText;
-            while (firstNonText < m_entries.size() && m_entries[firstNonText].action.kind == InterpretedActionKind::Text) {
-                leadingText.append(m_entries[firstNonText].action.text);
-                ++firstNonText;
+            // Gather only as much leading text as it takes to find the first grapheme boundary
+            // at or past the excess. A boundary strictly inside the gathered text cannot move
+            // when more text follows, so the rest of the section never needs to be joined.
+            const qsizetype excess      = retained - m_options.maxRetainedUtf16CodeUnits;
+            std::size_t     textEntries = 0;
+            QString         leadingText;
+            qsizetype       cut = 0;
+            while (textEntries < m_entries.size() && m_entries[textEntries].action.kind == InterpretedActionKind::Text) {
+                leadingText.append(m_entries[textEntries].action.text);
+                ++textEntries;
+                cut = nextGraphemeBoundary(leadingText, std::min(excess, leadingText.size()));
+                if (cut < leadingText.size()) {
+                    break;
+                }
             }
             if (leadingText.isEmpty()) {
                 beginRemoveRows({}, 0, 0);
@@ -634,12 +649,9 @@ namespace Hyprcast::Overlay {
                 endRemoveRows();
                 continue;
             }
-
-            const qsizetype excess = retainedUtf16CodeUnits() - m_options.maxRetainedUtf16CodeUnits;
-            const qsizetype target = std::min(excess, leadingText.size());
-            const qsizetype cut    = nextGraphemeBoundary(leadingText, target);
-            removeTextPrefix(cut, firstNonText);
+            removeTextPrefix(cut, textEntries);
         }
+        return trimmed;
     }
 
     void InputHistory::removeTextPrefix(qsizetype length, std::size_t entryCount) {

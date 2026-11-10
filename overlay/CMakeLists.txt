@@ -22,8 +22,6 @@ pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET "xkbcommon>=0.7")
 
 add_library(
   hyprcast_overlay_ipc STATIC
-  src/ipc/Restart.cpp
-  src/ipc/Restart.hpp
   src/ipc/CaptureController.cpp
   src/ipc/CaptureController.hpp
   src/ipc/OverlayInstance.cpp
@@ -88,11 +86,11 @@ if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
     target_link_libraries(${name} PRIVATE hyprcast::warnings GTest::gtest ${ARGN})
   endfunction()
 
-  hyprcast_overlay_test(overlay_restart_tests Restart.cpp hyprcast_overlay_ipc PkgConfig::XKBCOMMON)
+  hyprcast_overlay_test(overlay_reload_tests Reload.cpp hyprcast_overlay_ipc PkgConfig::XKBCOMMON)
   # The tests start the overlay itself.
-  add_dependencies(overlay_restart_tests hyprcast-overlay)
-  target_compile_definitions(overlay_restart_tests PRIVATE HYPRCAST_OVERLAY_BINARY="$<TARGET_FILE:hyprcast-overlay>")
-  gtest_discover_tests(overlay_restart_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 90)
+  add_dependencies(overlay_reload_tests hyprcast-overlay)
+  target_compile_definitions(overlay_reload_tests PRIVATE HYPRCAST_OVERLAY_BINARY="$<TARGET_FILE:hyprcast-overlay>")
+  gtest_discover_tests(overlay_reload_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 90)
 
   hyprcast_overlay_test(overlay_lifecycle_tests Lifecycle.cpp hyprcast_overlay_ipc)
   gtest_discover_tests(overlay_lifecycle_tests DISCOVERY_MODE PRE_TEST)

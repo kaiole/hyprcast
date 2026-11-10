@@ -9,6 +9,7 @@
 #include <QQmlContext>
 #include <QQuickItem>
 #include <QQuickView>
+#include <QStringView>
 #include <QUrl>
 #include <QVariant>
 #include <QVariantMap>
@@ -48,6 +49,8 @@ struct ThemeDescriptor {
 
 // The only presentation API version this overlay implements.
 inline constexpr int ThemeApiVersion = 1;
+// The theme compiled into the overlay, which is always in the catalog.
+inline constexpr QStringView BuiltinDefaultId = u"builtin:default";
 
 class ThemeCatalog final {
 public:

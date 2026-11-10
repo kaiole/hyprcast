@@ -28,11 +28,7 @@ public:
                              QObject* parent = nullptr);
 
     // Becomes the resident owner, or forwards `command` to the existing one.
-    // `inheritedLock` is the ownership lock handed over by a restarting
-    // resident.
-    [[nodiscard]] std::expected<Ownership, QString>
-    acquire(Command command, unique_fd inheritedLock = {});
-    [[nodiscard]] int lockDescriptor() const noexcept { return m_lockFd.get(); }
+    [[nodiscard]] std::expected<Ownership, QString> acquire(Command command);
 
     // Single-line wire reply: "ok\n" or "error: <message>\n".
     [[nodiscard]] static QByteArray replyLine(const QString& error);
@@ -43,8 +39,6 @@ signals:
     void restartRequested(QLocalSocket* client);
 
 private:
-    [[nodiscard]] std::expected<void, QString>
-    adoptLock(const QString& lockPath, unique_fd inheritedLock);
     [[nodiscard]] std::expected<Ownership, QString>
     forward(Command command) const;
     [[nodiscard]] std::expected<Ownership, QString> listen();

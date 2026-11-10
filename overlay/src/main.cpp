@@ -6,7 +6,6 @@
 #include "ipc/IpcClient.hpp"
 #include "ipc/OverlayInstance.hpp"
 #include "ipc/Protocol.hpp"
-#include "ipc/Restart.hpp"
 #include "theme/Theme.hpp"
 
 #include <LayerShellQt/Window>
@@ -20,6 +19,7 @@
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QList>
+#include <QLocalSocket>
 #include <QMargins>
 #include <QObject>
 #include <QQmlEngine>
@@ -34,13 +34,16 @@
 #include <QTextStream>
 #include <QTimer>
 #include <QUrl>
+#include <QVariantMap>
 #include <array>
 #include <cmath>
 #include <cstdlib>
 #include <expected>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <tuple>
+#include <utility>
 
 namespace {
 
@@ -183,8 +186,10 @@ public:
         m_parser.addPositionalArgument(
             QStringLiteral("command"),
             QStringLiteral(
-                "toggle: launch/enable or toggle capture; restart: replace "
-                "this session's overlay and restore capture (selectors only)."),
+                "toggle: launch/enable or toggle capture; restart: rebuild "
+                "this session's overlay window from the saved configuration "
+                "and installed themes, keeping capture as it is (selectors "
+                "only)."),
             QStringLiteral("[toggle|restart]"));
         m_parser.addOptions({
             m_config,
@@ -235,8 +240,8 @@ public:
                     && name != m_instance.names().front()) {
                     return std::unexpected(
                         QStringLiteral("restart accepts only --socket and "
-                                       "--instance-signature; resident startup "
-                                       "overrides are preserved"));
+                                       "--instance-signature; the running "
+                                       "overlay keeps its startup overrides"));
                 }
             }
         }
@@ -389,21 +394,6 @@ public:
             m_quitAfter.names().front());
     }
 
-    // Arguments for a restarted resident: the same startup overrides, minus
-    // selectors and one-shot options.
-    [[nodiscard]] QStringList
-    replacementArguments(const QString& socketPath) const {
-        QStringList arguments {QStringLiteral("--socket"), socketPath};
-        for (const QString& name : m_parser.optionNames()) {
-            if (name == u"socket" || name == u"instance-signature"
-                || name == u"config" || name == u"quit-after-ms") {
-                continue;
-            }
-            arguments << QStringLiteral("--") + name << m_parser.value(name);
-        }
-        return arguments;
-    }
-
 private:
     QCommandLineParser m_parser;
     const QCommandLineOption m_help = m_parser.addHelpOption();
@@ -486,14 +476,7 @@ struct ConfigSource {
 };
 
 std::expected<ConfigSource, QString>
-resolveConfigSource(const CommandLine& commandLine,
-                    const std::optional<RestartContext>& bootstrap) {
-    if (bootstrap) {
-        return ConfigSource {
-            .path = bootstrap->configPath,
-            .explicitPath = bootstrap->explicitConfig,
-        };
-    }
+resolveConfigSource(const CommandLine& commandLine) {
     if (const auto path = commandLine.configPath()) {
         if (path->isEmpty()) {
             return std::unexpected(
@@ -548,6 +531,15 @@ void configureWindow(QQuickView& view,
 }
 
 std::expected<void, QString> loadThemeHost(QQuickView& view) {
+    QObject::connect(
+        view.engine(),
+        &QQmlEngine::warnings,
+        &view,
+        [](const QList<QQmlError>& warnings) {
+            for (const auto& warning : warnings) {
+                writeWarning(QStringLiteral("QML: %1").arg(warning.toString()));
+            }
+        });
     view.setResizeMode(QQuickView::SizeRootObjectToView);
     view.setSource(QUrl(ThemeHostUrl.toString()));
     if (view.status() == QQuickView::Error) {
@@ -560,86 +552,347 @@ std::expected<void, QString> loadThemeHost(QQuickView& view) {
     return {};
 }
 
-// Loads the startup configuration and theme in isolation, so a restart is
-// refused while the running overlay is still intact. Trusted QML is
-// instantiated in a separate engine, never the active cache.
-std::expected<void, QString>
-preflightRestart(const ConfigSource& source, const ConfigOverrides& overrides) {
-    ThemeCatalog catalog(themeRoots(), QUrl(BundledThemeManifest.toString()));
-    if (auto discovered = catalog.discover(); !discovered) {
-        return std::unexpected(discovered.error());
+// Whether this session can show `config`: its monitor is connected and the
+// catalog knows its theme and accepts the theme's options.
+std::expected<void, QString> checkAgainstSession(const OverlayConfig& config,
+                                                 const ThemeCatalog& catalog) {
+    return requireScreen(config.monitor).and_then([&] {
+        return catalog.validateOptions(config.themeId, config.themeOptions)
+            .transform([](const QVariantMap&) {});
+    });
+}
+
+OverlayConfig withBundledTheme(OverlayConfig config) {
+    config.themeId = BuiltinDefaultId.toString();
+    config.themeOptions.clear();
+    return config;
+}
+
+// What a restart replaces: the window, the QML engine it owns and the theme
+// loaded into that engine. A new engine has compiled no QML yet, so it reads
+// every theme file again.
+struct Scene {
+    Scene(const ThemeCatalog& catalog,
+          KeyboardPresenter& presenter,
+          const OverlayConfig& config,
+          QScreen* onScreen)
+        : theme(catalog, view, presenter),
+          layer(LayerWindow::get(&view)),
+          screen(onScreen),
+          monitor(config.monitor),
+          clickThrough(config.clickThrough) {
+        configureWindow(view, *layer, config, screen);
     }
-    OverlayConfigManager candidate(source.path, source.explicitPath, overrides);
-    candidate.setRuntimeValidator(
-        [&](const std::optional<OverlayConfig>&,
-            const OverlayConfig& config) -> std::expected<void, QString> {
-            return requireScreen(config.monitor).and_then([&] {
-                return catalog
-                    .validateOptions(config.themeId, config.themeOptions)
-                    .transform([](const QVariantMap&) {});
+
+    [[nodiscard]] std::expected<void, QString>
+    load(const OverlayConfig& config) {
+        return hosted.and_then([&] { return theme.loadInitial(config); });
+    }
+
+    QQuickView view;
+    // Before the theme runtime, which looks its host up in the view.
+    std::expected<void, QString> hosted = loadThemeHost(view);
+    ThemeRuntime theme;
+    LayerWindow* layer = nullptr; // Owned by the view.
+    QScreen* screen = nullptr;
+    // The settings only a new window can change, as this one was built.
+    QString monitor;
+    bool clickThrough = false;
+};
+
+// This process as the resident overlay. Everything but the scene lives until
+// the process exits; a restart replaces the scene alone, so the plugin
+// connection, the capture state and the key history carry over.
+class Resident {
+public:
+    Resident(const ConfigSource& source,
+             const ConfigOverrides& overrides,
+             const QString& socketPath)
+        : m_configPath(source.path),
+          m_configuration(source.path, source.explicitPath, overrides),
+          m_ipc(socketPath) {}
+
+    // Brings the overlay up. Returns the exit code if it cannot start.
+    [[nodiscard]] std::optional<int> start(const QGuiApplication& application,
+                                           OverlayInstance& instance,
+                                           OverlayInstance::Command command) {
+        const auto themeWarnings = m_catalog.discover();
+        if (!themeWarnings) {
+            writeError(themeWarnings.error());
+            return ExitFailure;
+        }
+        for (const QString& warning : *themeWarnings) {
+            writeWarning(warning);
+        }
+
+        m_configuration.setRuntimeValidator(
+            [this](const std::optional<OverlayConfig>& previous,
+                   const OverlayConfig& candidate) {
+                return validate(previous, candidate);
             });
-        });
-    if (auto initialized = candidate.initialize(); !initialized) {
-        return initialized;
-    }
-    KeyboardPresenter presenter;
-    QQuickView probe;
-    probe.setScreen(resolveScreen(candidate.config().monitor));
-    probe.resize(candidate.config().width, candidate.config().height);
-    if (!loadThemeHost(probe)) {
-        return std::unexpected(
-            QStringLiteral("Cannot initialize isolated theme preflight host"));
-    }
-    ThemeRuntime runtime(catalog, probe, presenter);
-    return runtime.loadInitial(candidate.config());
-}
+        if (const auto initialized = m_configuration.initialize();
+            !initialized) {
+            writeError(initialized.error());
+            return ExitUsage;
+        }
+        const OverlayConfig& config = m_configuration.config();
+        applyInputSettings(config);
+        // Unlike a restart, startup has nothing to keep running, so a theme
+        // that does not load is an error and not a reason to show another.
+        m_scene = std::make_unique<Scene>(m_catalog,
+                                          m_presenter,
+                                          config,
+                                          resolveScreen(config.monitor));
+        if (const auto loaded = m_scene->load(config); !loaded) {
+            writeError(loaded.error());
+            return ExitFailure;
+        }
+        present();
 
-// Decides whether a configuration can be applied to the overlay that is
-// already running: `previous` is empty for the initial load.
-std::expected<void, QString>
-validateForRunningOverlay(const std::optional<OverlayConfig>& previous,
-                          const OverlayConfig& candidate,
-                          const ThemeCatalog& themeCatalog,
-                          ThemeRuntime& theme) {
-    if (previous && previous->monitor != candidate.monitor) {
-        return std::unexpected(
-            QStringLiteral("window.monitor cannot be changed live; "
-                           "restart the overlay to apply it"));
+        connectSignals(application, instance);
+        m_initialActivation = command == OverlayInstance::Command::Toggle;
+        if (m_initialActivation) {
+            m_capture.enableWhenReady();
+        }
+        m_ipc.start();
+        m_configuration.startWatching();
+        return std::nullopt;
     }
-    if (previous && previous->clickThrough != candidate.clickThrough) {
-        return std::unexpected(
-            QStringLiteral("window.click_through cannot be changed "
-                           "live; restart the overlay to apply it"));
-    }
-    if (auto screen = requireScreen(candidate.monitor); !screen) {
-        return screen;
-    }
-    if (auto options = themeCatalog.validateOptions(candidate.themeId,
-                                                    candidate.themeOptions);
-        !options) {
-        return std::unexpected(options.error());
-    }
-    if (previous && previous->themeId != candidate.themeId) {
-        return theme.prepareSwitch(candidate);
-    }
-    return {};
-}
 
-// Runs this process as the resident overlay until it quits. `bootstrap` is
-// set when it replaces a resident that restarted into it.
-int runResident(QGuiApplication& application,
+private:
+    void connectSignals(const QGuiApplication& application,
+                        OverlayInstance& instance) {
+        QObject::connect(&m_configuration,
+                         &OverlayConfigManager::configurationChanged,
+                         &m_receiver,
+                         [this] { applyConfiguration(); });
+        QObject::connect(
+            &application,
+            &QGuiApplication::screenRemoved,
+            &m_receiver,
+            [this](const QScreen* removedScreen) {
+                if (removedScreen != m_scene->screen) {
+                    return;
+                }
+                writeError(QStringLiteral(
+                    "Selected output was removed; closing the overlay."));
+                m_scene->view.close();
+                QGuiApplication::quit();
+            });
+
+        QObject::connect(
+            &m_ipc,
+            &IpcClient::protocolMessageReceived,
+            &m_presenter,
+            [this](const ProtocolMessage& message) {
+                m_presenter.processMessage(message);
+            },
+            Qt::DirectConnection);
+        QObject::connect(&m_ipc,
+                         &IpcClient::connectionReset,
+                         &m_presenter,
+                         &KeyboardPresenter::resetConnection,
+                         Qt::DirectConnection);
+
+        QObject::connect(&instance,
+                         &OverlayInstance::toggleRequested,
+                         &m_capture,
+                         &CaptureController::toggle);
+        QObject::connect(&instance,
+                         &OverlayInstance::restartRequested,
+                         &m_receiver,
+                         [this](QLocalSocket* client) {
+                             const auto restarted = restart();
+                             if (!restarted) {
+                                 writeError(restarted.error());
+                             }
+                             OverlayInstance::reply(
+                                 client,
+                                 restarted ? QString {} : restarted.error());
+                         });
+        QObject::connect(&m_capture,
+                         &CaptureController::activeChanged,
+                         &m_receiver,
+                         [this](bool active) {
+                             if (active) {
+                                 m_initialActivation = false;
+                             } else {
+                                 m_presenter.clearHistory();
+                             }
+                             m_scene->view.setVisible(active);
+                         });
+        // A failed first `toggle` launch exits instead of leaving an idle
+        // resident behind.
+        QObject::connect(&m_capture,
+                         &CaptureController::commandFailed,
+                         &m_receiver,
+                         [this](const QString& error) {
+                             writeError(error);
+                             if (m_initialActivation) {
+                                 QCoreApplication::exit(ExitFailure);
+                             }
+                         });
+    }
+
+    void applyInputSettings(const OverlayConfig& config) {
+        // Each setter ignores a value it already has.
+        m_presenter.setHistoryOptions(historyOptions(config));
+        m_presenter.setRepeatsEnabled(config.repeatsEnabled);
+        m_presenter.setExpiration(config.expireAfterMs, config.fadeDurationMs);
+    }
+
+    // Decides whether a saved configuration can be applied to the running
+    // overlay: `previous` is empty for the initial load.
+    [[nodiscard]] std::expected<void, QString>
+    validate(const std::optional<OverlayConfig>& previous,
+             const OverlayConfig& candidate) {
+        if (previous && previous->monitor != candidate.monitor) {
+            return std::unexpected(
+                QStringLiteral("window.monitor cannot be changed live; "
+                               "restart the overlay to apply it"));
+        }
+        if (previous && previous->clickThrough != candidate.clickThrough) {
+            return std::unexpected(
+                QStringLiteral("window.click_through cannot be changed "
+                               "live; restart the overlay to apply it"));
+        }
+        if (auto shown = checkAgainstSession(candidate, m_catalog); !shown) {
+            return shown;
+        }
+        if (previous && previous->themeId != candidate.themeId) {
+            return m_scene->theme.prepareSwitch(candidate);
+        }
+        return {};
+    }
+
+    // The configuration as the theme runtime sees it: while the bundled theme
+    // stands in for one that failed to load, that theme's settings are shown
+    // by the bundled theme.
+    [[nodiscard]] OverlayConfig themed(const OverlayConfig& config) const {
+        return !m_standInFor.isEmpty() && config.themeId == m_standInFor
+            ? withBundledTheme(config)
+            : config;
+    }
+
+    // Applies a configuration the watcher accepted to the running scene.
+    void applyConfiguration() {
+        const OverlayConfig& config = m_configuration.config();
+        applyInputSettings(config);
+        if (config.themeId != m_standInFor) {
+            m_standInFor.clear();
+        }
+        m_scene->theme.applyAcceptedConfiguration(themed(config));
+        m_scene->view.resize(config.width, config.height);
+        m_scene->layer->setDesiredSize(QSize(config.width, config.height));
+        m_scene->layer->setAnchors(toLayerAnchors(config.anchor));
+        m_scene->layer->setMargins(config.margins);
+    }
+
+    // The `restart` command: reads the installed themes and the saved
+    // configuration again and rebuilds the scene from them. Anything wrong
+    // that can be found without running theme QML is reported with the
+    // running overlay untouched.
+    [[nodiscard]] std::expected<void, QString> restart() {
+        ThemeCatalog catalog = newCatalog();
+        const auto themeWarnings = catalog.discover();
+        if (!themeWarnings) {
+            return std::unexpected(themeWarnings.error());
+        }
+        auto candidate = m_configuration.loadCandidate();
+        if (!candidate) {
+            return std::unexpected(candidate.error());
+        }
+        if (const auto shown = checkAgainstSession(*candidate, catalog);
+            !shown) {
+            return std::unexpected(
+                QStringLiteral("%1: %2").arg(m_configPath, shown.error()));
+        }
+        QScreen* screen = resolveScreen(candidate->monitor);
+
+        for (const QString& warning : *themeWarnings) {
+            writeWarning(warning);
+        }
+        // The old scene goes before anything it refers to is replaced, and
+        // before the new one loads: images are cached for the whole process
+        // by URL, and only the end of a window drops them.
+        m_scene.reset();
+        m_catalog = std::move(catalog);
+        m_configuration.adopt(std::move(*candidate));
+        const OverlayConfig& config = m_configuration.config();
+        applyInputSettings(config);
+        m_scene =
+            std::make_unique<Scene>(m_catalog, m_presenter, config, screen);
+        auto loaded = m_scene->load(config);
+        m_standInFor.clear();
+        if (!loaded) {
+            // QML is code: whether a theme loads is only known by running it,
+            // and by then the old scene is gone.
+            if (const auto bundled = m_scene->load(withBundledTheme(config));
+                !bundled) {
+                writeError(bundled.error());
+                QCoreApplication::exit(ExitFailure);
+                return loaded;
+            }
+            m_standInFor = config.themeId;
+            loaded = std::unexpected(
+                QStringLiteral("The built-in theme is shown until 'hyprcast-"
+                               "overlay restart' loads the configured one: %1")
+                    .arg(loaded.error()));
+        }
+        present();
+        return loaded;
+    }
+
+    // Shows the scene if capture is on and logs what was built.
+    void present() {
+        const OverlayConfig& config = m_configuration.config();
+        m_scene->view.setVisible(m_capture.active());
+        qInfo().noquote() << QStringLiteral(
+                                 "Overlay on %1 (%2x%3 logical px, scale %4), "
+                                 "anchor=%5, theme=%6")
+                                 .arg(m_scene->screen->name())
+                                 .arg(config.width)
+                                 .arg(config.height)
+                                 .arg(m_scene->screen->devicePixelRatio())
+                                 .arg(toString(config.anchor))
+                                 .arg(m_scene->theme.activeThemeId());
+    }
+
+    [[nodiscard]] static ThemeCatalog newCatalog() {
+        return {themeRoots(), QUrl(BundledThemeManifest.toString())};
+    }
+
+    // Declaration order is lifetime order: each object outlives everything
+    // declared after it, so nothing refers to an object that is already gone
+    // during teardown.
+    ThemeCatalog m_catalog = newCatalog();
+    KeyboardPresenter m_presenter;
+    QString m_configPath;
+    OverlayConfigManager m_configuration;
+    IpcClient m_ipc;
+    CaptureController m_capture {m_ipc};
+    std::unique_ptr<Scene> m_scene;
+    // The configured theme that failed to load, while the bundled one is shown
+    // in its place.
+    QString m_standInFor;
+    bool m_initialActivation = false;
+    // Context of every connection that calls into this object: destroyed
+    // first, it disconnects them before any member goes.
+    QObject m_receiver;
+};
+
+// Runs this process as the resident overlay until it quits.
+int runResident(const QGuiApplication& application,
                 const CommandLine& commandLine,
                 OverlayInstance::Command command,
                 const QString& socketPath,
-                OverlayInstance& instance,
-                RestartHandoff& handoff,
-                const std::optional<RestartContext>& bootstrap) {
+                OverlayInstance& instance) {
     const auto overrides = commandLine.overrides();
     if (!overrides) {
         writeError(overrides.error());
         return ExitUsage;
     }
-    const auto configSource = resolveConfigSource(commandLine, bootstrap);
+    const auto configSource = resolveConfigSource(commandLine);
     if (!configSource) {
         writeError(configSource.error());
         return ExitUsage;
@@ -650,183 +903,10 @@ int runResident(QGuiApplication& application,
         return ExitUsage;
     }
 
-    ThemeCatalog themeCatalog(themeRoots(),
-                              QUrl(BundledThemeManifest.toString()));
-    const auto themeWarnings = themeCatalog.discover();
-    if (!themeWarnings) {
-        writeError(themeWarnings.error());
-        return ExitFailure;
+    Resident resident(*configSource, *overrides, socketPath);
+    if (const auto failure = resident.start(application, instance, command)) {
+        return *failure;
     }
-    for (const QString& warning : *themeWarnings) {
-        writeWarning(warning);
-    }
-
-    // Declaration order is lifetime order: each object outlives everything
-    // declared after it, so references captured below never dangle during
-    // teardown.
-    KeyboardPresenter keyboardPresenter;
-    QQuickView view;
-    QObject::connect(
-        view.engine(),
-        &QQmlEngine::warnings,
-        &view,
-        [](const QList<QQmlError>& warnings) {
-            for (const auto& warning : warnings) {
-                writeWarning(QStringLiteral("QML: %1").arg(warning.toString()));
-            }
-        });
-    if (const auto hosted = loadThemeHost(view); !hosted) {
-        writeError(hosted.error());
-        return ExitFailure;
-    }
-    ThemeRuntime theme(themeCatalog, view, keyboardPresenter);
-
-    OverlayConfigManager configuration(configSource->path,
-                                       configSource->explicitPath,
-                                       *overrides);
-    configuration.setRuntimeValidator(
-        [&](const std::optional<OverlayConfig>& previous,
-            const OverlayConfig& candidate) {
-            return validateForRunningOverlay(previous,
-                                             candidate,
-                                             themeCatalog,
-                                             theme);
-        });
-    if (const auto initialized = configuration.initialize(); !initialized) {
-        writeError(initialized.error());
-        return ExitUsage;
-    }
-
-    const OverlayConfig& initialConfig = configuration.config();
-    QScreen* selectedScreen = resolveScreen(initialConfig.monitor);
-    if (!selectedScreen) {
-        writeError(unavailableScreenMessage(initialConfig.monitor));
-        return ExitFailure;
-    }
-    LayerWindow* layerWindow = LayerWindow::get(&view);
-    configureWindow(view, *layerWindow, initialConfig, selectedScreen);
-
-    keyboardPresenter.setHistoryOptions(historyOptions(initialConfig));
-    keyboardPresenter.setRepeatsEnabled(initialConfig.repeatsEnabled);
-    keyboardPresenter.setExpiration(initialConfig.expireAfterMs,
-                                    initialConfig.fadeDurationMs);
-    if (const auto loaded = theme.loadInitial(initialConfig); !loaded) {
-        writeError(loaded.error());
-        return ExitFailure;
-    }
-
-    QObject::connect(
-        &configuration,
-        &OverlayConfigManager::configurationChanged,
-        &view,
-        [&] {
-            const OverlayConfig& config = configuration.config();
-            theme.applyAcceptedConfiguration(config);
-            view.resize(config.width, config.height);
-            layerWindow->setDesiredSize(QSize(config.width, config.height));
-            layerWindow->setAnchors(toLayerAnchors(config.anchor));
-            layerWindow->setMargins(config.margins);
-            // Each setter ignores a value it already has.
-            keyboardPresenter.setHistoryOptions(historyOptions(config));
-            keyboardPresenter.setRepeatsEnabled(config.repeatsEnabled);
-            keyboardPresenter.setExpiration(config.expireAfterMs,
-                                            config.fadeDurationMs);
-        });
-    QObject::connect(
-        &application,
-        &QGuiApplication::screenRemoved,
-        &view,
-        [&](QScreen* removedScreen) {
-            if (removedScreen != selectedScreen) {
-                return;
-            }
-            writeError(QStringLiteral(
-                "Selected output was removed; closing the overlay."));
-            view.close();
-            QGuiApplication::quit();
-        });
-
-    qInfo().noquote() << QStringLiteral("Overlay on %1 (%2x%3 logical px, "
-                                        "scale %4), anchor=%5, theme=%6")
-                             .arg(selectedScreen->name())
-                             .arg(initialConfig.width)
-                             .arg(initialConfig.height)
-                             .arg(selectedScreen->devicePixelRatio())
-                             .arg(toString(initialConfig.anchor))
-                             .arg(theme.activeThemeId());
-
-    IpcClient ipcClient(socketPath);
-    QObject::connect(
-        &ipcClient,
-        &IpcClient::protocolMessageReceived,
-        &keyboardPresenter,
-        [&](const ProtocolMessage& message) {
-            keyboardPresenter.processMessage(message);
-        },
-        Qt::DirectConnection);
-    QObject::connect(&ipcClient,
-                     &IpcClient::connectionReset,
-                     &keyboardPresenter,
-                     &KeyboardPresenter::resetConnection,
-                     Qt::DirectConnection);
-
-    CaptureController capture(ipcClient);
-    QObject::connect(&instance,
-                     &OverlayInstance::toggleRequested,
-                     &capture,
-                     &CaptureController::toggle);
-    QObject::connect(&capture,
-                     &CaptureController::activeChanged,
-                     &view,
-                     [&](bool active) {
-                         if (!active) {
-                             keyboardPresenter.clearHistory();
-                         }
-                         view.setVisible(active);
-                     });
-    // A failed first `toggle` launch exits instead of leaving an idle resident
-    // behind.
-    bool initialActivation = command == OverlayInstance::Command::Toggle;
-    QObject::connect(&capture,
-                     &CaptureController::commandFailed,
-                     &application,
-                     [&](const QString& error) {
-                         writeError(error);
-                         if (initialActivation) {
-                             QGuiApplication::exit(ExitFailure);
-                         }
-                     });
-    QObject::connect(&capture,
-                     &CaptureController::activeChanged,
-                     &application,
-                     [&](bool active) {
-                         if (active) {
-                             initialActivation = false;
-                         }
-                     });
-    if (initialActivation) {
-        capture.enableWhenReady();
-    }
-
-    const RestartContext startup {
-        .socketPath = socketPath,
-        .configPath = configSource->path,
-        .explicitConfig = configSource->explicitPath,
-        .arguments = commandLine.replacementArguments(socketPath),
-    };
-    RestartCoordinator restartCoordinator(
-        instance,
-        capture,
-        handoff,
-        startup,
-        QCoreApplication::applicationFilePath(),
-        [&] { return preflightRestart(*configSource, *overrides); });
-    if (bootstrap) {
-        restartCoordinator.initializeReplacement(*bootstrap);
-    }
-
-    ipcClient.start();
-    configuration.startWatching();
     if (*quitAfterMs > 0) {
         QTimer::singleShot(*quitAfterMs, &application, &QCoreApplication::quit);
     }
@@ -836,17 +916,7 @@ int runResident(QGuiApplication& application,
 } // namespace
 
 int main(int argc, char* argv[]) {
-    // Adopt restart descriptors before Qt opens anything of its own.
-    RestartHandoff handoff;
-    if (const auto adopted = handoff.adopt(); !adopted) {
-        writeError(adopted.error());
-        return ExitFailure;
-    }
-    // A plain copy of the bootstrap data; the descriptors stay owned by
-    // `handoff`.
-    const std::optional<RestartContext> bootstrap = handoff.context();
-
-    QGuiApplication application(argc, argv);
+    const QGuiApplication application(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("hyprcast-overlay"));
     QCoreApplication::setApplicationVersion(
         QString::fromLatin1(hyprcast::project_version));
@@ -864,7 +934,7 @@ int main(int argc, char* argv[]) {
     }
 
     OverlayInstance instance(*socketPath);
-    const auto ownership = instance.acquire(*command, handoff.takeLock());
+    const auto ownership = instance.acquire(*command);
     if (!ownership) {
         writeError(ownership.error());
         return ExitFailure;
@@ -878,7 +948,5 @@ int main(int argc, char* argv[]) {
                        commandLine,
                        *command,
                        *socketPath,
-                       instance,
-                       handoff,
-                       bootstrap);
+                       instance);
 }

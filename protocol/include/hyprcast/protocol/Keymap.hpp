@@ -3,5 +3,7 @@
 #include <string>
 
 namespace Hyprcast {
-    using Keymap = std::string;
-}
+
+using Keymap = std::string;
+
+} // namespace Hyprcast

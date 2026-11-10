@@ -7,10 +7,12 @@
 #include <string_view>
 
 namespace Hyprcast {
-    inline HANDLE                     PHANDLE = nullptr;
 
-    inline constexpr std::string_view PLUGIN_NAME = "Hyprcast";
-    inline constexpr std::string_view DESCRIPTION = "Keycaster for Hyprland";
-    inline constexpr std::string_view AUTHOR      = "kaiole";
-    inline constexpr std::string_view VERSION     = PROJECT_VERSION;
-}
+inline HANDLE PHANDLE = nullptr;
+
+inline constexpr std::string_view PLUGIN_NAME = "Hyprcast";
+inline constexpr std::string_view DESCRIPTION = "Keycaster for Hyprland";
+inline constexpr std::string_view AUTHOR = "kaiole";
+inline constexpr std::string_view VERSION = PROJECT_VERSION;
+
+} // namespace Hyprcast

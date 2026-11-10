@@ -14,35 +14,48 @@ static void check(bool value) {
     }
 }
 int main() {
-    CConfig    state;
+    CConfig state;
     lua_State* L = luaL_newstate();
     check(L != nullptr);
     luaL_openlibs(L);
     lua_pushlightuserdata(L, &state);
-    lua_pushcclosure(L, [](lua_State* luaState) { return static_cast<CConfig*>(lua_touserdata(luaState, lua_upvalueindex(1)))->configure(luaState); }, 1);
+    lua_pushcclosure(
+        L,
+        [](lua_State* luaState) {
+            return static_cast<CConfig*>(
+                       lua_touserdata(luaState, lua_upvalueindex(1)))
+                ->configure(luaState);
+        },
+        1);
     lua_setglobal(L, "configure");
     auto run = [&](const std::string& code, bool success = true) {
-        const int top    = lua_gettop(L);
+        const int top = lua_gettop(L);
         const int result = luaL_dostring(L, code.c_str());
         if ((result == LUA_OK) != success) {
-            std::cerr << code << "\n" << (result == LUA_OK ? "unexpected success" : lua_tostring(L, -1)) << '\n';
+            std::cerr << code << "\n"
+                      << (result == LUA_OK ? "unexpected success"
+                                           : lua_tostring(L, -1))
+                      << '\n';
             std::exit(1);
         }
         if (result != LUA_OK) {
-            check(std::string(lua_tostring(L, -1)).contains("hyprcast.configure:"));
+            check(std::string(lua_tostring(L, -1))
+                      .contains("hyprcast.configure:"));
             lua_pop(L, 1);
         }
         check(lua_gettop(L) == top);
     };
-    check(state.accepted() == SConfig{});
+    check(state.accepted() == SConfig {});
     run("configure({})", false);
     state.beginReload();
-    run("configure({filter='include',keyboards={' Foo ', 'foo', ' Foo ', 'not connected'}})");
-    check(state.accepted() == SConfig{});
+    run("configure({filter='include',keyboards={' Foo ', 'foo', ' Foo ', 'not "
+        "connected'}})");
+    check(state.accepted() == SConfig {});
     state.finishReload(true);
     check(state.accepted().filterSetting == eKeyboardFilterSetting::INCLUDE);
-    check(state.accepted().filteredKeyboards == std::vector<std::string>({" Foo ", "foo", "not connected"}));
-    const auto  previous  = state.accepted();
+    check(state.accepted().filteredKeyboards
+          == std::vector<std::string>({" Foo ", "foo", "not connected"}));
+    const auto previous = state.accepted();
     const char* invalid[] = {
         "configure()",
         "configure({}, {})",
@@ -73,7 +86,8 @@ int main() {
     for (auto code : invalid) {
         state.beginReload();
         run(code, false);
-        state.finishReload(true); // Even a caught validation error poisons this evaluation.
+        state.finishReload(
+            true); // Even a caught validation error poisons this evaluation.
         check(state.accepted() == previous);
     }
     state.beginReload();
@@ -95,30 +109,37 @@ int main() {
     check(state.accepted().filteredKeyboards.empty());
     state.beginReload();
     state.finishReload(true);
-    check(state.accepted() == SConfig{});
+    check(state.accepted() == SConfig {});
     state.beginReload();
     run("configure({filter='exclude',keyboards={}})");
     state.finishReload(true);
-    check(state.accepted() == SConfig{});
+    check(state.accepted() == SConfig {});
     state.beginReload();
     run("configure({filter=nil,keyboards={'a','a','A'}})");
     state.finishReload(true);
     check(state.accepted().filterSetting == eKeyboardFilterSetting::EXCLUDE);
-    check(state.accepted().filteredKeyboards == std::vector<std::string>({"a", "A"}));
+    check(state.accepted().filteredKeyboards
+          == std::vector<std::string>({"a", "A"}));
     state.beginReload();
     run("configure({})");
     state.finishReload(true);
-    check(state.accepted() == SConfig{});
-    for (const auto& [code, expected] : std::vector<std::pair<std::string, std::string>>{
-             {"configure({wat=true})", "unknown configuration field \"wat\"; expected filter or keyboards"},
+    check(state.accepted() == SConfig {});
+    for (const auto& [code, expected] :
+         std::vector<std::pair<std::string, std::string>> {
+             {"configure({wat=true})",
+              "unknown configuration field \"wat\"; expected filter or "
+              "keyboards"},
              {"configure({keyboards='x'})", "keyboards must be a table"},
-             {"configure({keyboards={'ok', 1}})", "keyboards[2] must be a string"},
+             {"configure({keyboards={'ok', 1}})",
+              "keyboards[2] must be a string"},
              {"configure({keyboards={''}})", "keyboards[1] must not be empty"},
-             {"configure({keyboards={'a\\0b'}})", "keyboards[1] must not contain NUL bytes"},
+             {"configure({keyboards={'a\\0b'}})",
+              "keyboards[1] must not contain NUL bytes"},
          }) {
         state.beginReload();
         check(luaL_dostring(L, code.c_str()) != LUA_OK);
-        check(std::string(lua_tostring(L, -1)).contains("hyprcast.configure: " + expected));
+        check(std::string(lua_tostring(L, -1))
+                  .contains("hyprcast.configure: " + expected));
         lua_pop(L, 1);
         state.finishReload(false);
     }

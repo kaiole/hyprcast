@@ -443,7 +443,7 @@ TEST(OverlayReload, MisuseAndUnavailableOutputAreRejected) {
         << "a refused restart rebuilds nothing";
 }
 
-TEST(OverlayReload, WindowOptionsAreApplied) {
+TEST(OverlayReload, WindowOptionsApplyOnSave) {
     Fixture f;
     const QString screens = f.directory.filePath("screens.json");
     write(screens,
@@ -461,17 +461,30 @@ TEST(OverlayReload, WindowOptionsAreApplied) {
         << "by default on the primary output, letting clicks through";
 
     write(f.config, base + "[window]\nmonitor = 'second'\n");
-    ASSERT_EQ(f.restart().code, 0) << "restart onto another output";
     ASSERT_TRUE(f.logged("WINDOW second true") && f.logged("Overlay on second"))
-        << "window.monitor is applied";
+        << "a saved window.monitor moves the overlay without a restart";
 
-    write(f.config,
-          base + "[window]\nmonitor = 'second'\nclick_through = false\n");
-    ASSERT_EQ(f.restart().code, 0) << "restart into a window that takes clicks";
+    const QByteArray taken =
+        base + "[window]\nmonitor = 'second'\nclick_through = false\n";
+    write(f.config, taken);
     ASSERT_TRUE(f.logged("WINDOW second false"))
-        << "window.click_through is applied";
+        << "a saved window.click_through is applied without a restart";
     ASSERT_TRUE(f.logged("SHOWN true", 3) && f.undisturbed(pid))
         << "each window is shown, in the same connected process";
+
+    write(f.config, base + "[window]\nmonitor = 'not-an-output'\n");
+    ASSERT_TRUE(f.logged("keeping the last valid configuration")
+                && f.log.contains("not-an-output"))
+        << "an output that is not connected is refused on save";
+    ASSERT_TRUE(f.undisturbed(pid) && f.log.count("Overlay on") == 3)
+        << "and the window stays where it is";
+
+    write(f.config, taken);
+    ASSERT_EQ(f.restart().code, 0) << "restart with window options saved";
+    ASSERT_TRUE(f.logged("WINDOW second false", 2))
+        << "a restart builds its window with the saved options";
+    ASSERT_TRUE(f.logged("SHOWN true", 4) && f.undisturbed(pid))
+        << "shown again, in the same connected process";
 }
 
 TEST(OverlayReload, KeepsHistoryAndHeldKeys) {

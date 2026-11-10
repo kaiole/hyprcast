@@ -746,16 +746,6 @@ private:
     [[nodiscard]] std::expected<void, QString>
     validate(const std::optional<OverlayConfig>& previous,
              const OverlayConfig& candidate) {
-        if (previous && previous->monitor != candidate.monitor) {
-            return std::unexpected(
-                QStringLiteral("window.monitor cannot be changed live; "
-                               "restart the overlay to apply it"));
-        }
-        if (previous && previous->clickThrough != candidate.clickThrough) {
-            return std::unexpected(
-                QStringLiteral("window.click_through cannot be changed "
-                               "live; restart the overlay to apply it"));
-        }
         if (auto shown = checkAgainstSession(candidate, m_catalog); !shown) {
             return shown;
         }
@@ -774,10 +764,18 @@ private:
             : config;
     }
 
-    // Applies a configuration the watcher accepted to the running scene.
+    // Applies a configuration the watcher accepted to the running scene, or
+    // to a new one if it changes what only a new window can take.
     void applyConfiguration() {
         const OverlayConfig& config = m_configuration.config();
         applyInputSettings(config);
+        if (config.monitor != m_scene->monitor
+            || config.clickThrough != m_scene->clickThrough) {
+            if (const auto rebuilt = rebuildScene(); !rebuilt) {
+                writeError(rebuilt.error());
+            }
+            return;
+        }
         if (config.themeId != m_standInFor) {
             m_standInFor.clear();
         }
@@ -807,21 +805,28 @@ private:
             return std::unexpected(
                 QStringLiteral("%1: %2").arg(m_configPath, shown.error()));
         }
-        QScreen* screen = resolveScreen(candidate->monitor);
-
         for (const QString& warning : *themeWarnings) {
             writeWarning(warning);
         }
-        // The old scene goes before anything it refers to is replaced, and
-        // before the new one loads: images are cached for the whole process
-        // by URL, and only the end of a window drops them.
+        // The old scene goes before the catalog it refers to.
         m_scene.reset();
         m_catalog = std::move(catalog);
         m_configuration.adopt(std::move(*candidate));
+        applyInputSettings(m_configuration.config());
+        return rebuildScene();
+    }
+
+    // Replaces the scene with one built from the current configuration, which
+    // has passed checkAgainstSession().
+    [[nodiscard]] std::expected<void, QString> rebuildScene() {
         const OverlayConfig& config = m_configuration.config();
-        applyInputSettings(config);
-        m_scene =
-            std::make_unique<Scene>(m_catalog, m_presenter, config, screen);
+        // The old scene goes before the new one loads: images are cached for
+        // the whole process by URL, and only the end of a window drops them.
+        m_scene.reset();
+        m_scene = std::make_unique<Scene>(m_catalog,
+                                          m_presenter,
+                                          config,
+                                          resolveScreen(config.monitor));
         auto loaded = m_scene->load(config);
         m_standInFor.clear();
         if (!loaded) {

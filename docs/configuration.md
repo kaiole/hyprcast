@@ -4,14 +4,18 @@ Config file: `~/.config/hyprcast/overlay.toml`. Every setting is optional.
 
 Changes apply on save. If the file is invalid, the overlay prints the error and keeps the last working config.
 
-These need a restart:
-
-- Changing `window.monitor` or `window.click_through`
-- Installing or editing a theme
+Theme files are not watched. After installing or editing a theme, run:
 
 ```sh
 hyprcast-overlay restart
 ```
+
+This rebuilds the overlay window from the saved config and the installed themes, in the running overlay. Capture stays as it is and the keys already shown stay on screen.
+
+- If the config is invalid or names a monitor that is not connected, the command prints the error and changes nothing.
+- If the theme fails to load, the command prints the error and the overlay shows the built-in theme until a restart loads yours.
+
+The options the overlay was started with (such as `--width`) stay in effect. The overlay also keeps running the program it was started from: see the [README](../README.md#install) for updating Hyprcast.
 
 ## Example
 
@@ -51,7 +55,7 @@ Sizes are in logical pixels. Colors are names (`white`) or hex (`#RRGGBB`, `#AAR
 
 | Key | Default | Values |
 |---|---|---|
-| `monitor` | primary | Output name from `hyprctl monitors`. Needs restart. |
+| `monitor` | primary | Output name from `hyprctl monitors` |
 | `anchor` | `"bottom-right"` | `top`, `bottom`, `left`, `right`, `top-left`, `top-right`, `bottom-left`, `bottom-right` |
 | `margins` | `[24, 24, 24, 24]` | Left, top, right, bottom |
 | `width` | `600` | Max width, 1–8192 |
@@ -59,7 +63,7 @@ Sizes are in logical pixels. Colors are names (`white`) or hex (`#RRGGBB`, `#AAR
 | `dynamic_size` | `true` | Panel grows and shrinks with content |
 | `min_width` | `240` | Up to `width` |
 | `min_height` | `64` | Up to `height` |
-| `click_through` | `true` | Clicks pass through the overlay. Needs restart. |
+| `click_through` | `true` | Clicks pass through the overlay |
 
 ### `[appearance]`
 

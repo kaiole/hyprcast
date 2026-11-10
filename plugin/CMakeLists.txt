@@ -31,6 +31,7 @@ endblock()
 find_package(PkgConfig REQUIRED)
 
 add_subdirectory(config)
+add_subdirectory(wire)
 
 pkg_check_modules(
   HYPRLAND_DEPS
@@ -65,7 +66,7 @@ endif()
 target_include_directories(hyprcast PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(
   hyprcast PRIVATE rt PkgConfig::HYPRLAND_DEPS hyprcast::config
-                   hyprcast::common hyprcast::protocol libjson::libjson
+                   hyprcast::wire hyprcast::common hyprcast::protocol
                    hyprcast::warnings)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")

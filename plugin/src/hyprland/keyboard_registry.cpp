@@ -10,6 +10,7 @@
 #include "hyprcast/protocol/modifier_state.hpp"
 #include "hyprcast/protocol/registry_snapshot.hpp"
 #include "hyprcast/protocol/repeat_info.hpp"
+#include "hyprcast/session/session.hpp"
 #include "keyboard_info.hpp"
 
 #include <hyprland/src/Compositor.hpp>
@@ -102,9 +103,9 @@ keyboard_snapshot get_keyboard_snapshot(const IKeyboard& keyboard,
 
 } // namespace
 
-keyboard_registry::keyboard_registry(log_sink& log, callbacks cbs)
+keyboard_registry::keyboard_registry(log_sink& log, session& events)
     : log_(&log),
-      callbacks_(std::move(cbs)) {
+      session_(&events) {
     for (auto& keyboard : g_pInputManager->m_keyboards) {
         add_keyboard(keyboard);
     }
@@ -163,11 +164,11 @@ void keyboard_registry::update_subscriptions(const config& accepted_config) {
 
         info->key_event_listener = keyboard->m_keyboardEvents.key.listen(
             [this, id](const IKeyboard::SKeyEvent& event) {
-                run_guarded(
-                    "Cannot process key event; disconnecting client",
-                    [this, id, &event] {
-                        callbacks_.on_key_event(id, to_hyprcast_type(event));
-                    });
+                run_guarded("Cannot process key event; disconnecting client",
+                            [this, id, &event] {
+                                session_->on_key_event(id,
+                                                       to_hyprcast_type(event));
+                            });
             });
 
         info->modifiers_listener = keyboard->m_keyboardEvents.modifiers.listen(
@@ -175,8 +176,8 @@ void keyboard_registry::update_subscriptions(const config& accepted_config) {
                 run_guarded(
                     "Cannot process modifiers update; disconnecting client",
                     [this, id, &event] {
-                        callbacks_.on_modifiers_event(id,
-                                                      to_hyprcast_type(event));
+                        session_->on_modifiers_event(id,
+                                                     to_hyprcast_type(event));
                     });
             });
 
@@ -188,7 +189,7 @@ void keyboard_registry::update_subscriptions(const config& accepted_config) {
                     [this, id, info, &event] {
                         auto keymap = to_hyprcast_type(event);
                         info->last_sent_keymap = keymap;
-                        callbacks_.on_keymap_event(id, std::move(keymap));
+                        session_->on_keymap_event(id, std::move(keymap));
                     });
             });
 
@@ -204,7 +205,7 @@ void keyboard_registry::update_subscriptions(const config& accepted_config) {
                         "Cannot process repeat settings update; disconnecting "
                         "client",
                         [this, id, &locked_keyboard] {
-                            callbacks_.on_repeat_info_event(
+                            session_->on_repeat_info_event(
                                 id,
                                 to_hyprcast_type(
                                     locked_keyboard->m_repeatRate,
@@ -225,7 +226,7 @@ void keyboard_registry::update_subscriptions(const config& accepted_config) {
                     get_keyboard_snapshot(*keyboard, id, info->name);
                 info->last_sent_keymap = snapshot.keymap;
 
-                callbacks_.on_subscribe(std::move(snapshot));
+                session_->on_subscribe(std::move(snapshot));
             });
     }
 }
@@ -285,7 +286,7 @@ void keyboard_registry::sync_keymap(const SP<IKeyboard>& keyboard) {
         return;
     }
 
-    callbacks_.on_keymap_event(info.id, active_keymap);
+    session_->on_keymap_event(info.id, active_keymap);
     info.last_sent_keymap = active_keymap;
 }
 
@@ -339,7 +340,7 @@ void keyboard_registry::unsubscribe_listeners(keyboard_info& info) noexcept {
                 info.id,
                 info.name);
     run_guarded("Cannot prepare keyboard unsubscription; disconnecting client",
-                [this, &info] { callbacks_.on_unsubscribe(info.id); });
+                [this, &info] { session_->on_unsubscribe(info.id); });
 }
 
 } // namespace hyprcast

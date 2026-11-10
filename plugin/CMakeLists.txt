@@ -35,6 +35,7 @@ add_subdirectory(log)
 add_subdirectory(config)
 add_subdirectory(wire)
 add_subdirectory(server)
+add_subdirectory(session)
 
 pkg_check_modules(
   HYPRLAND_DEPS
@@ -72,7 +73,7 @@ target_link_libraries(
   PRIVATE rt
           PkgConfig::HYPRLAND_DEPS
           hyprcast::config
-          hyprcast::wire
+          hyprcast::session
           hyprcast::server
           hyprcast::log
           hyprcast::common

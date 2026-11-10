@@ -8,3 +8,7 @@ target_link_libraries(
   hyprcast_session
   PUBLIC hyprcast::server hyprcast::protocol hyprcast::log
   PRIVATE hyprcast::wire hyprcast::warnings)
+
+if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
+  add_subdirectory(tests)
+endif()

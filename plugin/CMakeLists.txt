@@ -30,6 +30,10 @@ endblock()
 
 find_package(PkgConfig REQUIRED)
 
+if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
+  add_subdirectory(test_support)
+endif()
+
 add_subdirectory(log)
 add_subdirectory(config)
 add_subdirectory(wire)

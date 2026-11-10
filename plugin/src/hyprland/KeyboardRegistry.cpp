@@ -39,7 +39,8 @@ namespace Hyprcast {
         // Stateless, so the unique_ptr stays pointer-sized (a function-pointer deleter would not).
         struct SFreeDeleter {
             void operator()(char* string) const noexcept {
-                // NOLINTNEXTLINE(cppcoreguidelines-no-malloc): libxkbcommon allocates this with malloc.
+                // libxkbcommon allocates this with malloc.
+                // NOLINTNEXTLINE(cppcoreguidelines-no-malloc)
                 std::free(string);
             }
         };

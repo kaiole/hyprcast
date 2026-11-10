@@ -66,7 +66,7 @@ int main() {
         "configure({keyboards={[-1]='a'}})",
         "configure({keyboards={[1.5]='a'}})",
         "configure({keyboards={x='a'}})",
-        "configure(setmetatable({}, {__index=function() error('must not execute') end}))",
+        "configure(setmetatable({}, {__index=function() error('ran') end}))",
         "configure({keyboards=setmetatable({}, {})})",
         "configure({['keyboards\\0x']={}})",
     };

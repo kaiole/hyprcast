@@ -59,3 +59,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 
 install(TARGETS hyprcast LIBRARY DESTINATION lib)
+
+if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
+  add_subdirectory(tests)
+endif()

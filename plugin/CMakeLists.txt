@@ -44,8 +44,9 @@ if(HYPRCAST_LUA_VERSION VERSION_LESS "5.5" OR NOT HYPRCAST_LUA_VERSION
 endif()
 add_library(hyprcast_config STATIC src/config/Config.cpp)
 set_target_properties(hyprcast_config PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_include_directories(hyprcast_config
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_sources(
+  hyprcast_config PUBLIC FILE_SET HEADERS BASE_DIRS include FILES
+                         include/hyprcast/config/Config.hpp)
 target_link_libraries(hyprcast_config PUBLIC PkgConfig::HYPRCAST_LUA
                       PRIVATE hyprcast_warnings)
 

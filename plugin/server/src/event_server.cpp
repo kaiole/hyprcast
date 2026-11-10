@@ -12,11 +12,13 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <iterator>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -35,6 +37,14 @@ constexpr std::string_view lock_file_name = "server.lock";
 constexpr std::size_t max_command_length =
     std::max(wire::command_enable.size(), wire::command_disable.size());
 
+// A Wayland timer takes its delay as an int, and a delay of zero disarms it.
+int to_timer_delay(std::chrono::milliseconds delay) {
+    constexpr std::chrono::milliseconds::rep shortest = 1;
+    constexpr std::chrono::milliseconds::rep longest =
+        std::numeric_limits<int>::max();
+    return static_cast<int>(std::clamp(delay.count(), shortest, longest));
+}
+
 } // namespace
 
 std::filesystem::path event_socket_dir(const char* runtime_dir,
@@ -52,12 +62,14 @@ event_server::event_server(wl_event_loop* loop,
                            log_sink& log,
                            connected_cb on_connected,
                            capture_cb on_capture,
-                           disconnected_cb on_disconnected)
+                           disconnected_cb on_disconnected,
+                           std::chrono::milliseconds accept_retry_delay)
     : loop_(loop),
       log_(&log),
       on_connected_(std::move(on_connected)),
       on_capture_(std::move(on_capture)),
       on_disconnected_(std::move(on_disconnected)),
+      accept_retry_delay_ms_(to_timer_delay(accept_retry_delay)),
       sock_paths_(init_sock_paths(sock_dir)),
       sock_lock_(sock_paths_.lock_file),
       sock_fd_(create_socket()),
@@ -124,6 +136,12 @@ event_server::event_server(wl_event_loop* loop,
         throw std::runtime_error(
             "Cannot register IPC socket with Wayland event loop");
     }
+    wl_accept_retry_.reset(
+        ::wl_event_loop_add_timer(loop_, &on_accept_retry, this));
+    if (!wl_accept_retry_) {
+        throw std::runtime_error(
+            "Cannot register IPC retry timer with Wayland event loop");
+    }
     log_message(*log_,
                 log_level::trace,
                 "Listening on IPC socket '{}'",
@@ -173,7 +191,7 @@ void event_server::disconnect_client() noexcept {
 
 void event_server::shutdown() noexcept {
     disconnect_client();
-    wl_socket_readable_.reset();
+    stop_accepting();
     sock_fd_.reset();
 }
 
@@ -224,8 +242,6 @@ int event_server::on_socket_readable(int sock_fd,
         ::accept4(sock_fd, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC)
     };
 
-    // Ignore transient failures. Unexpected failures disable the listener
-    // to avoid repeatedly waking the compositor on a broken socket.
     if (!client_fd) {
         const int error = errno;
 
@@ -254,16 +270,15 @@ int event_server::on_socket_readable(int sock_fd,
             return 0;
         }
 
-        log_error(*self->log_,
-                  "Cannot accept IPC connection: {}; disabling new connections "
-                  "until plugin reload",
-                  std::strerror(error));
-        self->log_->notify_failure(
-            "IPC listener stopped. Unload and reload hyprcast; see "
-            "Hyprland logs for details.");
-        self->wl_socket_readable_.reset();
-
+        self->pause_accepting(error);
         return 0;
+    }
+
+    if (self->accept_failing_) {
+        self->accept_failing_ = false;
+        log_message(*self->log_,
+                    log_level::warning,
+                    "Accepting IPC connections again");
     }
 
     if (self->client_fd_.valid()) {
@@ -296,6 +311,57 @@ int event_server::on_socket_readable(int sock_fd,
         [self] noexcept { self->disconnect_client(); });
 
     return 0;
+}
+
+// Any other accept4() failure, such as the process being out of descriptors,
+// leaves the connection pending and the listening socket readable. Returning
+// to the event loop as it is would call straight back here, for as long as
+// the cause lasts. So the socket goes unwatched until a timer has run out.
+void event_server::pause_accepting(int error) {
+    if (!accept_failing_) {
+        accept_failing_ = true;
+        log_error(*log_,
+                  "Cannot accept IPC connection: {}; trying again every {} ms",
+                  std::strerror(error),
+                  accept_retry_delay_ms_);
+    }
+
+    if (::wl_event_source_fd_update(wl_socket_readable_.get(), 0) == -1
+        || ::wl_event_source_timer_update(wl_accept_retry_.get(),
+                                          accept_retry_delay_ms_)
+            == -1) {
+        give_up_accepting();
+    }
+}
+
+int event_server::on_accept_retry(void* data) {
+    auto* self = static_cast<event_server*>(data);
+
+    // Watching the socket again is the retry: a connection that is still
+    // pending makes it readable at once.
+    if (::wl_event_source_fd_update(self->wl_socket_readable_.get(),
+                                    WL_EVENT_READABLE)
+        == -1) {
+        self->give_up_accepting();
+    }
+
+    return 0;
+}
+
+// Without a way to come back to the socket later, the choice is between
+// never accepting again and being called for it without pause.
+void event_server::give_up_accepting() noexcept {
+    stop_accepting();
+    log_error(*log_,
+              "Cannot schedule another attempt to accept IPC connections; "
+              "disabling new connections until plugin reload");
+    log_->notify_failure("IPC listener stopped. Unload and reload hyprcast; "
+                         "see Hyprland logs for details.");
+}
+
+void event_server::stop_accepting() noexcept {
+    wl_accept_retry_.reset();
+    wl_socket_readable_.reset();
 }
 
 int event_server::on_client_event(int /*client_fd*/,

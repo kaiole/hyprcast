@@ -423,7 +423,7 @@ void testHistoryAndSpaceReload() {
     check(keymap, "XKB keymap");
     char* text = xkb_keymap_get_as_string(keymap, XKB_KEYMAP_FORMAT_TEXT_V1);
     check(text, "serialize keymap");
-    QJsonObject snapshot {
+    const QJsonObject snapshot {
         {"event", "subscribe_keyboard"},
         {"keyboard_id", 1},
         {"name", "test"},
@@ -535,7 +535,7 @@ void testFailedExecAndBadReplies() {
     check(!duplicate.acquire(OverlayInstance::Command::Start),
           "failed exec retains ownership");
 
-    Fixture environment;
+    const Fixture environment;
     for (const QByteArray& response :
          {QByteArray {}, QByteArray("ok\nextra\n")}) {
         const QString badPath = dir.filePath(
@@ -579,7 +579,7 @@ void testFailedExecAndBadReplies() {
 
 } // namespace
 int main(int argc, char** argv) {
-    QCoreApplication app(argc, argv);
+    const QCoreApplication app(argc, argv);
     try {
         check(app.arguments().size() == 2, "overlay executable argument");
         executable = app.arguments().at(1);

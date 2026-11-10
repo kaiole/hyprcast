@@ -164,7 +164,7 @@ void testGraphemesAcrossActions() {
 
 void testBoundedRetentionAndStableMetadata() {
     InputHistory history({.maxRetainedUtf16CodeUnits = 5});
-    auto original = text(QStringLiteral("abcdefg"), 42, 30);
+    const auto original = text(QStringLiteral("abcdefg"), 42, 30);
     history.apply(original);
     check(history.displayText() == QStringLiteral("cdefg"),
           "retention keeps the newest content under its UTF-16 display budget");
@@ -308,7 +308,7 @@ void testStructuredModelRolesAndNotifications() {
 void testCountedRepeatProjectionAndBackspace() {
     InputHistory history(
         {.presentation = {.countedRepeats = true, .repeatThreshold = 4}});
-    auto first = text(QStringLiteral("a"));
+    const auto first = text(QStringLiteral("a"));
     history.apply(first);
     for (std::uint32_t i = 1; i <= 4; ++i) {
         auto repeat = first;
@@ -382,7 +382,7 @@ void testCountedRepeatProjectionAndBackspace() {
 void testAdjacentCountedInputsAndUnicodeEligibility() {
     InputHistory options(
         {.presentation = {.countedRepeats = true, .repeatThreshold = 2}});
-    auto first = text(QStringLiteral("x"));
+    const auto first = text(QStringLiteral("x"));
     options.apply(first);
     options.apply(text(QStringLiteral("b"), 2, 48));
     auto later = first;

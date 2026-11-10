@@ -48,7 +48,7 @@ void startForwarder(QProcess& process, const QString& socket) {
                   {QStringLiteral("forward"), socket});
 }
 void testLifecycle() {
-    QTemporaryDir directory;
+    const QTemporaryDir directory;
     check(directory.isValid(), "temporary directory");
     const QString socket = directory.filePath("events.sock");
     OverlayInstance owner(socket);
@@ -139,14 +139,14 @@ void testLifecycle() {
 }
 
 void testUnavailableAndCleanup() {
-    QTemporaryDir directory;
+    const QTemporaryDir directory;
     const QString socket = directory.filePath("missing.sock");
     {
         OverlayInstance owner(socket);
         check(isOwner(owner.acquire(OverlayInstance::Command::Start)),
               "owner without plugin");
         IpcClient ipc(socket);
-        CaptureController capture(ipc);
+        const CaptureController capture(ipc);
         QObject::connect(&owner,
                          &OverlayInstance::toggleRequested,
                          &capture,
@@ -182,7 +182,7 @@ void testUnavailableAndCleanup() {
 } // namespace
 
 int main(int argc, char** argv) {
-    QCoreApplication app(argc, argv);
+    const QCoreApplication app(argc, argv);
     if (app.arguments().size() == 3) {
         OverlayInstance instance(app.arguments().at(2));
         const bool crash = app.arguments().at(1) == "crash";

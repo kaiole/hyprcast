@@ -641,8 +641,10 @@ ThemeApi::ThemeApi(KeyboardPresenter& presenter,
             &KeyboardPresenter::heldKeysChanged,
             this,
             &ThemeApi::heldKeysChanged);
-    auto notifyHistoryCount = [this] { emit historyCountChanged(); };
-    auto notifyExpiredCount = [this] { emit expiredHistoryCountChanged(); };
+    const auto notifyHistoryCount = [this] { emit historyCountChanged(); };
+    const auto notifyExpiredCount = [this] {
+        emit expiredHistoryCountChanged();
+    };
     connect(&m_presenter.historyModel(),
             &QAbstractItemModel::rowsInserted,
             this,

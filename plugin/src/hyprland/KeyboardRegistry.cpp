@@ -28,7 +28,7 @@ namespace Hyprcast {
 namespace {
 
 SKeyEvent toHyprcastType(const IKeyboard::SKeyEvent& event) noexcept {
-    auto state = event.state == WL_KEYBOARD_KEY_STATE_PRESSED
+    const auto state = event.state == WL_KEYBOARD_KEY_STATE_PRESSED
         ? eKeyState::PRESSED
         : eKeyState::RELEASED;
 
@@ -133,8 +133,8 @@ void CKeyboardRegistry::updateSubscriptions(const SConfig& acceptedConfig) {
             continue;
         }
 
-        auto it = std::ranges::find(acceptedConfig.filteredKeyboards,
-                                    keyboardInfo->name);
+        const auto it = std::ranges::find(acceptedConfig.filteredKeyboards,
+                                          keyboardInfo->name);
         if ((acceptedConfig.filterSetting == eKeyboardFilterSetting::INCLUDE
              && it == acceptedConfig.filteredKeyboards.end())
             || (acceptedConfig.filterSetting == eKeyboardFilterSetting::EXCLUDE
@@ -265,12 +265,12 @@ void CKeyboardRegistry::syncKeymap(const SP<IKeyboard>& keyboard) {
         return;
     }
 
-    auto it = std::ranges::find_if(m_keyboardRegistry,
-                                   [&keyboard](const auto& keyboardInfo) {
-                                       return keyboardInfo->subscribed
-                                           && keyboardInfo->keyboard.lock()
-                                           == keyboard;
-                                   });
+    const auto it = std::ranges::find_if(
+        m_keyboardRegistry,
+        [&keyboard](const auto& keyboardInfo) {
+            return keyboardInfo->subscribed
+                && keyboardInfo->keyboard.lock() == keyboard;
+        });
     if (it == m_keyboardRegistry.end()) {
         return;
     }

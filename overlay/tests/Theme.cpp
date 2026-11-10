@@ -308,7 +308,7 @@ void testOptions(const QString& userRoot, const QString& bundledRoot) {
                   == QStringLiteral("rows"),
           "theme option defaults are exposed to QML");
 
-    QVariantMap valid {
+    const QVariantMap valid {
         {QStringLiteral("gap"), 12},
         {QStringLiteral("mode"), QStringLiteral("compact")},
         {QStringLiteral("tint"), QStringLiteral("red")},
@@ -412,7 +412,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     check(discover(catalog, nullptr, &error),
           "discover themes before QML loading test");
 
-    QTemporaryDir hostDirectory;
+    const QTemporaryDir hostDirectory;
     const QString hostPath = hostDirectory.filePath(QStringLiteral("Host.qml"));
     check(writeFile(hostPath,
                     QByteArrayLiteral(
@@ -620,7 +620,8 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
                   && hasVisualText(view.rootObject(), QStringLiteral("…2x")),
               "copied keycaps QML renders resolved chords and counted-repeat "
               "badges");
-        auto checkCapGeometry = [&](qreal expectedHeight, qreal expectedDepth) {
+        const auto checkCapGeometry = [&](qreal expectedHeight,
+                                          qreal expectedDepth) {
             // Positioners polish asynchronously; flush nested rows explicitly
             // instead of relying on a render frame or an incidental event
             // delay.
@@ -782,7 +783,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     check(prepareSwitch(runtime, config, &error),
           "load Cascade through the normal catalog");
     runtime.applyAcceptedConfiguration(config);
-    auto settle = [&]() {
+    const auto settle = [&]() {
         for (int i = 0; i < 5; ++i) {
             QCoreApplication::processEvents();
             QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
@@ -1175,7 +1176,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
               && hasVisualText(ribbon, QStringLiteral("Ctrl"))
               && hasVisualText(ribbon, QStringLiteral("C")),
           "ribbon preserves Unicode and distinct chord caps");
-    auto checkRibbon = [&]() {
+    const auto checkRibbon = [&]() {
         if (!ribbon) {
             return;
         }
@@ -1844,20 +1845,20 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
 } // namespace
 
 int main(int argc, char** argv) {
-    QGuiApplication application(argc, argv);
-    QTemporaryDir user;
-    QTemporaryDir system;
-    QTemporaryDir bundled;
+    const QGuiApplication application(argc, argv);
+    const QTemporaryDir user;
+    const QTemporaryDir system;
+    const QTemporaryDir bundled;
     check(user.isValid() && system.isValid() && bundled.isValid(),
           "create isolated theme roots");
 
     testDiscoveryAndPrecedence(user.path(), system.path(), bundled.path());
 
-    QTemporaryDir optionUser;
-    QTemporaryDir optionBundled;
+    const QTemporaryDir optionUser;
+    const QTemporaryDir optionBundled;
     testOptions(optionUser.path(), optionBundled.path());
 
-    QTemporaryDir runtimeUser;
+    const QTemporaryDir runtimeUser;
     testRuntimeLoadingAndSwitchRecovery(runtimeUser.path());
 
     if (failures == 0) {

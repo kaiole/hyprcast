@@ -39,14 +39,14 @@ developed on. These rules have no exceptions.
 | Path | Contents |
 |---|---|
 | `plugin/adapter/` | The module Hyprland loads and the only code that includes Hyprland headers: entry points, `setupKeyboard` hook, keyboard registry, Lua config glue, log sink, and the `keycaster` object that wires them to the session |
-| `plugin/session/` | Capture rules: the paused flag, what a client is told on connect, routing of keyboard events to the encoder and the server |
+| `plugin/session/` | Capture rules: the paused flag, the session-lock check, what a client is told and when, routing of keyboard events to the encoder and the server |
 | `plugin/server/` | Event server: socket, lock file, the one client connection, outgoing queue; RAII wrappers for the file lock and Wayland event sources |
 | `plugin/wire/` | Encodes each protocol message as one JSON line |
 | `plugin/config/` | Plugin configuration parsing |
 | `plugin/log/` | The log sink the libraries report through, and `run_guarded` |
 | `plugin/test_support/` | Test helpers: temporary directory, event loop, socket client, recording log |
 | `plugin/<library>/tests/` | GoogleTest tests of that library; nothing loads the plugin |
-| `protocol/include/hyprcast/protocol/` | Event types and their JSON wire format |
+| `protocol/include/hyprcast/protocol/` | Event types, their JSON wire format and the protocol version |
 | `common/` | Code shared by both components; `version.hpp.in` is configured by CMake |
 | `overlay/src/ipc/` | Socket client, message parsing, single-instance and restart handling |
 | `overlay/src/input/` | xkb interpretation of key events into actions |
@@ -64,6 +64,40 @@ the target `hyprcast_<library>` and the alias `hyprcast::<library>`. The librari
 and are tested without Hyprland; `./check` rejects a Hyprland include outside
 `plugin/adapter/`. Logic belongs in a library, and the adapter stays as thin
 as the Hyprland API allows.
+
+## Privacy invariants
+
+The plugin sees every key pressed in the session, passwords included. These
+rules decide what leaves the compositor. Tests pin each one. A change that
+needs one of those tests weakened changes the rule: do not make it unless the
+owner asked for exactly that.
+
+| Invariant | Pinned by |
+|---|---|
+| Capture starts paused | `plugin/session/tests/session_test.cpp` (`StartsPausedWithoutAskingForKeyboards`, `TellsANewClientOnlyTheState`) |
+| Capture pauses when the client goes away: closed, replaced, disconnected or shut down | `session_test.cpp` (`PausesWhen...`, `ShutdownDropsTheClientAndPauses`) |
+| While paused the client is told the capture state and nothing else: no keys, modifiers, keymaps, repeat settings or keyboards | `session_test.cpp` (`SendsNothingDerivedFromInputWhilePaused`, `DropsEverythingWhileNoClientIsConnected`) |
+| While the session is locked nothing derived from input is sent, enabled or not | `session_test.cpp` (`SendsNothingDerivedFromInputWhileLocked`, `EnableWhileLockedAnnouncesNoKeyboards`) |
+| Nothing from a gap leaks out after it: every keyboard is announced afresh when input flows again, and the release of a key whose press was not sent is dropped | `session_test.cpp` (`EveryEnableSendsAFreshSnapshot`, `ResumesWithAFreshSnapshotAfterUnlock`, `DropsTheReleaseOf...`); the overlay side in `overlay/tests/Input.cpp` (`testResentSnapshotReplacesKeyboardState`) and `overlay/tests/Ipc.cpp` (`testConnectionStateFollowsResentSnapshots`) |
+| Only the connected client's `enable` turns capture on: nothing on the compositor side (Lua function, config value, compositor event) does | `session_test.cpp` (`OnlyAClientCommandUnpauses`) |
+| The overlay asks nothing of a plugin that speaks another protocol version | `overlay/tests/Ipc.cpp` (`testIncompatiblePluginIsRefused`), `overlay/tests/Lifecycle.cpp` and `overlay/tests/Restart.cpp` (`testIncompatiblePlugin`) |
+
+"Locked" is Hyprland's session lock (`ext-session-lock-v1`, as `hyprlock`
+takes it), which the adapter reads through the session's `locked_cb`; with no
+lock manager to ask it answers locked. A password typed anywhere else, such as
+a terminal or a polkit prompt, is captured like any other input while capture
+is on.
+
+## Protocol version
+
+`protocol_version` in `protocol/include/hyprcast/protocol/wire.hpp` is the one
+definition. The plugin opens every connection with a `hello` line carrying it,
+and the overlay reads nothing else from, and sends nothing to, a plugin whose
+first line is not a hello with the same number. Raise it with every change an
+older plugin or overlay would misread, and never change the hello line itself.
+The golden lines are in `plugin/wire/tests/wire_test.cpp`, and
+`overlay/tests/WireContract.cpp` feeds each encoded message to the overlay's
+parser.
 
 ## Build and gate
 

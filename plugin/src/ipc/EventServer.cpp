@@ -181,7 +181,7 @@ CEventServer::SSockPaths CEventServer::initSockPaths() {
     return {
         .sockDir = sockDir,
         .sockFile = sockFile,
-        .lockFile = sockDir / LOCK_FILE
+        .lockFile = sockDir / LOCK_FILE,
     };
 }
 

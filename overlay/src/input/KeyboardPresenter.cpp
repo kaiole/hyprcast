@@ -51,7 +51,7 @@ QVariantList KeyboardPresenter::heldKeyItems() const {
         result.push_back(QVariantMap {
             {QStringLiteral("kind"), kind},
             {QStringLiteral("identity"), item.identity},
-            {QStringLiteral("label"), label}
+            {QStringLiteral("label"), label},
         });
     }
     return result;

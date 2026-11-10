@@ -121,28 +121,31 @@ std::expected<OverlayConfig, QString> readConfig(const toml::table& root) {
     OverlayConfig config;
     const auto sections = {
         TableReader(root, {})
-            .onlyKeys(
-                {"window",
-                 "appearance",
-                 "display",
-                 "history",
-                 "repeat",
-                 "expiration",
-                 "theme",
-                 "symbols"})
+            .onlyKeys({
+                "window",
+                "appearance",
+                "display",
+                "history",
+                "repeat",
+                "expiration",
+                "theme",
+                "symbols",
+            })
             .result(),
         readSection(root,
                     "window",
                     [&](TableReader& read) {
-                        read.onlyKeys({"monitor",
-                                       "anchor",
-                                       "margins",
-                                       "width",
-                                       "height",
-                                       "min_width",
-                                       "min_height",
-                                       "dynamic_size",
-                                       "click_through"})
+                        read.onlyKeys({
+                                          "monitor",
+                                          "anchor",
+                                          "margins",
+                                          "width",
+                                          "height",
+                                          "min_width",
+                                          "min_height",
+                                          "dynamic_size",
+                                          "click_through",
+                                      })
                             .string("monitor", config.monitor)
                             .choice("anchor", config.anchor, parseAnchor)
                             .node("margins",
@@ -160,17 +163,19 @@ std::expected<OverlayConfig, QString> readConfig(const toml::table& root) {
             root,
             "appearance",
             [&](TableReader& read) {
-                read.onlyKeys({"background_color",
-                               "background_opacity",
-                               "corner_radius",
-                               "panel_border_width",
-                               "panel_border_color",
-                               "foreground_color",
-                               "font_family",
-                               "font_size",
-                               "font_weight",
-                               "history_padding_x",
-                               "text_extra_padding_x"})
+                read.onlyKeys({
+                                  "background_color",
+                                  "background_opacity",
+                                  "corner_radius",
+                                  "panel_border_width",
+                                  "panel_border_color",
+                                  "foreground_color",
+                                  "font_family",
+                                  "font_size",
+                                  "font_weight",
+                                  "history_padding_x",
+                                  "text_extra_padding_x",
+                              })
                     .string("background_color", config.backgroundColor)
                     .number("background_opacity", config.backgroundOpacity)
                     .integer("corner_radius", config.cornerRadius)
@@ -293,7 +298,7 @@ std::expected<Anchor, QString> parseAnchor(QStringView text) {
     }
     Anchor anchor {
         .vertical = Anchor::Vertical::None,
-        .horizontal = Anchor::Horizontal::None
+        .horizontal = Anchor::Horizontal::None,
     };
     for (const auto& part : parts) {
         const bool vertical = part == u"top" || part == u"bottom";
@@ -421,7 +426,7 @@ QVariantMap overlayConfigToQmlValues(const OverlayConfig& c) {
         {QStringLiteral("modifierSymbols"), c.modifierSymbols},
         {QStringLiteral("panelVisibility"), toString(c.panelVisibility)},
         {QStringLiteral("repeatPresentation"), toString(c.repeatPresentation)},
-        {QStringLiteral("repeatCountThreshold"), c.repeatCountThreshold}
+        {QStringLiteral("repeatCountThreshold"), c.repeatCountThreshold},
     };
 }
 
@@ -468,7 +473,7 @@ validateOverlayConfig(const OverlayConfig& config) {
         {config.width, "window.width"},
         {config.height, "window.height"},
         {config.minWidth, "window.min_width"},
-        {config.minHeight, "window.min_height"}
+        {config.minHeight, "window.min_height"},
     };
     for (const auto& [value, name] : sizes) {
         if (auto ok = checkRange(value,
@@ -485,11 +490,12 @@ validateOverlayConfig(const OverlayConfig& config) {
             QStringLiteral("when window.dynamic_size is enabled, min_width and "
                            "min_height must not exceed width and height"));
     }
-    for (const int margin :
-         {config.margins.left(),
-          config.margins.top(),
-          config.margins.right(),
-          config.margins.bottom()}) {
+    for (const int margin : {
+             config.margins.left(),
+             config.margins.top(),
+             config.margins.right(),
+             config.margins.bottom(),
+         }) {
         if (auto ok = checkRange(margin,
                                  Limits::Margin,
                                  QStringLiteral("window.margins"));
@@ -511,9 +517,11 @@ validateOverlayConfig(const OverlayConfig& config) {
         {config.textExtraPaddingX, {0, 512}, "appearance.text_extra_padding_x"},
         {config.repeatCountThreshold, {2, 10000}, "repeat.count_threshold"},
         {config.expireAfterMs, Limits::ExpireAfterMs, "expiration.after_ms"},
-        {config.fadeDurationMs,
-         Limits::FadeDurationMs,
-         "expiration.fade_duration_ms"},
+        {
+            config.fadeDurationMs,
+            Limits::FadeDurationMs,
+            "expiration.fade_duration_ms",
+        },
     };
     for (const auto& [value, range, name] : appearance) {
         if (auto ok = checkRange(value, range, QString::fromLatin1(name));
@@ -527,10 +535,14 @@ validateOverlayConfig(const OverlayConfig& config) {
             QStringLiteral("'appearance.font_family' must be a non-empty font "
                            "family name (max 128 characters)"));
     }
-    for (const auto& [color, name] :
-         {std::pair {&config.backgroundColor, "appearance.background_color"},
-          std::pair {&config.panelBorderColor, "appearance.panel_border_color"},
-          std::pair {&config.foregroundColor, "appearance.foreground_color"}}) {
+    for (const auto& [color, name] : {
+             std::pair {&config.backgroundColor, "appearance.background_color"},
+             std::pair {
+                 &config.panelBorderColor,
+                 "appearance.panel_border_color"
+             },
+             std::pair {&config.foregroundColor, "appearance.foreground_color"},
+         }) {
         if (auto ok = validateColor(*color, QString::fromLatin1(name)); !ok) {
             return ok;
         }

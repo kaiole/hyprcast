@@ -40,7 +40,7 @@ SModifiers toHyprcastType(const IKeyboard::SModifiersEvent& event) noexcept {
         .depressed = event.depressed,
         .latched = event.latched,
         .locked = event.locked,
-        .group = event.group
+        .group = event.group,
     };
 }
 
@@ -69,7 +69,7 @@ Keymap toHyprcastType(const IKeyboard::SKeymapEvent& event) {
 SRepeatInfo toHyprcastType(int repeatRate, int repeatDelay) noexcept {
     return {
         .rate = static_cast<std::uint32_t>(std::max(repeatRate, 0)),
-        .delay = static_cast<std::uint32_t>(std::max(repeatDelay, 0))
+        .delay = static_cast<std::uint32_t>(std::max(repeatDelay, 0)),
     };
 }
 

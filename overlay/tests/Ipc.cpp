@@ -118,7 +118,7 @@ void testMessageParsing() {
             "0,\"keymap\":\"\",\"rate\":0,\"delay\":0}"),
         QByteArrayLiteral("{\"event\":\"repeat_info\",\"keyboard_id\":1,"
                           "\"rate\":-1,\"delay\":0}"),
-        QByteArrayLiteral("{\"event\":\"future_event\",\"keyboard_id\":1}")
+        QByteArrayLiteral("{\"event\":\"future_event\",\"keyboard_id\":1}"),
     };
     for (const auto& json : invalid) {
         const auto message = parseMessage(json);

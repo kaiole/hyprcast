@@ -433,7 +433,7 @@ void testHistoryAndSpaceReload() {
         {"group", 0},
         {"rate", 0},
         {"delay", 0},
-        {"keymap", QString::fromUtf8(text)}
+        {"keymap", QString::fromUtf8(text)},
     };
     std::free(text);
     xkb_keymap_unref(keymap);

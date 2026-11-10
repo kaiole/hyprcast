@@ -26,9 +26,9 @@ The first command needs network access: it downloads libjson, and toml++ and Goo
 
 This installs `hyprcast-overlay` to `~/.local/bin`, `libhyprcast.so` to `~/.local/lib`, and the example themes to `~/.local/share/hyprcast/themes`. The key binding below needs `~/.local/bin` on the `PATH` of your Hyprland session.
 
-Rebuild and reload the plugin after every Hyprland update.
+Build and install again after every Hyprland update: the plugin refuses to load into a Hyprland it was not built for.
 
-After updating Hyprcast, reload the plugin (or restart Hyprland) and end the running overlay, for example with `killall hyprcast-overlay`: the next `hyprcast-overlay toggle` starts the new one. `hyprcast-overlay restart` is not enough, because it keeps the running program. The overlay refuses to capture with a plugin from another version of the protocol and tells you which of the two to restart.
+After updating Hyprcast, reload the plugin (`hyprctl plugin unload` and then `hyprctl plugin load` with the path from Setup, or restart Hyprland) and end the running overlay, for example with `killall hyprcast-overlay`: the next `hyprcast-overlay toggle` starts the new one. `hyprcast-overlay restart` is not enough, because it keeps the running program. The overlay refuses to capture with a plugin from another version of the protocol and tells you which of the two to replace.
 
 ## Setup
 

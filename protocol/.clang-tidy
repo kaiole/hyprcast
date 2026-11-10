@@ -1,0 +1,26 @@
+---
+InheritParentConfig: true
+
+# Temporary: the sources here still use Hyprland naming. The rename step moves
+# them to the root's snake_case and deletes this file. Until then this keeps
+# the rules the old configuration had and leaves the other kinds unchecked.
+CheckOptions:
+  readability-identifier-naming.ClassCase: CamelCase
+  readability-identifier-naming.ClassPrefix: C
+  readability-identifier-naming.ClassIgnoredRegexp: "I.*"
+  readability-identifier-naming.StructCase: CamelCase
+  readability-identifier-naming.StructPrefix: S
+  readability-identifier-naming.EnumCase: CamelCase
+  readability-identifier-naming.EnumPrefix: e
+  readability-identifier-naming.EnumConstantCase: UPPER_CASE
+  readability-identifier-naming.NamespaceCase: CamelCase
+  readability-identifier-naming.FunctionCase: camelBack
+  readability-identifier-naming.VariableCase: aNy_CasE
+  readability-identifier-naming.ParameterCase: aNy_CasE
+  readability-identifier-naming.ConstantCase: aNy_CasE
+  readability-identifier-naming.PrivateMemberCase: aNy_CasE
+  readability-identifier-naming.PrivateMemberSuffix: ""
+  readability-identifier-naming.ProtectedMemberCase: aNy_CasE
+  readability-identifier-naming.ProtectedMemberSuffix: ""
+  readability-identifier-naming.PublicMemberCase: aNy_CasE
+  readability-identifier-naming.TypeAliasCase: aNy_CasE

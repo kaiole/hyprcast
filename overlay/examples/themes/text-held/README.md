@@ -9,7 +9,7 @@ not evidence that a historical key is still down.
 
 Install this entire directory in
 `${XDG_DATA_HOME:-~/.local/share}/hyprcast/themes/text-held/` and select the ID.
-Theme files are not watched: restart the overlay after editing QML.
+Theme files are not watched: run `hyprcast-overlay restart` after editing QML.
 
 ## Demo configuration
 

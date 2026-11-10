@@ -29,6 +29,7 @@
 #include <QSize>
 #include <QStandardPaths>
 #include <QString>
+#include <QStringView>
 #include <QSurfaceFormat>
 #include <QTextStream>
 #include <QTimer>
@@ -46,10 +47,9 @@ namespace {
 using namespace Hyprcast::Overlay;
 using LayerWindow = LayerShellQt::Window;
 
-const QString ThemeHostUrl =
-    QStringLiteral("qrc:/hyprcast/overlay/qml/ThemeHost.qml");
-const QString BundledThemeManifest =
-    QStringLiteral("qrc:/hyprcast/overlay/qml/themes/default/theme.toml");
+constexpr QStringView ThemeHostUrl = u"qrc:/hyprcast/overlay/qml/ThemeHost.qml";
+constexpr QStringView BundledThemeManifest =
+    u"qrc:/hyprcast/overlay/qml/themes/default/theme.toml";
 
 // Exit codes: usage and configuration errors are distinguished from runtime
 // failures.
@@ -275,26 +275,9 @@ public:
             .filePath(QStringLiteral("hyprcast/%1/events.sock").arg(signature));
     }
 
-    [[nodiscard]] std::expected<ConfigOverrides, QString> overrides() const {
-        ConfigOverrides overrides;
-        if (m_parser.isSet(m_monitor)) {
-            overrides.monitor = m_parser.value(m_monitor);
-        }
-        if (m_parser.isSet(m_anchor)) {
-            const auto anchor = parseAnchor(m_parser.value(m_anchor));
-            if (!anchor) {
-                return std::unexpected(
-                    QStringLiteral("--anchor: %1").arg(anchor.error()));
-            }
-            overrides.anchor = *anchor;
-        }
-        if (m_parser.isSet(m_margins)) {
-            const auto margins = parseMargins(m_parser.value(m_margins));
-            if (!margins) {
-                return std::unexpected(margins.error());
-            }
-            overrides.margins = *margins;
-        }
+    // Reads the integer options that only differ in name and range.
+    [[nodiscard]] std::expected<void, QString>
+    readIntegerOverrides(ConfigOverrides& overrides) const {
         for (const auto& [option, target, range] : {
                  std::tuple {&m_width, &overrides.width, Limits::SurfaceSize},
                  std::tuple {&m_height, &overrides.height, Limits::SurfaceSize},
@@ -320,6 +303,32 @@ public:
             }
             *target = *value;
         }
+        return {};
+    }
+
+    [[nodiscard]] std::expected<ConfigOverrides, QString> overrides() const {
+        ConfigOverrides overrides;
+        if (m_parser.isSet(m_monitor)) {
+            overrides.monitor = m_parser.value(m_monitor);
+        }
+        if (m_parser.isSet(m_anchor)) {
+            const auto anchor = parseAnchor(m_parser.value(m_anchor));
+            if (!anchor) {
+                return std::unexpected(
+                    QStringLiteral("--anchor: %1").arg(anchor.error()));
+            }
+            overrides.anchor = *anchor;
+        }
+        if (m_parser.isSet(m_margins)) {
+            const auto margins = parseMargins(m_parser.value(m_margins));
+            if (!margins) {
+                return std::unexpected(margins.error());
+            }
+            overrides.margins = *margins;
+        }
+        if (auto integers = readIntegerOverrides(overrides); !integers) {
+            return std::unexpected(integers.error());
+        }
         if (m_parser.isSet(m_opacity)) {
             bool ok = false;
             const double opacity = m_parser.value(m_opacity).toDouble(&ok);
@@ -339,8 +348,10 @@ public:
         }
         if (m_parser.isSet(m_retention)) {
             constexpr Range<int> retention {
-                static_cast<int>(Limits::RetainedUtf16CodeUnits.minimum),
-                static_cast<int>(Limits::RetainedUtf16CodeUnits.maximum),
+                .minimum =
+                    static_cast<int>(Limits::RetainedUtf16CodeUnits.minimum),
+                .maximum =
+                    static_cast<int>(Limits::RetainedUtf16CodeUnits.maximum),
             };
             const auto units = parseInteger(m_parser.value(m_retention),
                                             retention,
@@ -372,9 +383,10 @@ public:
         if (!m_parser.isSet(m_quitAfter)) {
             return 0;
         }
-        return parseInteger(m_parser.value(m_quitAfter),
-                            {1, std::numeric_limits<int>::max()},
-                            m_quitAfter.names().front());
+        return parseInteger(
+            m_parser.value(m_quitAfter),
+            {.minimum = 1, .maximum = std::numeric_limits<int>::max()},
+            m_quitAfter.names().front());
     }
 
     // Arguments for a restarted resident: the same startup overrides, minus
@@ -537,7 +549,7 @@ void configureWindow(QQuickView& view,
 
 std::expected<void, QString> loadThemeHost(QQuickView& view) {
     view.setResizeMode(QQuickView::SizeRootObjectToView);
-    view.setSource(QUrl(ThemeHostUrl));
+    view.setSource(QUrl(ThemeHostUrl.toString()));
     if (view.status() == QQuickView::Error) {
         QStringList errors;
         for (const auto& error : view.errors()) {
@@ -553,7 +565,7 @@ std::expected<void, QString> loadThemeHost(QQuickView& view) {
 // instantiated in a separate engine, never the active cache.
 std::expected<void, QString>
 preflightRestart(const ConfigSource& source, const ConfigOverrides& overrides) {
-    ThemeCatalog catalog(themeRoots(), QUrl(BundledThemeManifest));
+    ThemeCatalog catalog(themeRoots(), QUrl(BundledThemeManifest.toString()));
     if (auto discovered = catalog.discover(); !discovered) {
         return std::unexpected(discovered.error());
     }
@@ -582,47 +594,46 @@ preflightRestart(const ConfigSource& source, const ConfigOverrides& overrides) {
     return runtime.loadInitial(candidate.config());
 }
 
-} // namespace
-
-int main(int argc, char* argv[]) {
-    // Adopt restart descriptors before Qt opens anything of its own.
-    RestartHandoff handoff;
-    if (const auto adopted = handoff.adopt(); !adopted) {
-        writeError(adopted.error());
-        return ExitFailure;
+// Decides whether a configuration can be applied to the overlay that is
+// already running: `previous` is empty for the initial load.
+std::expected<void, QString>
+validateForRunningOverlay(const std::optional<OverlayConfig>& previous,
+                          const OverlayConfig& candidate,
+                          const ThemeCatalog& themeCatalog,
+                          ThemeRuntime& theme) {
+    if (previous && previous->monitor != candidate.monitor) {
+        return std::unexpected(
+            QStringLiteral("window.monitor cannot be changed live; "
+                           "restart the overlay to apply it"));
     }
-    // A plain copy of the bootstrap data; the descriptors stay owned by
-    // `handoff`.
-    const std::optional<RestartContext> bootstrap = handoff.context();
-
-    QGuiApplication application(argc, argv);
-    QCoreApplication::setApplicationName(QStringLiteral("hyprcast-overlay"));
-    QCoreApplication::setApplicationVersion(
-        QString::fromLatin1(Hyprcast::PROJECT_VERSION));
-
-    CommandLine commandLine;
-    const auto command = commandLine.parse(QGuiApplication::arguments());
-    if (!command) {
-        writeError(command.error());
-        return ExitUsage;
+    if (previous && previous->clickThrough != candidate.clickThrough) {
+        return std::unexpected(
+            QStringLiteral("window.click_through cannot be changed "
+                           "live; restart the overlay to apply it"));
     }
-    const auto socketPath = commandLine.socketPath();
-    if (!socketPath) {
-        writeError(socketPath.error());
-        return ExitUsage;
+    if (auto screen = requireScreen(candidate.monitor); !screen) {
+        return screen;
     }
+    if (auto options = themeCatalog.validateOptions(candidate.themeId,
+                                                    candidate.themeOptions);
+        !options) {
+        return std::unexpected(options.error());
+    }
+    if (previous && previous->themeId != candidate.themeId) {
+        return theme.prepareSwitch(candidate);
+    }
+    return {};
+}
 
-    OverlayInstance instance(*socketPath);
-    const auto ownership = instance.acquire(*command, handoff.takeLock());
-    if (!ownership) {
-        writeError(ownership.error());
-        return ExitFailure;
-    }
-    if (*ownership == OverlayInstance::Ownership::Forwarded) {
-        return EXIT_SUCCESS;
-    }
-
-    // From here on this process is the resident overlay.
+// Runs this process as the resident overlay until it quits. `bootstrap` is
+// set when it replaces a resident that restarted into it.
+int runResident(QGuiApplication& application,
+                const CommandLine& commandLine,
+                OverlayInstance::Command command,
+                const QString& socketPath,
+                OverlayInstance& instance,
+                RestartHandoff& handoff,
+                const std::optional<RestartContext>& bootstrap) {
     const auto overrides = commandLine.overrides();
     if (!overrides) {
         writeError(overrides.error());
@@ -639,7 +650,8 @@ int main(int argc, char* argv[]) {
         return ExitUsage;
     }
 
-    ThemeCatalog themeCatalog(themeRoots(), QUrl(BundledThemeManifest));
+    ThemeCatalog themeCatalog(themeRoots(),
+                              QUrl(BundledThemeManifest.toString()));
     const auto themeWarnings = themeCatalog.discover();
     if (!themeWarnings) {
         writeError(themeWarnings.error());
@@ -674,30 +686,11 @@ int main(int argc, char* argv[]) {
                                        *overrides);
     configuration.setRuntimeValidator(
         [&](const std::optional<OverlayConfig>& previous,
-            const OverlayConfig& candidate) -> std::expected<void, QString> {
-            if (previous && previous->monitor != candidate.monitor) {
-                return std::unexpected(
-                    QStringLiteral("window.monitor cannot be changed live; "
-                                   "restart the overlay to apply it"));
-            }
-            if (previous && previous->clickThrough != candidate.clickThrough) {
-                return std::unexpected(
-                    QStringLiteral("window.click_through cannot be changed "
-                                   "live; restart the overlay to apply it"));
-            }
-            if (auto screen = requireScreen(candidate.monitor); !screen) {
-                return screen;
-            }
-            if (auto options =
-                    themeCatalog.validateOptions(candidate.themeId,
-                                                 candidate.themeOptions);
-                !options) {
-                return std::unexpected(options.error());
-            }
-            if (previous && previous->themeId != candidate.themeId) {
-                return theme.prepareSwitch(candidate);
-            }
-            return {};
+            const OverlayConfig& candidate) {
+            return validateForRunningOverlay(previous,
+                                             candidate,
+                                             themeCatalog,
+                                             theme);
         });
     if (const auto initialized = configuration.initialize(); !initialized) {
         writeError(initialized.error());
@@ -762,7 +755,7 @@ int main(int argc, char* argv[]) {
                              .arg(toString(initialConfig.anchor))
                              .arg(theme.activeThemeId());
 
-    IpcClient ipcClient(*socketPath);
+    IpcClient ipcClient(socketPath);
     QObject::connect(
         &ipcClient,
         &IpcClient::protocolMessageReceived,
@@ -793,7 +786,7 @@ int main(int argc, char* argv[]) {
                      });
     // A failed first `toggle` launch exits instead of leaving an idle resident
     // behind.
-    bool initialActivation = *command == OverlayInstance::Command::Toggle;
+    bool initialActivation = command == OverlayInstance::Command::Toggle;
     QObject::connect(&capture,
                      &CaptureController::commandFailed,
                      &application,
@@ -816,10 +809,10 @@ int main(int argc, char* argv[]) {
     }
 
     const RestartContext startup {
-        .socketPath = *socketPath,
+        .socketPath = socketPath,
         .configPath = configSource->path,
         .explicitConfig = configSource->explicitPath,
-        .arguments = commandLine.replacementArguments(*socketPath),
+        .arguments = commandLine.replacementArguments(socketPath),
     };
     RestartCoordinator restartCoordinator(
         instance,
@@ -838,4 +831,54 @@ int main(int argc, char* argv[]) {
         QTimer::singleShot(*quitAfterMs, &application, &QCoreApplication::quit);
     }
     return QGuiApplication::exec();
+}
+
+} // namespace
+
+int main(int argc, char* argv[]) {
+    // Adopt restart descriptors before Qt opens anything of its own.
+    RestartHandoff handoff;
+    if (const auto adopted = handoff.adopt(); !adopted) {
+        writeError(adopted.error());
+        return ExitFailure;
+    }
+    // A plain copy of the bootstrap data; the descriptors stay owned by
+    // `handoff`.
+    const std::optional<RestartContext> bootstrap = handoff.context();
+
+    QGuiApplication application(argc, argv);
+    QCoreApplication::setApplicationName(QStringLiteral("hyprcast-overlay"));
+    QCoreApplication::setApplicationVersion(
+        QString::fromLatin1(Hyprcast::PROJECT_VERSION));
+
+    CommandLine commandLine;
+    const auto command = commandLine.parse(QGuiApplication::arguments());
+    if (!command) {
+        writeError(command.error());
+        return ExitUsage;
+    }
+    const auto socketPath = commandLine.socketPath();
+    if (!socketPath) {
+        writeError(socketPath.error());
+        return ExitUsage;
+    }
+
+    OverlayInstance instance(*socketPath);
+    const auto ownership = instance.acquire(*command, handoff.takeLock());
+    if (!ownership) {
+        writeError(ownership.error());
+        return ExitFailure;
+    }
+    if (*ownership == OverlayInstance::Ownership::Forwarded) {
+        return EXIT_SUCCESS;
+    }
+
+    // From here on this process is the resident overlay.
+    return runResident(application,
+                       commandLine,
+                       *command,
+                       *socketPath,
+                       instance,
+                       handoff,
+                       bootstrap);
 }

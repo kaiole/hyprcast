@@ -44,8 +44,8 @@ namespace {
 using Toml::TableReader;
 using Toml::toQString;
 
-const QString BuiltinDefaultId = QStringLiteral("builtin:default");
-const QString ManifestLabel = QStringLiteral("theme manifest");
+constexpr QStringView BuiltinDefaultId = u"builtin:default";
+constexpr QStringView ManifestLabel = u"theme manifest";
 
 bool validOptionName(const QString& name) {
     static const QRegularExpression pattern(
@@ -236,6 +236,8 @@ resolveInsidePackage(const QString& relativePath, const QString& packageRoot) {
                            "the theme directory")
                 .arg(relativePath));
     }
+    // A const QString is copied here, which only bumps a reference count.
+    // NOLINTNEXTLINE(performance-no-automatic-move)
     return fileCanonical;
 }
 
@@ -303,7 +305,7 @@ readOptionDeclaration(const QString& name, const toml::node& node) {
     }
 
     ThemeOption option;
-    TableReader read(*declaration, prefix, ManifestLabel);
+    TableReader read(*declaration, prefix, ManifestLabel.toString());
     read.onlyKeys(
             {"type", "default", "minimum", "maximum", "values", "description"})
         .required("type")
@@ -376,25 +378,22 @@ readOptionDeclaration(const QString& name, const toml::node& node) {
     return option;
 }
 
-std::expected<ThemeDescriptor, QString>
-loadDescriptor(const QUrl& manifestUrl,
-               bool bundled,
-               const QString& expectedId) {
+// Reads and parses the manifest file behind `manifestUrl`.
+std::expected<toml::table, QString> readManifest(const QUrl& manifestUrl) {
     const QString manifestFile = readFileName(manifestUrl);
     QFile file(manifestFile);
     if (manifestFile.isEmpty() || !file.open(QIODevice::ReadOnly)) {
         return std::unexpected(QStringLiteral("cannot read theme manifest '%1'")
                                    .arg(manifestUrl.toString()));
     }
-    if (file.size() > 256 * 1024) {
+    if (file.size() > qint64 {256} * 1024) {
         return std::unexpected(
             QStringLiteral("theme manifest exceeds 256 KiB"));
     }
     const QByteArray contents = file.readAll();
 
-    toml::table parsed;
     try {
-        parsed = toml::parse(
+        return toml::parse(
             std::string_view(contents.constData(),
                              static_cast<std::size_t>(contents.size())),
             manifestUrl.toString().toStdString());
@@ -402,8 +401,50 @@ loadDescriptor(const QUrl& manifestUrl,
                                                 // from std::runtime_error.
         return std::unexpected(QString::fromUtf8(exception.what()));
     }
+}
 
-    if (auto ok = TableReader(parsed, {}, ManifestLabel)
+// Checks the id, API version and name read from a manifest's [theme] table.
+// `expectedId` is the package directory name, or empty for the bundled theme.
+std::expected<void, QString> checkIdentity(const ThemeDescriptor& theme,
+                                           const QString& expectedId) {
+    if (!validThemeId(theme.id)) {
+        return std::unexpected(
+            QStringLiteral("theme id '%1' must match [a-z0-9][a-z0-9._-]{0,63} "
+                           "and not use the reserved 'builtin.' prefix")
+                .arg(theme.id));
+    }
+    if (!expectedId.isEmpty() && theme.id != expectedId) {
+        return std::unexpected(
+            QStringLiteral(
+                "manifest id '%1' does not match directory name '%2'")
+                .arg(theme.id, expectedId));
+    }
+    if (theme.apiVersion != ThemeApiVersion) {
+        return std::unexpected(
+            QStringLiteral("theme '%1' requires presentation API version %2; "
+                           "this overlay supports version %3")
+                .arg(theme.id)
+                .arg(theme.apiVersion)
+                .arg(ThemeApiVersion));
+    }
+    if (theme.name.size() > 128 || theme.name.contains(QChar::Null)) {
+        return std::unexpected(QStringLiteral(
+            "theme.name must be at most 128 characters and contain no NUL"));
+    }
+    return {};
+}
+
+std::expected<ThemeDescriptor, QString>
+loadDescriptor(const QUrl& manifestUrl,
+               bool bundled,
+               const QString& expectedId) {
+    const auto manifest = readManifest(manifestUrl);
+    if (!manifest) {
+        return std::unexpected(manifest.error());
+    }
+    const toml::table& parsed = *manifest;
+
+    if (auto ok = TableReader(parsed, {}, ManifestLabel.toString())
                       .onlyKeys({"theme", "options"})
                       .result();
         !ok) {
@@ -418,7 +459,9 @@ loadDescriptor(const QUrl& manifestUrl,
     ThemeDescriptor result;
     result.bundled = bundled;
     QString entry;
-    TableReader read(**theme, QStringLiteral("theme"), ManifestLabel);
+    TableReader read(**theme,
+                     QStringLiteral("theme"),
+                     ManifestLabel.toString());
     read.onlyKeys({"id", "name", "api_version", "entry"})
         .required("id")
         .string("id", result.id)
@@ -437,29 +480,8 @@ loadDescriptor(const QUrl& manifestUrl,
     if (result.name.isEmpty()) {
         result.name = result.id;
     }
-    if (!validThemeId(result.id)) {
-        return std::unexpected(
-            QStringLiteral("theme id '%1' must match [a-z0-9][a-z0-9._-]{0,63} "
-                           "and not use the reserved 'builtin.' prefix")
-                .arg(result.id));
-    }
-    if (!expectedId.isEmpty() && result.id != expectedId) {
-        return std::unexpected(
-            QStringLiteral(
-                "manifest id '%1' does not match directory name '%2'")
-                .arg(result.id, expectedId));
-    }
-    if (result.apiVersion != ThemeApiVersion) {
-        return std::unexpected(
-            QStringLiteral("theme '%1' requires presentation API version %2; "
-                           "this overlay supports version %3")
-                .arg(result.id)
-                .arg(result.apiVersion)
-                .arg(ThemeApiVersion));
-    }
-    if (result.name.size() > 128 || result.name.contains(QChar::Null)) {
-        return std::unexpected(QStringLiteral(
-            "theme.name must be at most 128 characters and contain no NUL"));
+    if (auto ok = checkIdentity(result, expectedId); !ok) {
+        return std::unexpected(ok.error());
     }
 
     if (bundled) {
@@ -640,7 +662,7 @@ ThemeCatalog::validateOptions(const QString& id,
 QStringList ThemeCatalog::availableThemeIds() const {
     QStringList ids = m_themes.keys();
     if (m_bundledDefault) {
-        ids.push_back(BuiltinDefaultId);
+        ids.push_back(BuiltinDefaultId.toString());
     }
     ids.removeDuplicates();
     std::ranges::sort(ids);
@@ -899,7 +921,7 @@ ThemeRuntime::createInstance(const OverlayConfig& config) {
     root->setParent(instance->slot.get());
     root->setParentItem(instance->slot.get());
     instance->root = root;
-    object.release(); // Now owned by the slot.
+    (void)object.release(); // Now owned by the slot.
     return instance;
 }
 

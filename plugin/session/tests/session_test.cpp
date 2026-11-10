@@ -210,19 +210,66 @@ TEST_F(SessionTest, EveryEnableSendsAFreshSnapshot) {
     EXPECT_EQ(snapshots_taken, 2);
 }
 
-TEST_F(SessionTest, SendsNoKeyEventsWhilePaused) {
+// A release names the key as surely as its press does.
+TEST_F(SessionTest, DropsTheReleaseOfAKeyPressedWhilePaused) {
     auto client = connect();
 
     under_test.on_key_event(1, press_a);
     send_command(client, "enable", false);
+    under_test.on_key_event(2, press_a);
     under_test.on_key_event(1, release_a);
+    under_test.on_key_event(2, release_a);
 
-    // The press would have arrived before the answer to `enable`.
+    // Only the other keyboard's key was pressed after `enable`.
     expect_lines(client,
                  {
                      wire::casting_state_message(true),
                      wire::casting_state_message(false),
+                     wire::key_message(2, press_a),
+                     wire::key_message(2, release_a),
+                 });
+}
+
+TEST_F(SessionTest, DropsTheReleaseOfAKeyPressedWhileLocked) {
+    auto client = connect();
+    send_command(client, "enable", false);
+    locked = true;
+    under_test.on_key_event(1, press_a);
+
+    locked = false;
+    under_test.on_key_event(1, release_a);
+    under_test.on_key_event(1, press_a);
+    under_test.on_key_event(1, release_a);
+
+    expect_lines(client,
+                 {
+                     wire::casting_state_message(true),
+                     wire::casting_state_message(false),
+                     wire::key_message(1, press_a),
                      wire::key_message(1, release_a),
+                 });
+}
+
+// The client forgets a key when its keyboard is withdrawn, so the release
+// that follows a gap has nothing to end.
+TEST_F(SessionTest, DropsTheReleaseOfAKeyHeldAcrossAGap) {
+    auto client = connect();
+    send_command(client, "enable", false);
+    under_test.on_key_event(1, press_a);
+
+    send_command(client, "disable", true);
+    send_command(client, "enable", false);
+    under_test.on_key_event(1, release_a);
+    send_command(client, "disable", true);
+
+    expect_lines(client,
+                 {
+                     wire::casting_state_message(true),
+                     wire::casting_state_message(false),
+                     wire::key_message(1, press_a),
+                     wire::casting_state_message(true),
+                     wire::casting_state_message(false),
+                     wire::casting_state_message(true),
                  });
 }
 
@@ -299,13 +346,13 @@ TEST_F(SessionTest, PausesWhenTheClientLeaves) {
     auto second = connect();
     under_test.on_key_event(1, press_a);
     send_command(second, "enable", false);
-    under_test.on_key_event(1, release_a);
+    under_test.on_key_event(2, press_a);
 
     expect_lines(second,
                  {
                      wire::casting_state_message(true),
                      wire::casting_state_message(false),
-                     wire::key_message(1, release_a),
+                     wire::key_message(2, press_a),
                  });
 }
 
@@ -487,13 +534,13 @@ TEST_F(SessionTest, DropsEverythingWhileNoClientIsConnected) {
 
     auto client = connect();
     send_command(client, "enable", false);
-    under_test.on_key_event(1, release_a);
+    under_test.on_key_event(2, press_a);
 
     expect_lines(client,
                  {
                      wire::casting_state_message(true),
                      wire::casting_state_message(false),
-                     wire::key_message(1, release_a),
+                     wire::key_message(2, press_a),
                  });
 }
 

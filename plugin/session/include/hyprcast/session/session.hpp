@@ -10,8 +10,10 @@
 #include "hyprcast/protocol/repeat_info.hpp"
 #include "hyprcast/server/event_server.hpp"
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <utility>
 #include <vector>
 
 struct wl_event_loop;
@@ -93,6 +95,10 @@ private:
     bool flowing_ = false;
     // The keyboards the client has been told about and not yet lost.
     std::vector<keyboard_id> announced_;
+    // The keys whose press the client was sent and whose release it was not.
+    // A release is sent only for one of these, because it names its key as
+    // surely as the press does.
+    std::vector<std::pair<keyboard_id, std::uint32_t>> pressed_;
     // Last, so that its callbacks never see a half-built session.
     event_server server_;
 };

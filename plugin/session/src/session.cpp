@@ -2,6 +2,7 @@
 
 #include "hyprcast/log/log_sink.hpp"
 #include "hyprcast/protocol/key_event.hpp"
+#include "hyprcast/protocol/key_state.hpp"
 #include "hyprcast/protocol/keyboard_id.hpp"
 #include "hyprcast/protocol/keyboard_snapshot.hpp"
 #include "hyprcast/protocol/keymap_text.hpp"
@@ -54,15 +55,28 @@ void session::on_subscribe(keyboard_snapshot snapshot) {
 }
 
 void session::on_unsubscribe(keyboard_id id) {
-    if (sync_flow() && std::erase(announced_, id) > 0) {
+    if (!sync_flow()) {
+        return;
+    }
+    std::erase_if(pressed_, [id](const auto& key) { return key.first == id; });
+    if (std::erase(announced_, id) > 0) {
         server_.queue_message(wire::unsubscribe_message(id));
     }
 }
 
 void session::on_key_event(keyboard_id id, const key_event& event) {
-    if (sync_flow()) {
-        server_.queue_message(wire::key_message(id, event));
+    if (!sync_flow()) {
+        return;
     }
+    const std::pair key {id, event.keycode};
+    if (event.state == key_state::pressed) {
+        if (!std::ranges::contains(pressed_, key)) {
+            pressed_.push_back(key);
+        }
+    } else if (std::erase(pressed_, key) == 0) {
+        return;
+    }
+    server_.queue_message(wire::key_message(id, event));
 }
 
 void session::on_modifiers_event(keyboard_id id,
@@ -137,6 +151,7 @@ void session::start_flow() {
 
 void session::stop_flow() {
     flowing_ = false;
+    pressed_.clear();
     for (const auto id : std::exchange(announced_, {})) {
         server_.queue_message(wire::unsubscribe_message(id));
     }
@@ -146,6 +161,7 @@ void session::forget_client() noexcept {
     paused_ = true;
     flowing_ = false;
     announced_.clear();
+    pressed_.clear();
 }
 
 } // namespace hyprcast

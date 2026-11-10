@@ -7,13 +7,13 @@
 namespace hyprcast {
 
 // Holds an exclusive flock() for as long as the object lives. All special
-// members are implicit: CUniqueFd already makes this move-only (rule of zero).
-class CFileLock {
+// members are implicit: unique_fd already makes this move-only (rule of zero).
+class file_lock {
 public:
-    explicit CFileLock(const std::filesystem::path& lockPath);
+    explicit file_lock(const std::filesystem::path& lock_path);
 
 private:
-    CUniqueFd m_lockFd;
+    unique_fd lock_fd_;
 };
 
 } // namespace hyprcast

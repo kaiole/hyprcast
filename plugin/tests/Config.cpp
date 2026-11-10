@@ -23,46 +23,46 @@ void check(bool value) {
 } // namespace
 
 int main() {
-    CConfig state;
-    lua_State* L = luaL_newstate();
-    check(L != nullptr);
-    luaL_openlibs(L);
-    lua_pushlightuserdata(L, &state);
+    config_state state;
+    lua_State* lua = luaL_newstate();
+    check(lua != nullptr);
+    luaL_openlibs(lua);
+    lua_pushlightuserdata(lua, &state);
     lua_pushcclosure(
-        L,
-        [](lua_State* luaState) {
-            return static_cast<CConfig*>(
-                       lua_touserdata(luaState, lua_upvalueindex(1)))
-                ->configure(luaState);
+        lua,
+        [](lua_State* lua_state) {
+            return static_cast<config_state*>(
+                       lua_touserdata(lua_state, lua_upvalueindex(1)))
+                ->configure(lua_state);
         },
         1);
-    lua_setglobal(L, "configure");
+    lua_setglobal(lua, "configure");
     const auto run = [&](const std::string& code, bool success = true) {
-        const int top = lua_gettop(L);
-        const int result = luaL_dostring(L, code.c_str());
+        const int top = lua_gettop(lua);
+        const int result = luaL_dostring(lua, code.c_str());
         if ((result == LUA_OK) != success) {
             std::cerr << code << "\n"
                       << (result == LUA_OK ? "unexpected success"
-                                           : lua_tostring(L, -1))
+                                           : lua_tostring(lua, -1))
                       << '\n';
             std::_Exit(1);
         }
         if (result != LUA_OK) {
-            check(std::string(lua_tostring(L, -1))
+            check(std::string(lua_tostring(lua, -1))
                       .contains("hyprcast.configure:"));
-            lua_pop(L, 1);
+            lua_pop(lua, 1);
         }
-        check(lua_gettop(L) == top);
+        check(lua_gettop(lua) == top);
     };
-    check(state.accepted() == SConfig {});
+    check(state.accepted() == config {});
     run("configure({})", false);
-    state.beginReload();
+    state.begin_reload();
     run("configure({filter='include',keyboards={' Foo ', 'foo', ' Foo ', 'not "
         "connected'}})");
-    check(state.accepted() == SConfig {});
-    state.finishReload(true);
-    check(state.accepted().filterSetting == eKeyboardFilterSetting::INCLUDE);
-    check(state.accepted().filteredKeyboards
+    check(state.accepted() == config {});
+    state.finish_reload(true);
+    check(state.accepted().filter_setting == keyboard_filter_setting::include);
+    check(state.accepted().filtered_keyboards
           == std::vector<std::string>({" Foo ", "foo", "not connected"}));
     const auto previous = state.accepted();
     const std::array invalid {
@@ -93,46 +93,46 @@ int main() {
         "configure({['keyboards\\0x']={}})",
     };
     for (const auto* code : invalid) {
-        state.beginReload();
+        state.begin_reload();
         run(code, false);
-        state.finishReload(
+        state.finish_reload(
             true); // Even a caught validation error poisons this evaluation.
         check(state.accepted() == previous);
     }
-    state.beginReload();
+    state.begin_reload();
     run("configure({filter='exclude',keyboards={'private'}})");
-    state.finishReload(false);
+    state.finish_reload(false);
     check(state.accepted() == previous);
-    state.beginReload();
+    state.begin_reload();
     run("configure({})");
     run("configure({})", false);
-    state.finishReload(true);
+    state.finish_reload(true);
     check(state.accepted() == previous);
-    state.beginReload();
+    state.begin_reload();
     run("configure({filter='exclude',keyboards={'private'}})");
-    state.beginReload();
+    state.begin_reload();
     run("configure({filter='include'})");
-    state.finishReload(true);
-    state.finishReload(true);
-    check(state.accepted().filterSetting == eKeyboardFilterSetting::INCLUDE);
-    check(state.accepted().filteredKeyboards.empty());
-    state.beginReload();
-    state.finishReload(true);
-    check(state.accepted() == SConfig {});
-    state.beginReload();
+    state.finish_reload(true);
+    state.finish_reload(true);
+    check(state.accepted().filter_setting == keyboard_filter_setting::include);
+    check(state.accepted().filtered_keyboards.empty());
+    state.begin_reload();
+    state.finish_reload(true);
+    check(state.accepted() == config {});
+    state.begin_reload();
     run("configure({filter='exclude',keyboards={}})");
-    state.finishReload(true);
-    check(state.accepted() == SConfig {});
-    state.beginReload();
+    state.finish_reload(true);
+    check(state.accepted() == config {});
+    state.begin_reload();
     run("configure({filter=nil,keyboards={'a','a','A'}})");
-    state.finishReload(true);
-    check(state.accepted().filterSetting == eKeyboardFilterSetting::EXCLUDE);
-    check(state.accepted().filteredKeyboards
+    state.finish_reload(true);
+    check(state.accepted().filter_setting == keyboard_filter_setting::exclude);
+    check(state.accepted().filtered_keyboards
           == std::vector<std::string>({"a", "A"}));
-    state.beginReload();
+    state.begin_reload();
     run("configure({})");
-    state.finishReload(true);
-    check(state.accepted() == SConfig {});
+    state.finish_reload(true);
+    check(state.accepted() == config {});
     for (const auto& [code, expected] :
          std::vector<std::pair<std::string, std::string>> {
              {
@@ -151,20 +151,20 @@ int main() {
                  "keyboards[1] must not contain NUL bytes",
              },
          }) {
-        state.beginReload();
-        check(luaL_dostring(L, code.c_str()) != LUA_OK);
-        check(std::string(lua_tostring(L, -1))
+        state.begin_reload();
+        check(luaL_dostring(lua, code.c_str()) != LUA_OK);
+        check(std::string(lua_tostring(lua, -1))
                   .contains("hyprcast.configure: " + expected));
-        lua_pop(L, 1);
-        state.finishReload(false);
+        lua_pop(lua, 1);
+        state.finish_reload(false);
     }
     // Direct successful parsing preserves its argument stack too.
-    state.beginReload();
-    lua_newtable(L);
-    check(state.configure(L) == 0);
-    check(lua_gettop(L) == 1 && lua_istable(L, 1));
-    lua_pop(L, 1);
-    state.finishReload(true);
-    lua_close(L);
+    state.begin_reload();
+    lua_newtable(lua);
+    check(state.configure(lua) == 0);
+    check(lua_gettop(lua) == 1 && lua_istable(lua, 1));
+    lua_pop(lua, 1);
+    state.finish_reload(true);
+    lua_close(lua);
     std::cout << "configuration tests passed\n";
 }

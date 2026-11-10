@@ -12,9 +12,9 @@
 namespace hyprcast {
 
 template <typename... Args>
-void logMessage(Hyprutils::CLI::eLogLevel level,
-                std::format_string<Args...> fmt,
-                Args&&... args) noexcept {
+void log_message(Hyprutils::CLI::eLogLevel level,
+                 std::format_string<Args...> fmt,
+                 Args&&... args) noexcept {
     try {
         Log::logger->log(level,
                          "[hyprcast] {}",
@@ -25,13 +25,13 @@ void logMessage(Hyprutils::CLI::eLogLevel level,
 }
 
 template <typename... Args>
-void logError(std::format_string<Args...> fmt, Args&&... args) noexcept {
-    logMessage(Log::ERR, fmt, std::forward<Args>(args)...);
+void log_error(std::format_string<Args...> fmt, Args&&... args) noexcept {
+    log_message(Log::ERR, fmt, std::forward<Args>(args)...);
 }
 
-inline void notifyFailure(std::string_view message) noexcept {
+inline void notify_failure(std::string_view message) noexcept {
     try {
-        HyprlandAPI::addNotification(PHANDLE,
+        HyprlandAPI::addNotification(plugin_handle,
                                      std::format("[hyprcast] {}", message),
                                      CHyprColor {1.0f, 0.2f, 0.2f, 1.0f},
                                      8000);

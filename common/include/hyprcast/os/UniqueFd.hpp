@@ -8,40 +8,40 @@ namespace hyprcast {
 
 // Move-only owner of a POSIX file descriptor, in the spirit of std::unique_ptr.
 // A negative descriptor means "empty".
-class CUniqueFd {
+class unique_fd {
 public:
-    CUniqueFd() noexcept = default;
-    explicit CUniqueFd(int fd) noexcept : m_fd(fd) {}
-    ~CUniqueFd() noexcept { reset(); }
+    unique_fd() noexcept = default;
+    explicit unique_fd(int fd) noexcept : fd_(fd) {}
+    ~unique_fd() noexcept { reset(); }
 
-    CUniqueFd(const CUniqueFd&) = delete;
-    CUniqueFd& operator=(const CUniqueFd&) = delete;
-    CUniqueFd(CUniqueFd&& other) noexcept : m_fd(other.release()) {}
-    CUniqueFd& operator=(CUniqueFd&& other) noexcept {
+    unique_fd(const unique_fd&) = delete;
+    unique_fd& operator=(const unique_fd&) = delete;
+    unique_fd(unique_fd&& other) noexcept : fd_(other.release()) {}
+    unique_fd& operator=(unique_fd&& other) noexcept {
         reset(other.release());
         return *this;
     }
 
-    [[nodiscard]] int get() const noexcept { return m_fd; }
-    [[nodiscard]] bool valid() const noexcept { return m_fd >= 0; }
+    [[nodiscard]] int get() const noexcept { return fd_; }
+    [[nodiscard]] bool valid() const noexcept { return fd_ >= 0; }
     explicit operator bool() const noexcept { return valid(); }
 
     // Gives up ownership without closing; the caller becomes responsible for
     // the descriptor.
-    [[nodiscard]] int release() noexcept { return std::exchange(m_fd, -1); }
+    [[nodiscard]] int release() noexcept { return std::exchange(fd_, -1); }
 
     void reset(int fd = -1) noexcept {
-        if (m_fd == fd) {
+        if (fd_ == fd) {
             return;
         }
-        if (m_fd >= 0) {
-            ::close(m_fd);
+        if (fd_ >= 0) {
+            ::close(fd_);
         }
-        m_fd = fd;
+        fd_ = fd;
     }
 
 private:
-    int m_fd = -1;
+    int fd_ = -1;
 };
 
 } // namespace hyprcast

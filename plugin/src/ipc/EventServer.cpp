@@ -29,194 +29,194 @@
 namespace hyprcast {
 namespace {
 
-constexpr int BACKLOG_SIZE = 1;
-constexpr std::size_t SOCK_PATH_CAPACITY = sizeof(::sockaddr_un {}.sun_path);
-constexpr std::string_view SOCK_DIR = "hyprcast";
-constexpr std::string_view SOCK_FILE = "events.sock";
-constexpr std::string_view LOCK_FILE = "server.lock";
+constexpr int backlog_size = 1;
+constexpr std::size_t sock_path_capacity = sizeof(::sockaddr_un {}.sun_path);
+constexpr std::string_view sock_dir_name = "hyprcast";
+constexpr std::string_view sock_file_name = "events.sock";
+constexpr std::string_view lock_file_name = "server.lock";
 // A longer unterminated buffer can never become a valid command.
-constexpr std::size_t MAX_COMMAND_LENGTH =
-    std::max(wire::COMMAND_ENABLE.size(), wire::COMMAND_DISABLE.size());
+constexpr std::size_t max_command_length =
+    std::max(wire::command_enable.size(), wire::command_disable.size());
 
 } // namespace
 
-CEventServer::CEventServer(ConnectedCB onConnected,
-                           CaptureCB onCapture,
-                           DisconnectedCB onDisconnected)
-    : m_onConnected(std::move(onConnected)),
-      m_onCapture(std::move(onCapture)),
-      m_onDisconnected(std::move(onDisconnected)),
-      m_sockPaths(initSockPaths()),
-      m_sockLock(m_sockPaths.lockFile),
-      m_sockFd(createSocket()),
-      m_sockFile(m_sockPaths.sockFile) {
-    std::error_code errorCode;
-    const auto sockStatus =
-        std::filesystem::symlink_status(m_sockPaths.sockFile, errorCode);
-    if (errorCode && errorCode != std::errc::no_such_file_or_directory) {
-        throw std::system_error(errorCode,
+event_server::event_server(connected_cb on_connected,
+                           capture_cb on_capture,
+                           disconnected_cb on_disconnected)
+    : on_connected_(std::move(on_connected)),
+      on_capture_(std::move(on_capture)),
+      on_disconnected_(std::move(on_disconnected)),
+      sock_paths_(init_sock_paths()),
+      sock_lock_(sock_paths_.lock_file),
+      sock_fd_(create_socket()),
+      sock_file_(sock_paths_.sock_file) {
+    std::error_code error_code;
+    const auto sock_status =
+        std::filesystem::symlink_status(sock_paths_.sock_file, error_code);
+    if (error_code && error_code != std::errc::no_such_file_or_directory) {
+        throw std::system_error(error_code,
                                 "Cannot inspect IPC socket '"
-                                    + m_sockPaths.sockFile.string() + "'");
+                                    + sock_paths_.sock_file.string() + "'");
     }
 
-    if (sockStatus.type() != std::filesystem::file_type::not_found) {
-        if (!std::filesystem::is_socket(sockStatus)) {
+    if (sock_status.type() != std::filesystem::file_type::not_found) {
+        if (!std::filesystem::is_socket(sock_status)) {
             throw std::runtime_error("Refusing to remove non-socket entry '"
-                                     + m_sockPaths.sockFile.string() + "'");
+                                     + sock_paths_.sock_file.string() + "'");
         }
 
-        if (::unlink(m_sockPaths.sockFile.c_str()) == -1 && errno != ENOENT) {
+        if (::unlink(sock_paths_.sock_file.c_str()) == -1 && errno != ENOENT) {
             throw std::system_error(errno,
                                     std::generic_category(),
                                     "Cannot remove stale IPC socket '"
-                                        + m_sockPaths.sockFile.string() + "'");
+                                        + sock_paths_.sock_file.string() + "'");
         }
     }
 
-    ::sockaddr_un sockAddress {};
-    sockAddress.sun_family = AF_UNIX;
-    std::memcpy(std::data(sockAddress.sun_path),
-                m_sockPaths.sockFile.c_str(),
-                m_sockPaths.sockFile.native().size() + 1);
+    ::sockaddr_un sock_address {};
+    sock_address.sun_family = AF_UNIX;
+    std::memcpy(std::data(sock_address.sun_path),
+                sock_paths_.sock_file.c_str(),
+                sock_paths_.sock_file.native().size() + 1);
 
-    const int bindStatus =
-        ::bind(m_sockFd.get(),
+    const int bind_status =
+        ::bind(sock_fd_.get(),
                // bind(2) takes every address family as a sockaddr*.
                // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-               reinterpret_cast<const ::sockaddr*>(&sockAddress),
-               sizeof(sockAddress));
-    if (bindStatus == -1) {
+               reinterpret_cast<const ::sockaddr*>(&sock_address),
+               sizeof(sock_address));
+    if (bind_status == -1) {
         throw std::system_error(errno,
                                 std::generic_category(),
                                 "Cannot bind IPC socket '"
-                                    + m_sockPaths.sockFile.string() + "'");
+                                    + sock_paths_.sock_file.string() + "'");
     }
 
-    m_sockFile.markBound();
+    sock_file_.mark_bound();
 
-    // TODO: if multiple clients is needed we need to increase BACKLOG_SIZE
-    const int listenStatus = ::listen(m_sockFd.get(), BACKLOG_SIZE);
-    if (listenStatus == -1) {
+    // TODO: if multiple clients is needed we need to increase backlog_size
+    const int listen_status = ::listen(sock_fd_.get(), backlog_size);
+    if (listen_status == -1) {
         throw std::system_error(errno,
                                 std::generic_category(),
                                 "Cannot listen on IPC socket '"
-                                    + m_sockPaths.sockFile.string() + "'");
+                                    + sock_paths_.sock_file.string() + "'");
     }
 
-    m_wlSocketReadable.reset(
+    wl_socket_readable_.reset(
         ::wl_event_loop_add_fd(g_pCompositor->m_wlEventLoop,
-                               m_sockFd.get(),
+                               sock_fd_.get(),
                                WL_EVENT_READABLE,
-                               &onSocketReadable,
+                               &on_socket_readable,
                                this));
-    if (!m_wlSocketReadable) {
+    if (!wl_socket_readable_) {
         throw std::runtime_error(
             "Cannot register IPC socket with Wayland event loop");
     }
-    logMessage(Log::TRACE,
-               "Listening on IPC socket '{}'",
-               m_sockPaths.sockFile.string());
+    log_message(Log::TRACE,
+                "Listening on IPC socket '{}'",
+                sock_paths_.sock_file.string());
 }
 
-void CEventServer::queueMessage(std::string message) {
-    if (!m_clientFd.valid()) {
+void event_server::queue_message(std::string message) {
+    if (!client_fd_.valid()) {
         return;
     }
 
-    constexpr std::size_t MAX_MESSAGES = 256;
-    if (m_messageQueue.size() >= MAX_MESSAGES) {
-        logMessage(Log::WARN,
-                   "Client disconnected: outgoing queue reached {} messages",
-                   MAX_MESSAGES);
-        disconnectClient();
+    constexpr std::size_t max_messages = 256;
+    if (message_queue_.size() >= max_messages) {
+        log_message(Log::WARN,
+                    "Client disconnected: outgoing queue reached {} messages",
+                    max_messages);
+        disconnect_client();
         return;
     }
 
     message.push_back('\n');
-    m_messageQueue.push_back(std::move(message));
-    flushMessages();
+    message_queue_.push_back(std::move(message));
+    flush_messages();
 }
 
-void CEventServer::disconnectClient() noexcept {
-    const bool hadClient = m_clientFd.valid();
-    if (hadClient) {
-        logMessage(Log::TRACE, "Client disconnected");
+void event_server::disconnect_client() noexcept {
+    const bool had_client = client_fd_.valid();
+    if (had_client) {
+        log_message(Log::TRACE, "Client disconnected");
     }
 
-    m_commandBuffer.clear();
-    m_messageOffset = 0;
-    m_messageQueue.clear();
-    m_wlClientEvents.reset();
-    m_clientFd.reset();
-    if (hadClient) {
-        runGuarded("Cannot pause disconnected capture",
-                   m_onDisconnected,
-                   [] noexcept {});
+    command_buffer_.clear();
+    message_offset_ = 0;
+    message_queue_.clear();
+    wl_client_events_.reset();
+    client_fd_.reset();
+    if (had_client) {
+        run_guarded("Cannot pause disconnected capture",
+                    on_disconnected_,
+                    [] noexcept {});
     }
 }
 
-void CEventServer::shutdown() noexcept {
-    disconnectClient();
-    m_wlSocketReadable.reset();
-    m_sockFd.reset();
+void event_server::shutdown() noexcept {
+    disconnect_client();
+    wl_socket_readable_.reset();
+    sock_fd_.reset();
 }
 
-CEventServer::SSockPaths CEventServer::initSockPaths() {
-    const char* runtimeDir = std::getenv("XDG_RUNTIME_DIR");
-    if (runtimeDir == nullptr || runtimeDir[0] == '\0') {
+event_server::sock_paths event_server::init_sock_paths() {
+    const char* runtime_dir = std::getenv("XDG_RUNTIME_DIR");
+    if (runtime_dir == nullptr || runtime_dir[0] == '\0') {
         throw std::runtime_error("XDG_RUNTIME_DIR is unset");
     }
 
-    const auto sockDir = std::filesystem::path(runtimeDir) / SOCK_DIR
+    const auto sock_dir = std::filesystem::path(runtime_dir) / sock_dir_name
         / g_pCompositor->m_instanceSignature;
-    const auto sockFile = sockDir / SOCK_FILE;
+    const auto sock_file = sock_dir / sock_file_name;
 
-    if (sockFile.native().size() >= SOCK_PATH_CAPACITY) {
+    if (sock_file.native().size() >= sock_path_capacity) {
         throw std::runtime_error("IPC socket path exceeds Unix socket limit: '"
-                                 + sockFile.string() + "'");
+                                 + sock_file.string() + "'");
     }
 
-    std::error_code errorCode;
-    std::filesystem::create_directories(sockDir, errorCode);
-    if (errorCode) {
-        throw std::system_error(errorCode,
+    std::error_code error_code;
+    std::filesystem::create_directories(sock_dir, error_code);
+    if (error_code) {
+        throw std::system_error(error_code,
                                 "Cannot create socket directory '"
-                                    + sockDir.string() + "'");
+                                    + sock_dir.string() + "'");
     }
 
     return {
-        .sockDir = sockDir,
-        .sockFile = sockFile,
-        .lockFile = sockDir / LOCK_FILE,
+        .sock_dir = sock_dir,
+        .sock_file = sock_file,
+        .lock_file = sock_dir / lock_file_name,
     };
 }
 
-CUniqueFd CEventServer::createSocket() {
-    CUniqueFd sockFd {
+unique_fd event_server::create_socket() {
+    unique_fd sock_fd {
         ::socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0)
     };
-    if (!sockFd) {
+    if (!sock_fd) {
         throw std::system_error(errno,
                                 std::generic_category(),
                                 "Cannot create IPC socket");
     }
 
-    return sockFd;
+    return sock_fd;
 }
 
 // wl_event_loop_add_fd requires a function ptr that returns an int
-int CEventServer::onSocketReadable(int sockFd,
-                                   std::uint32_t /*mask*/,
-                                   void* data) {
-    auto* self = static_cast<CEventServer*>(data);
+int event_server::on_socket_readable(int sock_fd,
+                                     std::uint32_t /*mask*/,
+                                     void* data) {
+    auto* self = static_cast<event_server*>(data);
 
-    CUniqueFd clientFd {
-        ::accept4(sockFd, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC)
+    unique_fd client_fd {
+        ::accept4(sock_fd, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC)
     };
 
     // Ignore transient failures. Unexpected failures disable the listener
     // to avoid repeatedly waking the compositor on a broken socket.
-    if (!clientFd) {
+    if (!client_fd) {
         const int error = errno;
 
         // These are expected, recoverable accept4() failures:
@@ -244,132 +244,134 @@ int CEventServer::onSocketReadable(int sockFd,
             return 0;
         }
 
-        logError("Cannot accept IPC connection: {}; disabling new connections "
-                 "until plugin reload",
-                 std::strerror(error));
-        notifyFailure("IPC listener stopped. Unload and reload hyprcast; see "
-                      "Hyprland logs for details.");
-        self->m_wlSocketReadable.reset();
+        log_error("Cannot accept IPC connection: {}; disabling new connections "
+                  "until plugin reload",
+                  std::strerror(error));
+        notify_failure("IPC listener stopped. Unload and reload hyprcast; see "
+                       "Hyprland logs for details.");
+        self->wl_socket_readable_.reset();
 
         return 0;
     }
 
-    if (self->m_clientFd.valid()) {
-        logMessage(Log::TRACE, "Replacing existing client with new connection");
+    if (self->client_fd_.valid()) {
+        log_message(Log::TRACE,
+                    "Replacing existing client with new connection");
     }
-    self->disconnectClient();
+    self->disconnect_client();
 
-    self->m_clientFd = std::move(clientFd);
-    logMessage(Log::TRACE, "Client connected");
+    self->client_fd_ = std::move(client_fd);
+    log_message(Log::TRACE, "Client connected");
 
-    self->m_wlClientEvents.reset(
+    self->wl_client_events_.reset(
         ::wl_event_loop_add_fd(g_pCompositor->m_wlEventLoop,
-                               self->m_clientFd.get(),
+                               self->client_fd_.get(),
                                WL_EVENT_READABLE,
-                               &onClientEvent,
+                               &on_client_event,
                                self));
-    if (!self->m_wlClientEvents) {
-        logError("Cannot register client with Wayland event loop; "
-                 "disconnecting client");
-        self->disconnectClient();
+    if (!self->wl_client_events_) {
+        log_error("Cannot register client with Wayland event loop; "
+                  "disconnecting client");
+        self->disconnect_client();
         return 0;
     }
 
-    runGuarded("Cannot prepare initial keyboard snapshot; disconnecting client",
-               self->m_onConnected,
-               [self] noexcept { self->disconnectClient(); });
+    run_guarded(
+        "Cannot prepare initial keyboard snapshot; disconnecting client",
+        self->on_connected_,
+        [self] noexcept { self->disconnect_client(); });
 
     return 0;
 }
 
-int CEventServer::onClientEvent(int /*clientFd*/,
-                                std::uint32_t mask,
-                                void* data) {
-    auto* self = static_cast<CEventServer*>(data);
+int event_server::on_client_event(int /*client_fd*/,
+                                  std::uint32_t mask,
+                                  void* data) {
+    auto* self = static_cast<event_server*>(data);
 
     if (mask & static_cast<std::uint32_t>(WL_EVENT_HANGUP | WL_EVENT_ERROR)) {
         if (mask & WL_EVENT_ERROR) {
-            logError(
+            log_error(
                 "Wayland reported a client socket error; disconnecting client");
         }
 
-        self->disconnectClient();
+        self->disconnect_client();
         return 0;
     }
 
     if (mask & WL_EVENT_READABLE) {
-        runGuarded(
+        run_guarded(
             "Cannot process capture command",
-            [self] { self->readCommands(); },
-            [self] noexcept { self->disconnectClient(); });
+            [self] { self->read_commands(); },
+            [self] noexcept { self->disconnect_client(); });
     }
-    if (!self->m_clientFd.valid()) {
+    if (!self->client_fd_.valid()) {
         return 0;
     }
     if (mask & WL_EVENT_WRITABLE) {
-        self->flushMessages();
+        self->flush_messages();
     }
 
     return 0;
 }
 
-void CEventServer::readCommands() {
+void event_server::read_commands() {
     // Bound work per compositor dispatch as well as per command.
     std::array<char, 64> buffer {};
-    const auto size = ::recv(m_clientFd.get(), buffer.data(), buffer.size(), 0);
+    const auto size = ::recv(client_fd_.get(), buffer.data(), buffer.size(), 0);
     if (size < 0
         && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) {
         return;
     }
     if (size <= 0) {
-        disconnectClient();
+        disconnect_client();
         return;
     }
-    m_commandBuffer.append(buffer.data(), static_cast<std::size_t>(size));
+    command_buffer_.append(buffer.data(), static_cast<std::size_t>(size));
     while (true) {
-        const auto end = m_commandBuffer.find('\n');
+        const auto end = command_buffer_.find('\n');
         if (end == std::string::npos) {
-            if (m_commandBuffer.size() > MAX_COMMAND_LENGTH) {
-                disconnectClient();
+            if (command_buffer_.size() > max_command_length) {
+                disconnect_client();
             }
             return;
         }
-        const std::string_view command {m_commandBuffer.data(), end};
-        if (command != wire::COMMAND_ENABLE
-            && command != wire::COMMAND_DISABLE) {
-            disconnectClient();
+        const std::string_view command {command_buffer_.data(), end};
+        if (command != wire::command_enable
+            && command != wire::command_disable) {
+            disconnect_client();
             return;
         }
-        const bool enable = command == wire::COMMAND_ENABLE;
-        m_commandBuffer.erase(0, end + 1);
-        m_onCapture(enable);
-        if (!m_clientFd.valid()) {
+        const bool enable = command == wire::command_enable;
+        command_buffer_.erase(0, end + 1);
+        on_capture_(enable);
+        if (!client_fd_.valid()) {
             return;
         }
     }
 }
 
-void CEventServer::flushMessages() {
-    while (!m_messageQueue.empty()) {
-        std::string_view message = m_messageQueue.front();
+void event_server::flush_messages() {
+    while (!message_queue_.empty()) {
+        std::string_view message = message_queue_.front();
 
-        const auto fullMessageSize = message.size();
-        if (m_messageOffset >= fullMessageSize) {
-            logError("Invalid outgoing message offset {} for {} bytes; "
-                     "disconnecting client",
-                     m_messageOffset,
-                     fullMessageSize);
-            disconnectClient();
+        const auto full_message_size = message.size();
+        if (message_offset_ >= full_message_size) {
+            log_error("Invalid outgoing message offset {} for {} bytes; "
+                      "disconnecting client",
+                      message_offset_,
+                      full_message_size);
+            disconnect_client();
             return;
         }
 
-        message = message.substr(m_messageOffset);
+        message = message.substr(message_offset_);
 
-        const auto bytesSent = ::send(m_clientFd.get(),
-                                      message.data(),
-                                      message.size(),
-                                      MSG_NOSIGNAL);
-        if (bytesSent == -1) {
+        const auto bytes_sent = ::send(client_fd_.get(),
+                                       message.data(),
+                                       message.size(),
+                                       MSG_NOSIGNAL);
+        if (bytes_sent == -1) {
             const int error = errno;
 
             if (error == EINTR) {
@@ -377,38 +379,38 @@ void CEventServer::flushMessages() {
             }
 
             if (error == EAGAIN || error == EWOULDBLOCK) {
-                updateWlDispatchEvent(WL_EVENT_WRITABLE);
+                update_wl_dispatch_event(WL_EVENT_WRITABLE);
                 return;
             }
 
             if (error != EPIPE && error != ECONNRESET) {
-                logError("Cannot send IPC message: {}; disconnecting client",
-                         std::strerror(error));
+                log_error("Cannot send IPC message: {}; disconnecting client",
+                          std::strerror(error));
             }
-            disconnectClient();
+            disconnect_client();
             return;
         }
 
-        m_messageOffset += static_cast<std::size_t>(bytesSent);
-        if (m_messageOffset != fullMessageSize) {
-            updateWlDispatchEvent(WL_EVENT_WRITABLE);
+        message_offset_ += static_cast<std::size_t>(bytes_sent);
+        if (message_offset_ != full_message_size) {
+            update_wl_dispatch_event(WL_EVENT_WRITABLE);
             return;
         }
 
-        m_messageQueue.pop_front();
-        m_messageOffset = 0;
+        message_queue_.pop_front();
+        message_offset_ = 0;
     }
 
-    updateWlDispatchEvent(0);
+    update_wl_dispatch_event(0);
 }
 
-void CEventServer::updateWlDispatchEvent(std::uint32_t mask) {
-    if (::wl_event_source_fd_update(m_wlClientEvents.get(),
+void event_server::update_wl_dispatch_event(std::uint32_t mask) {
+    if (::wl_event_source_fd_update(wl_client_events_.get(),
                                     mask | WL_EVENT_READABLE)
         == -1) {
-        logError(
+        log_error(
             "Cannot update client Wayland event source; disconnecting client");
-        disconnectClient();
+        disconnect_client();
     }
 }
 

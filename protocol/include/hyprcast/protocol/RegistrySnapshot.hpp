@@ -6,6 +6,6 @@
 
 namespace hyprcast {
 
-using RegistrySnapshot = std::vector<SKeyboardSnapshot>;
+using registry_snapshot = std::vector<keyboard_snapshot>;
 
 } // namespace hyprcast

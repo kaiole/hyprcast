@@ -9,20 +9,20 @@
 
 namespace hyprcast {
 
-CFileLock::CFileLock(const std::filesystem::path& lockPath)
-    : m_lockFd(::open(lockPath.c_str(), O_CREAT | O_CLOEXEC | O_RDWR, 0600)) {
-    if (!m_lockFd) {
+file_lock::file_lock(const std::filesystem::path& lock_path)
+    : lock_fd_(::open(lock_path.c_str(), O_CREAT | O_CLOEXEC | O_RDWR, 0600)) {
+    if (!lock_fd_) {
         throw std::system_error(errno,
                                 std::generic_category(),
-                                "Cannot open server lock '" + lockPath.string()
+                                "Cannot open server lock '" + lock_path.string()
                                     + "'");
     }
 
-    if (::flock(m_lockFd.get(), LOCK_EX | LOCK_NB) == -1) {
+    if (::flock(lock_fd_.get(), LOCK_EX | LOCK_NB) == -1) {
         throw std::system_error(
             errno,
             std::generic_category(),
-            "Cannot acquire server lock '" + lockPath.string()
+            "Cannot acquire server lock '" + lock_path.string()
                 + "' (another hyprcast instance may be running)");
     }
 }

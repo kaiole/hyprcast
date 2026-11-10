@@ -23,62 +23,62 @@
 
 namespace hyprcast {
 
-class CKeyboardRegistry {
+class keyboard_registry {
 public:
-    using ExceptionCB = std::move_only_function<void() noexcept>;
-    using SubscriptionCB = std::function<void(SKeyboardSnapshot)>;
-    using UnsubscriptionCB = std::function<void(KeyboardId)>;
-    using KeyEventCB = std::function<void(KeyboardId, SKeyEvent)>;
-    using ModifiersEventCB = std::function<void(KeyboardId, SModifiers)>;
-    using KeymapEventCB = std::function<void(KeyboardId, Keymap)>;
-    using RepeatInfoEventCB = std::function<void(KeyboardId, SRepeatInfo)>;
+    using exception_cb = std::move_only_function<void() noexcept>;
+    using subscription_cb = std::function<void(keyboard_snapshot)>;
+    using unsubscription_cb = std::function<void(keyboard_id)>;
+    using key_event_cb = std::function<void(keyboard_id, key_event)>;
+    using modifiers_event_cb = std::function<void(keyboard_id, modifier_state)>;
+    using keymap_event_cb = std::function<void(keyboard_id, keymap_text)>;
+    using repeat_info_event_cb = std::function<void(keyboard_id, repeat_info)>;
 
-    struct SCallbacks {
-        ExceptionCB onException;
-        SubscriptionCB onSubscribe;
-        UnsubscriptionCB onUnsubscribe;
-        KeyEventCB onKeyEvent;
-        ModifiersEventCB onModifiersEvent;
-        KeymapEventCB onKeymapEvent;
-        RepeatInfoEventCB onRepeatInfoEvent;
+    struct callbacks {
+        exception_cb on_exception;
+        subscription_cb on_subscribe;
+        unsubscription_cb on_unsubscribe;
+        key_event_cb on_key_event;
+        modifiers_event_cb on_modifiers_event;
+        keymap_event_cb on_keymap_event;
+        repeat_info_event_cb on_repeat_info_event;
     };
 
-    explicit CKeyboardRegistry(SCallbacks callbacks);
+    explicit keyboard_registry(callbacks cbs);
 
     // Listeners capture `this` and per-keyboard record pointers, so the
     // registry must never move.
-    CKeyboardRegistry(const CKeyboardRegistry&) = delete;
-    CKeyboardRegistry& operator=(const CKeyboardRegistry&) = delete;
-    CKeyboardRegistry(CKeyboardRegistry&&) = delete;
-    CKeyboardRegistry& operator=(CKeyboardRegistry&&) = delete;
-    ~CKeyboardRegistry() = default;
+    keyboard_registry(const keyboard_registry&) = delete;
+    keyboard_registry& operator=(const keyboard_registry&) = delete;
+    keyboard_registry(keyboard_registry&&) = delete;
+    keyboard_registry& operator=(keyboard_registry&&) = delete;
+    ~keyboard_registry() = default;
 
-    void addKeyboard(const SP<IKeyboard>& keyboard);
-    void updateSubscriptions(const SConfig& acceptedConfig);
+    void add_keyboard(const SP<IKeyboard>& keyboard);
+    void update_subscriptions(const config& accepted_config);
 
     // Snapshots every subscribed keyboard and records each keymap as sent.
-    [[nodiscard]] RegistrySnapshot getRegistrySnapshot();
+    [[nodiscard]] registry_snapshot get_registry_snapshot();
 
     void shutdown() noexcept;
 
 private:
     template <typename Function>
-    void runGuarded(std::string_view context, Function&& function) {
-        hyprcast::runGuarded(context,
-                             std::forward<Function>(function),
-                             m_callbacks.onException);
+    void run_guarded(std::string_view context, Function&& function) {
+        hyprcast::run_guarded(context,
+                              std::forward<Function>(function),
+                              callbacks_.on_exception);
     }
 
-    void syncKeymap(const SP<IKeyboard>& keyboard);
-    void scheduleRemoval(SKeyboardInfo& keyboardInfo) noexcept;
-    void unsubscribeListeners(SKeyboardInfo& keyboardInfo) noexcept;
+    void sync_keymap(const SP<IKeyboard>& keyboard);
+    void schedule_removal(keyboard_info& info) noexcept;
+    void unsubscribe_listeners(keyboard_info& info) noexcept;
 
-    SCallbacks m_callbacks;
-    KeyboardId m_nextId = 1;
-    std::vector<std::unique_ptr<SKeyboardInfo>> m_keyboardRegistry;
+    callbacks callbacks_;
+    keyboard_id next_id_ = 1;
+    std::vector<std::unique_ptr<keyboard_info>> keyboard_registry_;
 
-    CHyprSignalListener m_layoutListener;
-    CWlEventSource m_wlIdleKeyboardRemoval;
+    CHyprSignalListener layout_listener_;
+    unique_wl_event_source wl_idle_keyboard_removal_;
 };
 
 } // namespace hyprcast

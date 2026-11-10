@@ -34,247 +34,246 @@ using namespace wire;
 }
 
 [[nodiscard]] libjson::json_value::object
-toJsonObject(const SKeyEvent& keyEvent) {
+to_json_object(const key_event& event) {
     return libjson::json_value::object {
         {
-            key(FIELD_TIME_MS),
-            {.data = static_cast<std::uint64_t>(keyEvent.timeMs)},
+            key(field_time_ms),
+            {.data = static_cast<std::uint64_t>(event.time_ms)},
         },
         {
-            key(FIELD_KEYCODE),
-            {.data = static_cast<std::uint64_t>(keyEvent.keycode)},
+            key(field_keycode),
+            {.data = static_cast<std::uint64_t>(event.keycode)},
         },
         {
-            key(FIELD_STATE),
+            key(field_state),
             {
-                .data =
-                    key(keyEvent.state == eKeyState::PRESSED ? STATE_PRESSED
-                                                             : STATE_RELEASED),
+                .data = key(event.state == key_state::pressed ? state_pressed
+                                                              : state_released),
             },
         },
     };
 }
 
 [[nodiscard]] libjson::json_value::object
-toJsonObject(const SModifiers& modifiers) {
+to_json_object(const modifier_state& modifiers) {
     return libjson::json_value::object {
         {
-            key(FIELD_DEPRESSED),
+            key(field_depressed),
             {.data = static_cast<std::uint64_t>(modifiers.depressed)},
         },
         {
-            key(FIELD_LATCHED),
+            key(field_latched),
             {.data = static_cast<std::uint64_t>(modifiers.latched)},
         },
         {
-            key(FIELD_LOCKED),
+            key(field_locked),
             {.data = static_cast<std::uint64_t>(modifiers.locked)},
         },
         {
-            key(FIELD_GROUP),
+            key(field_group),
             {.data = static_cast<std::uint64_t>(modifiers.group)},
         },
     };
 }
 
 [[nodiscard]] libjson::json_value::object
-toJsonObject(const SRepeatInfo& repeatInfo) {
+to_json_object(const repeat_info& info) {
     return libjson::json_value::object {
         {
-            key(FIELD_RATE),
-            {.data = static_cast<std::uint64_t>(repeatInfo.rate)},
+            key(field_rate),
+            {.data = static_cast<std::uint64_t>(info.rate)},
         },
         {
-            key(FIELD_DELAY),
-            {.data = static_cast<std::uint64_t>(repeatInfo.delay)},
+            key(field_delay),
+            {.data = static_cast<std::uint64_t>(info.delay)},
         },
     };
 }
 
 [[nodiscard]] libjson::json_value::object
-toJsonObject(SKeyboardSnapshot snapshot) {
-    auto jsonObject = toJsonObject(snapshot.modifiers);
-    jsonObject.merge(toJsonObject(snapshot.repeatInfo));
+to_json_object(keyboard_snapshot snapshot) {
+    auto json_object = to_json_object(snapshot.modifiers);
+    json_object.merge(to_json_object(snapshot.repeat_info));
 
-    jsonObject.emplace(key(FIELD_NAME),
-                       libjson::json_value {.data = std::move(snapshot.name)});
-    jsonObject.emplace(
-        key(FIELD_KEYMAP),
+    json_object.emplace(key(field_name),
+                        libjson::json_value {.data = std::move(snapshot.name)});
+    json_object.emplace(
+        key(field_keymap),
         libjson::json_value {.data = std::move(snapshot.keymap)});
 
-    return jsonObject;
+    return json_object;
 }
 
 [[nodiscard]] libjson::json_value
-makeEvent(std::string_view eventName,
-          KeyboardId id,
-          libjson::json_value::object jsonObject) {
-    jsonObject.emplace(key(FIELD_EVENT),
-                       libjson::json_value {.data = key(eventName)});
-    jsonObject.emplace(
-        key(FIELD_KEYBOARD_ID),
+make_event(std::string_view event_name,
+           keyboard_id id,
+           libjson::json_value::object json_object) {
+    json_object.emplace(key(field_event),
+                        libjson::json_value {.data = key(event_name)});
+    json_object.emplace(
+        key(field_keyboard_id),
         libjson::json_value {.data = static_cast<std::uint64_t>(id)});
 
-    return {.data = std::move(jsonObject)};
+    return {.data = std::move(json_object)};
 }
 
-[[nodiscard]] std::string keyMessage(KeyboardId id, const SKeyEvent& keyEvent) {
-    return libjson::serialize(makeEvent(EVENT_KEY, id, toJsonObject(keyEvent)));
+[[nodiscard]] std::string key_message(keyboard_id id, const key_event& event) {
+    return libjson::serialize(make_event(event_key, id, to_json_object(event)));
 }
 
-[[nodiscard]] std::string modifiersMessage(KeyboardId id,
-                                           const SModifiers& modifiers) {
+[[nodiscard]] std::string modifiers_message(keyboard_id id,
+                                            const modifier_state& modifiers) {
     return libjson::serialize(
-        makeEvent(EVENT_MODIFIERS, id, toJsonObject(modifiers)));
+        make_event(event_modifiers, id, to_json_object(modifiers)));
 }
 
-[[nodiscard]] std::string keymapMessage(KeyboardId id, Keymap keymap) {
-    libjson::json_value::object jsonObject;
-    jsonObject.emplace(key(FIELD_KEYMAP),
-                       libjson::json_value {.data = std::move(keymap)});
+[[nodiscard]] std::string keymap_message(keyboard_id id, keymap_text keymap) {
+    libjson::json_value::object json_object;
+    json_object.emplace(key(field_keymap),
+                        libjson::json_value {.data = std::move(keymap)});
 
     return libjson::serialize(
-        makeEvent(EVENT_KEYMAP, id, std::move(jsonObject)));
+        make_event(event_keymap, id, std::move(json_object)));
 }
 
-[[nodiscard]] std::string repeatInfoMessage(KeyboardId id,
-                                            const SRepeatInfo& repeatInfo) {
+[[nodiscard]] std::string repeat_info_message(keyboard_id id,
+                                              const repeat_info& info) {
     return libjson::serialize(
-        makeEvent(EVENT_REPEAT_INFO, id, toJsonObject(repeatInfo)));
+        make_event(event_repeat_info, id, to_json_object(info)));
 }
 
-[[nodiscard]] std::string subscribeMessage(SKeyboardSnapshot snapshot) {
+[[nodiscard]] std::string subscribe_message(keyboard_snapshot snapshot) {
     const auto id = snapshot.id;
-    return libjson::serialize(makeEvent(EVENT_SUBSCRIBE_KEYBOARD,
-                                        id,
-                                        toJsonObject(std::move(snapshot))));
+    return libjson::serialize(make_event(event_subscribe_keyboard,
+                                         id,
+                                         to_json_object(std::move(snapshot))));
 }
 
-[[nodiscard]] std::string unsubscribeMessage(KeyboardId id) {
-    return libjson::serialize(makeEvent(EVENT_UNSUBSCRIBE_KEYBOARD,
-                                        id,
-                                        libjson::json_value::object {}));
+[[nodiscard]] std::string unsubscribe_message(keyboard_id id) {
+    return libjson::serialize(make_event(event_unsubscribe_keyboard,
+                                         id,
+                                         libjson::json_value::object {}));
 }
 
-[[nodiscard]] std::string castingStateMessage(bool isPaused) {
+[[nodiscard]] std::string casting_state_message(bool is_paused) {
     return libjson::serialize(
-        makeEvent(EVENT_CASTING_STATE,
-                  GLOBAL_KEYBOARD_ID,
-                  libjson::json_value::object {
-                      {key(FIELD_PAUSED), {.data = isPaused}},
-                  }));
+        make_event(event_casting_state,
+                   global_keyboard_id,
+                   libjson::json_value::object {
+                       {key(field_paused), {.data = is_paused}},
+                   }));
 }
 
 } // namespace
 
 // Capture starts paused and pauses on disconnect, so only an explicit client
 // request enables it.
-CHyprcast::CHyprcast()
-    : m_server([this] { requestRegistrySnapshot(); },
-               [this](bool enabled) { setPause(!enabled); },
-               [this] { m_paused = true; }),
-      m_keyboardRegistry(makeRegistryCallbacks()),
-      m_config(makePluginConfigCallbacks()) {
-    m_keyboardRegistry.updateSubscriptions(m_config.getAcceptedConfig());
+keycaster::keycaster()
+    : server_([this] { request_registry_snapshot(); },
+              [this](bool enabled) { set_pause(!enabled); },
+              [this] { paused_ = true; }),
+      keyboard_registry_(make_registry_callbacks()),
+      config_(make_plugin_config_callbacks()) {
+    keyboard_registry_.update_subscriptions(config_.get_accepted_config());
 }
 
-void CHyprcast::addKeyboard(const SP<IKeyboard>& keyboard) {
-    if (m_shutdown) {
+void keycaster::add_keyboard(const SP<IKeyboard>& keyboard) {
+    if (shutdown_) {
         return;
     }
 
-    runGuarded(
+    run_guarded(
         "Cannot register keyboard; shutting down plugin",
         [this, &keyboard] {
-            m_keyboardRegistry.addKeyboard(keyboard);
-            m_keyboardRegistry.updateSubscriptions(
-                m_config.getAcceptedConfig());
+            keyboard_registry_.add_keyboard(keyboard);
+            keyboard_registry_.update_subscriptions(
+                config_.get_accepted_config());
         },
         [this] noexcept { shutdown(); });
 }
 
-void CHyprcast::setPause(bool paused) {
-    if (m_shutdown) {
+void keycaster::set_pause(bool paused) {
+    if (shutdown_) {
         throw std::runtime_error("Hyprcast is stopped; reload the plugin");
     }
 
     // Always echo the authoritative state, including idempotent control
     // requests.
-    m_paused = paused;
-    m_server.queueMessage(castingStateMessage(m_paused));
+    paused_ = paused;
+    server_.queue_message(casting_state_message(paused_));
 }
 
-bool CHyprcast::isPaused() const noexcept {
-    return m_paused;
+bool keycaster::is_paused() const noexcept {
+    return paused_;
 }
 
-CPluginConfig::SCallbacks CHyprcast::makePluginConfigCallbacks() {
+plugin_config::callbacks keycaster::make_plugin_config_callbacks() {
     return {
-        .onConfigReload =
+        .on_config_reload =
             [this] {
-                if (m_shutdown) {
+                if (shutdown_) {
                     return;
                 }
 
-                m_keyboardRegistry.updateSubscriptions(
-                    m_config.getAcceptedConfig());
+                keyboard_registry_.update_subscriptions(
+                    config_.get_accepted_config());
             },
-        .onException = [this] noexcept { shutdown(); },
+        .on_exception = [this] noexcept { shutdown(); },
     };
 }
 
-void CHyprcast::requestRegistrySnapshot() {
-    m_server.queueMessage(castingStateMessage(m_paused));
+void keycaster::request_registry_snapshot() {
+    server_.queue_message(casting_state_message(paused_));
 
-    auto registrySnapshot = m_keyboardRegistry.getRegistrySnapshot();
+    auto snapshots = keyboard_registry_.get_registry_snapshot();
 
-    for (auto& keyboardSnapshot : registrySnapshot) {
-        m_server.queueMessage(subscribeMessage(std::move(keyboardSnapshot)));
+    for (auto& snapshot : snapshots) {
+        server_.queue_message(subscribe_message(std::move(snapshot)));
     }
 }
 
-CKeyboardRegistry::SCallbacks CHyprcast::makeRegistryCallbacks() {
+keyboard_registry::callbacks keycaster::make_registry_callbacks() {
     return {
-        .onException = [this] noexcept { m_server.disconnectClient(); },
-        .onSubscribe =
-            [this](SKeyboardSnapshot keyboardSnapshot) {
-                m_server.queueMessage(
-                    subscribeMessage(std::move(keyboardSnapshot)));
+        .on_exception = [this] noexcept { server_.disconnect_client(); },
+        .on_subscribe =
+            [this](keyboard_snapshot snapshot) {
+                server_.queue_message(subscribe_message(std::move(snapshot)));
             },
-        .onUnsubscribe =
-            [this](KeyboardId id) {
-                m_server.queueMessage(unsubscribeMessage(id));
+        .on_unsubscribe =
+            [this](keyboard_id id) {
+                server_.queue_message(unsubscribe_message(id));
             },
-        .onKeyEvent =
-            [this](KeyboardId id, SKeyEvent keyEvent) {
-                if (!m_paused) {
-                    m_server.queueMessage(keyMessage(id, keyEvent));
+        .on_key_event =
+            [this](keyboard_id id, key_event event) {
+                if (!paused_) {
+                    server_.queue_message(key_message(id, event));
                 }
             },
-        .onModifiersEvent =
-            [this](KeyboardId id, SModifiers modifiers) {
-                m_server.queueMessage(modifiersMessage(id, modifiers));
+        .on_modifiers_event =
+            [this](keyboard_id id, modifier_state modifiers) {
+                server_.queue_message(modifiers_message(id, modifiers));
             },
-        .onKeymapEvent =
-            [this](KeyboardId id, Keymap keymap) {
-                m_server.queueMessage(keymapMessage(id, std::move(keymap)));
+        .on_keymap_event =
+            [this](keyboard_id id, keymap_text keymap) {
+                server_.queue_message(keymap_message(id, std::move(keymap)));
             },
-        .onRepeatInfoEvent =
-            [this](KeyboardId id, SRepeatInfo repeatInfo) {
-                m_server.queueMessage(repeatInfoMessage(id, repeatInfo));
+        .on_repeat_info_event =
+            [this](keyboard_id id, repeat_info info) {
+                server_.queue_message(repeat_info_message(id, info));
             },
     };
 }
 
-void CHyprcast::shutdown() noexcept {
-    if (m_shutdown) {
+void keycaster::shutdown() noexcept {
+    if (shutdown_) {
         return;
     }
-    notifyFailure("Plugin stopped after an internal failure. Unload and reload "
-                  "hyprcast; see Hyprland logs for details.");
-    m_keyboardRegistry.shutdown();
-    m_server.shutdown();
-    m_shutdown = true;
+    notify_failure(
+        "Plugin stopped after an internal failure. Unload and reload "
+        "hyprcast; see Hyprland logs for details.");
+    keyboard_registry_.shutdown();
+    server_.shutdown();
+    shutdown_ = true;
 }
 
 } // namespace hyprcast

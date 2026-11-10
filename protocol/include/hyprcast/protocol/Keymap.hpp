@@ -4,6 +4,6 @@
 
 namespace hyprcast {
 
-using Keymap = std::string;
+using keymap_text = std::string;
 
 } // namespace hyprcast

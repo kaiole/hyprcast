@@ -74,7 +74,7 @@ OverlayInstance::OverlayInstance(const QString& eventSocket, QObject* parent)
 }
 
 std::expected<OverlayInstance::Ownership, QString>
-OverlayInstance::acquire(Command command, CUniqueFd inheritedLock) {
+OverlayInstance::acquire(Command command, unique_fd inheritedLock) {
     const QString lockPath = m_path + QStringLiteral(".owner-lock");
     if (inheritedLock) {
         if (auto adopted = adoptLock(lockPath, std::move(inheritedLock));
@@ -88,7 +88,7 @@ OverlayInstance::acquire(Command command, CUniqueFd inheritedLock) {
         return std::unexpected(
             QStringLiteral("Cannot create overlay socket directory"));
     }
-    CUniqueFd lock {::open(lockPath.toLocal8Bit().constData(),
+    unique_fd lock {::open(lockPath.toLocal8Bit().constData(),
                            O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW
                                | O_NONBLOCK,
                            0600)};
@@ -118,7 +118,7 @@ OverlayInstance::acquire(Command command, CUniqueFd inheritedLock) {
 }
 
 std::expected<void, QString>
-OverlayInstance::adoptLock(const QString& lockPath, CUniqueFd inheritedLock) {
+OverlayInstance::adoptLock(const QString& lockPath, unique_fd inheritedLock) {
     struct stat fdInfo {};
     struct stat pathInfo {};
     if (::fstat(inheritedLock.get(), &fdInfo)

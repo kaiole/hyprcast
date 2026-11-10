@@ -7,26 +7,26 @@
 
 namespace hyprcast {
 
-class CSockFile {
+class sock_file {
 public:
-    explicit CSockFile(std::filesystem::path sockPath)
-        : m_sockPath(std::move(sockPath)) {}
-    ~CSockFile() noexcept {
-        if (m_bound) {
-            ::unlink(m_sockPath.c_str());
+    explicit sock_file(std::filesystem::path sock_path)
+        : sock_path_(std::move(sock_path)) {}
+    ~sock_file() noexcept {
+        if (bound_) {
+            ::unlink(sock_path_.c_str());
         }
     }
 
-    CSockFile(const CSockFile& other) = delete;
-    CSockFile& operator=(const CSockFile& other) = delete;
-    CSockFile(CSockFile&& other) = delete;
-    CSockFile& operator=(CSockFile&& other) = delete;
+    sock_file(const sock_file& other) = delete;
+    sock_file& operator=(const sock_file& other) = delete;
+    sock_file(sock_file&& other) = delete;
+    sock_file& operator=(sock_file&& other) = delete;
 
-    void markBound() noexcept { m_bound = true; }
+    void mark_bound() noexcept { bound_ = true; }
 
 private:
-    std::filesystem::path m_sockPath;
-    bool m_bound = false;
+    std::filesystem::path sock_path_;
+    bool bound_ = false;
 };
 
 } // namespace hyprcast

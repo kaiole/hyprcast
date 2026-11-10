@@ -8,36 +8,36 @@
 
 namespace hyprcast {
 
-class CHyprcast {
+class keycaster {
 public:
-    CHyprcast();
+    keycaster();
 
     // Members hold callbacks that capture `this`, so the object must never
     // move.
-    CHyprcast(const CHyprcast&) = delete;
-    CHyprcast& operator=(const CHyprcast&) = delete;
-    CHyprcast(CHyprcast&&) = delete;
-    CHyprcast& operator=(CHyprcast&&) = delete;
-    ~CHyprcast() = default;
+    keycaster(const keycaster&) = delete;
+    keycaster& operator=(const keycaster&) = delete;
+    keycaster(keycaster&&) = delete;
+    keycaster& operator=(keycaster&&) = delete;
+    ~keycaster() = default;
 
-    void addKeyboard(const SP<IKeyboard>& keyboard);
+    void add_keyboard(const SP<IKeyboard>& keyboard);
 
-    void setPause(bool paused);
-    [[nodiscard]] bool isPaused() const noexcept;
+    void set_pause(bool paused);
+    [[nodiscard]] bool is_paused() const noexcept;
 
 private:
-    void requestRegistrySnapshot();
-    CKeyboardRegistry::SCallbacks makeRegistryCallbacks();
-    CPluginConfig::SCallbacks makePluginConfigCallbacks();
+    void request_registry_snapshot();
+    keyboard_registry::callbacks make_registry_callbacks();
+    plugin_config::callbacks make_plugin_config_callbacks();
 
     void shutdown() noexcept;
 
-    CEventServer m_server;
-    CKeyboardRegistry m_keyboardRegistry;
-    CPluginConfig m_config;
+    event_server server_;
+    keyboard_registry keyboard_registry_;
+    plugin_config config_;
 
-    bool m_shutdown = false;
-    bool m_paused = true;
+    bool shutdown_ = false;
+    bool paused_ = true;
 };
 
 } // namespace hyprcast

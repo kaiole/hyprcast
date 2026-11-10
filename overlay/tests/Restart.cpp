@@ -560,7 +560,7 @@ void testFailedExecAndBadReplies() {
         check(bad.listen(badPath + ".overlay"), "bad response fixture");
         // Hold the ownership lock as a resident would, so the caller forwards
         // here.
-        const hyprcast::CUniqueFd lock {::open(
+        const hyprcast::unique_fd lock {::open(
             (badPath + ".overlay.owner-lock").toLocal8Bit().constData(),
             O_RDWR | O_CREAT | O_CLOEXEC,
             0600)};

@@ -65,12 +65,12 @@ public:
         return m_context;
     }
     // Transfers the inherited ownership lock to the new OverlayInstance.
-    [[nodiscard]] CUniqueFd takeLock() noexcept { return std::move(m_lockFd); }
+    [[nodiscard]] unique_fd takeLock() noexcept { return std::move(m_lockFd); }
 
 private:
     std::optional<RestartContext> m_context;
-    CUniqueFd m_lockFd;
-    CUniqueFd m_replyFd;
+    unique_fd m_lockFd;
+    unique_fd m_replyFd;
 };
 
 // Replaces the current process image with `executable`, handing over the

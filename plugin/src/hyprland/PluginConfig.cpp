@@ -14,24 +14,23 @@ namespace {
 
 // Lua calls configure() as a plain function, which cannot carry `this`.
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
-CPluginConfig* instance = nullptr;
+plugin_config* instance = nullptr;
 
 } // namespace
 
-CPluginConfig::CPluginConfig(SCallbacks callbacks)
-    : m_callbacks(std::move(callbacks)) {
-    m_preReload = Event::bus()->m_events.config.preReload.listen(
-        [this] { m_config.beginReload(); });
-    m_reloaded = Event::bus()->m_events.config.reloaded.listen([this] {
-        runGuarded("Cannot apply keyboard subscriptions after config reload; "
-                   "shutting down plugin",
-                   [this] { handleConfigReload(); });
+plugin_config::plugin_config(callbacks cbs) : callbacks_(std::move(cbs)) {
+    pre_reload_ = Event::bus()->m_events.config.preReload.listen(
+        [this] { config_.begin_reload(); });
+    reloaded_ = Event::bus()->m_events.config.reloaded.listen([this] {
+        run_guarded("Cannot apply keyboard subscriptions after config reload; "
+                    "shutting down plugin",
+                    [this] { handle_config_reload(); });
     });
 
-    if (!HyprlandAPI::addLuaFunction(PHANDLE,
+    if (!HyprlandAPI::addLuaFunction(plugin_handle,
                                      "hyprcast",
                                      "configure",
-                                     &CPluginConfig::configure)) {
+                                     &plugin_config::configure)) {
         throw std::runtime_error(
             "Cannot register Lua function hyprcast.configure");
     }
@@ -39,19 +38,19 @@ CPluginConfig::CPluginConfig(SCallbacks callbacks)
     instance = this;
 }
 
-CPluginConfig::~CPluginConfig() {
-    HyprlandAPI::removeLuaFunction(PHANDLE, "hyprcast", "configure");
+plugin_config::~plugin_config() {
+    HyprlandAPI::removeLuaFunction(plugin_handle, "hyprcast", "configure");
     instance = nullptr;
 }
 
-int CPluginConfig::configure(lua_State* L) noexcept {
-    return instance->m_config.configure(L);
+int plugin_config::configure(lua_State* lua) noexcept {
+    return instance->config_.configure(lua);
 }
 
-void CPluginConfig::handleConfigReload() {
-    m_config.finishReload(Config::mgr()->configVerifPassed()
+void plugin_config::handle_config_reload() {
+    config_.finish_reload(Config::mgr()->configVerifPassed()
                           && Config::mgr()->getErrors().empty());
-    m_callbacks.onConfigReload();
+    callbacks_.on_config_reload();
 }
 
 } // namespace hyprcast

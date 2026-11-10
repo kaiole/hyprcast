@@ -14,68 +14,68 @@
 
 namespace hyprcast {
 
-class CEventServer {
+class event_server {
 public:
-    using ConnectedCB =
+    using connected_cb =
         std::function<void()>; // A client connected and needs a full snapshot.
-    using CaptureCB = std::function<void(bool enabled)>;
-    using DisconnectedCB = std::function<void()>;
+    using capture_cb = std::function<void(bool enabled)>;
+    using disconnected_cb = std::function<void()>;
 
-    CEventServer(ConnectedCB onConnected,
-                 CaptureCB onCapture,
-                 DisconnectedCB onDisconnected);
+    event_server(connected_cb on_connected,
+                 capture_cb on_capture,
+                 disconnected_cb on_disconnected);
 
     // `this` is registered with the Wayland event loop, so the object must
     // never move.
-    CEventServer(const CEventServer&) = delete;
-    CEventServer& operator=(const CEventServer&) = delete;
-    CEventServer(CEventServer&&) = delete;
-    CEventServer& operator=(CEventServer&&) = delete;
-    ~CEventServer() = default;
+    event_server(const event_server&) = delete;
+    event_server& operator=(const event_server&) = delete;
+    event_server(event_server&&) = delete;
+    event_server& operator=(event_server&&) = delete;
+    ~event_server() = default;
 
-    void queueMessage(std::string message);
-    void disconnectClient() noexcept;
+    void queue_message(std::string message);
+    void disconnect_client() noexcept;
 
     void shutdown() noexcept;
 
 private:
-    struct SSockPaths {
-        std::filesystem::path sockDir;
-        std::filesystem::path sockFile;
-        std::filesystem::path lockFile;
+    struct sock_paths {
+        std::filesystem::path sock_dir;
+        std::filesystem::path sock_file;
+        std::filesystem::path lock_file;
     };
 
-    static SSockPaths initSockPaths();
-    static CUniqueFd createSocket();
+    static sock_paths init_sock_paths();
+    static unique_fd create_socket();
 
-    static int onSocketReadable(int sockFd, std::uint32_t mask, void* data);
-    static int onClientEvent(int clientFd, std::uint32_t mask, void* data);
+    static int on_socket_readable(int sock_fd, std::uint32_t mask, void* data);
+    static int on_client_event(int client_fd, std::uint32_t mask, void* data);
 
-    void readCommands();
-    void flushMessages();
-    void updateWlDispatchEvent(std::uint32_t mask);
+    void read_commands();
+    void flush_messages();
+    void update_wl_dispatch_event(std::uint32_t mask);
 
-    ConnectedCB m_onConnected;
-    CaptureCB m_onCapture;
-    DisconnectedCB m_onDisconnected;
-    std::string m_commandBuffer;
+    connected_cb on_connected_;
+    capture_cb on_capture_;
+    disconnected_cb on_disconnected_;
+    std::string command_buffer_;
 
     // Members are destroyed in reverse order: event sources are removed first,
     // then the client and listening descriptors close, the socket file is
     // unlinked, and the lock is released last. Keep this order when adding
     // members.
-    SSockPaths m_sockPaths;
-    CFileLock m_sockLock;
-    CUniqueFd m_sockFd;
-    CSockFile m_sockFile;
+    sock_paths sock_paths_;
+    file_lock sock_lock_;
+    unique_fd sock_fd_;
+    sock_file sock_file_;
 
-    CUniqueFd m_clientFd;
+    unique_fd client_fd_;
 
-    CWlEventSource m_wlSocketReadable;
-    CWlEventSource m_wlClientEvents;
+    unique_wl_event_source wl_socket_readable_;
+    unique_wl_event_source wl_client_events_;
 
-    std::deque<std::string> m_messageQueue;
-    std::size_t m_messageOffset = 0;
+    std::deque<std::string> message_queue_;
+    std::size_t message_offset_ = 0;
 };
 
 } // namespace hyprcast

@@ -31,7 +31,7 @@ public:
     // `inheritedLock` is the ownership lock handed over by a restarting
     // resident.
     [[nodiscard]] std::expected<Ownership, QString>
-    acquire(Command command, CUniqueFd inheritedLock = {});
+    acquire(Command command, unique_fd inheritedLock = {});
     [[nodiscard]] int lockDescriptor() const noexcept { return m_lockFd.get(); }
 
     // Single-line wire reply: "ok\n" or "error: <message>\n".
@@ -44,7 +44,7 @@ signals:
 
 private:
     [[nodiscard]] std::expected<void, QString>
-    adoptLock(const QString& lockPath, CUniqueFd inheritedLock);
+    adoptLock(const QString& lockPath, unique_fd inheritedLock);
     [[nodiscard]] std::expected<Ownership, QString>
     forward(Command command) const;
     [[nodiscard]] std::expected<Ownership, QString> listen();
@@ -52,7 +52,7 @@ private:
     QString m_path;
     // Declared before the server so the lock is released only after the server
     // has stopped listening and removed its socket.
-    CUniqueFd m_lockFd;
+    unique_fd m_lockFd;
     QLocalServer m_server;
 };
 

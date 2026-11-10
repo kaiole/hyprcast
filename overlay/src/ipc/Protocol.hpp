@@ -17,37 +17,37 @@ struct CastingStateMessage {
 };
 
 struct KeyboardSnapshotMessage {
-    KeyboardId id = 0;
+    keyboard_id id = 0;
     QString name {};
-    SModifiers modifiers {};
+    modifier_state modifiers {};
     QString keymap {};
-    SRepeatInfo repeatInfo {};
+    repeat_info repeatInfo {};
 };
 
 struct UnsubscribeKeyboardMessage {
-    KeyboardId id = 0;
+    keyboard_id id = 0;
 };
 
 struct KeyMessage {
-    KeyboardId keyboardId = 0;
+    keyboard_id keyboardId = 0;
     std::uint32_t timeMs = 0;
     std::uint32_t keycode = 0;
     bool pressed = false;
 };
 
 struct ModifiersMessage {
-    KeyboardId keyboardId = 0;
-    SModifiers modifiers {};
+    keyboard_id keyboardId = 0;
+    modifier_state modifiers {};
 };
 
 struct KeymapMessage {
-    KeyboardId keyboardId = 0;
+    keyboard_id keyboardId = 0;
     QString keymap {};
 };
 
 struct RepeatInfoMessage {
-    KeyboardId keyboardId = 0;
-    SRepeatInfo repeatInfo {};
+    keyboard_id keyboardId = 0;
+    repeat_info repeatInfo {};
 };
 
 using ProtocolMessage = std::variant<CastingStateMessage,

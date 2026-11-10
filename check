@@ -1,0 +1,12 @@
+#!/bin/sh
+# The gate: formatting, then every preset's workflow. Run before each commit.
+set -eu
+cd "$(dirname "$0")"
+
+find . \( -path ./build -o -path ./.cache -o -path ./.git \) -prune -o \
+  -type f \( -name '*.cpp' -o -name '*.hpp' \) -print0 |
+  xargs -0 clang-format --dry-run --Werror
+
+for preset in lint dev release; do
+  cmake --workflow --preset "$preset"
+done

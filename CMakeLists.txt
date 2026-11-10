@@ -13,7 +13,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(cmake/warnings.cmake)
 
-include(CTest)
+if(PROJECT_IS_TOP_LEVEL)
+  include(CTest)
+  if(BUILD_TESTING)
+    include(cmake/gtest.cmake)
+  endif()
+endif()
 
 option(HYPRCAST_BUILD_PLUGIN "Build the Hyprland plugin" ON)
 option(HYPRCAST_BUILD_OVERLAY "Build the Qt Quick overlay" ON)

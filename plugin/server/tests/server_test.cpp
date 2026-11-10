@@ -1,4 +1,5 @@
 #include "hyprcast/log/log_sink.hpp"
+#include "hyprcast/os/unique_fd.hpp"
 #include "hyprcast/server/event_server.hpp"
 #include "hyprcast/test_support/event_loop.hpp"
 #include "hyprcast/test_support/recording_log.hpp"
@@ -6,10 +7,14 @@
 #include "hyprcast/test_support/temp_dir.hpp"
 
 #include <gtest/gtest.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 #include <algorithm>
+#include <cerrno>
 #include <cstddef>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <functional>
 #include <iterator>
@@ -27,6 +32,27 @@ using test_support::socket_client;
 std::string read_file(const std::filesystem::path& path) {
     std::ifstream file {path};
     return {std::istreambuf_iterator<char> {file}, {}};
+}
+
+// An upper bound on what a Unix socket takes off a sender whose peer does not
+// read: the kernel stops at the send buffer size, give or take one chunk of
+// at most half of it.
+std::size_t socket_buffer_allowance() {
+    const unique_fd sock_fd {::socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0)};
+    int send_buffer_size = 0;
+    ::socklen_t option_size = sizeof(send_buffer_size);
+    if (!sock_fd
+        || ::getsockopt(sock_fd.get(),
+                        SOL_SOCKET,
+                        SO_SNDBUF,
+                        &send_buffer_size,
+                        &option_size)
+            == -1) {
+        throw std::system_error(errno,
+                                std::generic_category(),
+                                "Cannot read the socket send buffer size");
+    }
+    return 2 * static_cast<std::size_t>(send_buffer_size);
 }
 
 // Runs a real event_server on a real event loop and socket, in a directory of
@@ -362,23 +388,58 @@ TEST_F(EventServerTest, DeliversAMessageLargerThanTheSocketBuffer) {
     EXPECT_FALSE(client.closed());
 }
 
-// The backlog for a client that does not read is bounded: at some point the
-// server gives up on the client instead of queueing without limit. Where that
-// point is, is deliberately not pinned here.
-TEST_F(EventServerTest, DisconnectsAClientThatFallsTooFarBehind) {
+// The cap on the backlog counts bytes, not messages: a burst of small messages
+// behind a client that is not reading yet is held and then delivered.
+TEST_F(EventServerTest, HoldsManySmallMessagesForASlowClient) {
     start();
     auto client = connect();
-    const std::string message(std::size_t {16} * 1024, 'k');
-    constexpr int more_than_any_backlog = 4096;
+    // More than the socket takes, so that everything after it has to queue.
+    const std::string large(std::size_t {512} * 1024, 'k');
+    constexpr int small_messages = 2000;
 
-    int queued = 0;
-    while (count("disconnected") == 0 && queued < more_than_any_backlog) {
+    server->queue_message(large);
+    std::string expected = large + "\n";
+    for (int index = 0; index < small_messages; ++index) {
+        const auto message = std::format("key {}", index);
         server->queue_message(message);
-        ++queued;
+        expected += message + "\n";
     }
 
+    EXPECT_EQ(calls, call_list({"connected"}));
+    EXPECT_TRUE(
+        wait([&] { return client.received().size() >= expected.size(); }));
+    // Not EXPECT_EQ: a failure would print both half-megabyte strings.
+    EXPECT_TRUE(client.received() == expected);
+    EXPECT_FALSE(client.closed());
+}
+
+// The backlog for a client that does not read is bounded: the server holds
+// max_queued_bytes at most and gives up on the client with the first message
+// that does not fit.
+TEST_F(EventServerTest, DisconnectsAClientWhoseBacklogExceedsTheCap) {
+    start();
+    auto client = connect();
+    const std::string message((std::size_t {64} * 1024) - 1, 'k');
+    const std::size_t line_size = message.size() + 1;
+
+    std::size_t accepted = 0;
+    while (true) {
+        server->queue_message(message);
+        if (count("disconnected") != 0) {
+            break;
+        }
+        accepted += line_size;
+        ASSERT_LT(accepted, 4 * event_server::max_queued_bytes)
+            << "the backlog grows without limit";
+    }
+
+    // The refused message did not fit behind the unsent part of `accepted`.
+    EXPECT_GT(accepted, event_server::max_queued_bytes - line_size);
+    // The sent part is what the socket buffered for the client; nothing else
+    // left the queue, so the queue itself was not allowed to grow further.
+    EXPECT_LE(accepted,
+              event_server::max_queued_bytes + socket_buffer_allowance());
     EXPECT_EQ(calls, call_list({"connected", "disconnected"}));
-    EXPECT_LT(queued, more_than_any_backlog);
     EXPECT_TRUE(log.contains(log_level::warning, "outgoing queue"));
     // The client still gets what was already on its way, then end of stream.
     EXPECT_TRUE(wait([&] { return client.closed(); }));

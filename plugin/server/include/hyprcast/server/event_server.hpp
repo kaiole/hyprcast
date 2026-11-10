@@ -51,6 +51,19 @@ public:
     event_server& operator=(event_server&&) = delete;
     ~event_server() = default;
 
+    // The most bytes held back for a client that is not reading. A new client
+    // is sent the keymap of every keyboard at once, and one keymap is 70 to
+    // 90 KiB as JSON. A desktop has around ten keyboard devices (power
+    // button, lid switch, mice with keys, virtual keyboards), so a snapshot is
+    // on the order of 1 MiB. The cap is several times that because the two
+    // ways of getting it wrong are not alike: too low and a client with many
+    // keyboards is dropped on every connection, too high and a stalled client
+    // costs some memory until it is dropped.
+    static constexpr std::size_t max_queued_bytes =
+        std::size_t {8} * 1024 * 1024;
+
+    // Sends `message` as one line. Without a client it is dropped. A client
+    // whose backlog would grow beyond max_queued_bytes is disconnected.
     void queue_message(std::string message);
     void disconnect_client() noexcept;
 
@@ -98,7 +111,10 @@ private:
     unique_wl_event_source wl_client_events_;
 
     std::deque<std::string> message_queue_;
+    // How much of the front message has been sent.
     std::size_t message_offset_ = 0;
+    // The unsent bytes in message_queue_.
+    std::size_t queued_bytes_ = 0;
 };
 
 } // namespace hyprcast

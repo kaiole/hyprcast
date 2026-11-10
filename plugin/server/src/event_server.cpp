@@ -135,17 +135,17 @@ void event_server::queue_message(std::string message) {
         return;
     }
 
-    constexpr std::size_t max_messages = 256;
-    if (message_queue_.size() >= max_messages) {
+    message.push_back('\n');
+    if (message.size() > max_queued_bytes - queued_bytes_) {
         log_message(*log_,
                     log_level::warning,
-                    "Client disconnected: outgoing queue reached {} messages",
-                    max_messages);
+                    "Client disconnected: outgoing queue would exceed {} bytes",
+                    max_queued_bytes);
         disconnect_client();
         return;
     }
 
-    message.push_back('\n');
+    queued_bytes_ += message.size();
     message_queue_.push_back(std::move(message));
     flush_messages();
 }
@@ -158,6 +158,7 @@ void event_server::disconnect_client() noexcept {
 
     command_buffer_.clear();
     message_offset_ = 0;
+    queued_bytes_ = 0;
     message_queue_.clear();
     wl_client_events_.reset();
     client_fd_.reset();
@@ -408,6 +409,7 @@ void event_server::flush_messages() {
         }
 
         message_offset_ += static_cast<std::size_t>(bytes_sent);
+        queued_bytes_ -= static_cast<std::size_t>(bytes_sent);
         if (message_offset_ != full_message_size) {
             update_wl_dispatch_event(WL_EVENT_WRITABLE);
             return;

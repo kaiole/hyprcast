@@ -2,8 +2,8 @@
 
 #include "hyprcast/log/run_guarded.hpp"
 #include "hyprcast/server/event_server.hpp"
-#include "hyprland/keyboard_registry.hpp"
-#include "hyprland/plugin_config.hpp"
+#include "keyboard_registry.hpp"
+#include "plugin_config.hpp"
 
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/devices/IKeyboard.hpp>

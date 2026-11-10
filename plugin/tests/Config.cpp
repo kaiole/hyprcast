@@ -83,7 +83,7 @@ int main() {
         "configure({keyboards=setmetatable({}, {})})",
         "configure({['keyboards\\0x']={}})",
     };
-    for (auto code : invalid) {
+    for (const auto* code : invalid) {
         state.beginReload();
         run(code, false);
         state.finishReload(

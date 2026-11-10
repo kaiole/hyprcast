@@ -108,12 +108,11 @@ LayerWindow::Anchors toLayerAnchors(Anchor anchor) {
     return anchors;
 }
 
-QScreen* resolveScreen(const QGuiApplication& application,
-                       const QString& requestedName) {
+QScreen* resolveScreen(const QString& requestedName) {
     if (requestedName.isEmpty()) {
-        return application.primaryScreen();
+        return QGuiApplication::primaryScreen();
     }
-    for (QScreen* screen : application.screens()) {
+    for (QScreen* screen : QGuiApplication::screens()) {
         if (screen->name() == requestedName) {
             return screen;
         }
@@ -121,23 +120,21 @@ QScreen* resolveScreen(const QGuiApplication& application,
     return nullptr;
 }
 
-QString unavailableScreenMessage(const QGuiApplication& application,
-                                 const QString& requestedName) {
+QString unavailableScreenMessage(const QString& requestedName) {
     if (requestedName.isEmpty()) {
         return QStringLiteral("No display is available");
     }
     QStringList available;
-    for (QScreen* screen : application.screens()) {
+    for (QScreen* screen : QGuiApplication::screens()) {
         available.push_back(screen->name());
     }
     return QStringLiteral("Unknown monitor '%1'; available outputs: %2")
         .arg(requestedName, available.join(QStringLiteral(", ")));
 }
 
-std::expected<void, QString> requireScreen(const QGuiApplication& application,
-                                           const QString& monitor) {
-    if (!resolveScreen(application, monitor)) {
-        return std::unexpected(unavailableScreenMessage(application, monitor));
+std::expected<void, QString> requireScreen(const QString& monitor) {
+    if (!resolveScreen(monitor)) {
+        return std::unexpected(unavailableScreenMessage(monitor));
     }
     return {};
 }
@@ -549,9 +546,7 @@ std::expected<void, QString> loadThemeHost(QQuickView& view) {
 // refused while the running overlay is still intact. Trusted QML is
 // instantiated in a separate engine, never the active cache.
 std::expected<void, QString>
-preflightRestart(const QGuiApplication& application,
-                 const ConfigSource& source,
-                 const ConfigOverrides& overrides) {
+preflightRestart(const ConfigSource& source, const ConfigOverrides& overrides) {
     ThemeCatalog catalog(themeRoots(), QUrl(BundledThemeManifest));
     if (auto discovered = catalog.discover(); !discovered) {
         return std::unexpected(discovered.error());
@@ -560,7 +555,7 @@ preflightRestart(const QGuiApplication& application,
     candidate.setRuntimeValidator(
         [&](const std::optional<OverlayConfig>&,
             const OverlayConfig& config) -> std::expected<void, QString> {
-            return requireScreen(application, config.monitor).and_then([&] {
+            return requireScreen(config.monitor).and_then([&] {
                 return catalog
                     .validateOptions(config.themeId, config.themeOptions)
                     .transform([](const QVariantMap&) {});
@@ -571,7 +566,7 @@ preflightRestart(const QGuiApplication& application,
     }
     KeyboardPresenter presenter;
     QQuickView probe;
-    probe.setScreen(resolveScreen(application, candidate.config().monitor));
+    probe.setScreen(resolveScreen(candidate.config().monitor));
     probe.resize(candidate.config().width, candidate.config().height);
     if (!loadThemeHost(probe)) {
         return std::unexpected(
@@ -600,7 +595,7 @@ int main(int argc, char* argv[]) {
         QString::fromLatin1(Hyprcast::PROJECT_VERSION));
 
     CommandLine commandLine;
-    const auto command = commandLine.parse(application.arguments());
+    const auto command = commandLine.parse(QGuiApplication::arguments());
     if (!command) {
         writeError(command.error());
         return ExitUsage;
@@ -684,8 +679,7 @@ int main(int argc, char* argv[]) {
                     QStringLiteral("window.click_through cannot be changed "
                                    "live; restart the overlay to apply it"));
             }
-            if (auto screen = requireScreen(application, candidate.monitor);
-                !screen) {
+            if (auto screen = requireScreen(candidate.monitor); !screen) {
                 return screen;
             }
             if (auto options =
@@ -705,10 +699,9 @@ int main(int argc, char* argv[]) {
     }
 
     const OverlayConfig& initialConfig = configuration.config();
-    QScreen* selectedScreen = resolveScreen(application, initialConfig.monitor);
+    QScreen* selectedScreen = resolveScreen(initialConfig.monitor);
     if (!selectedScreen) {
-        writeError(
-            unavailableScreenMessage(application, initialConfig.monitor));
+        writeError(unavailableScreenMessage(initialConfig.monitor));
         return ExitFailure;
     }
     LayerWindow* layerWindow = LayerWindow::get(&view);
@@ -751,7 +744,7 @@ int main(int argc, char* argv[]) {
             writeError(QStringLiteral(
                 "Selected output was removed; closing the overlay."));
             view.close();
-            application.quit();
+            QGuiApplication::quit();
         });
 
     qInfo().noquote() << QStringLiteral("Overlay on %1 (%2x%3 logical px, "
@@ -801,7 +794,7 @@ int main(int argc, char* argv[]) {
                      [&](const QString& error) {
                          writeError(error);
                          if (initialActivation) {
-                             application.exit(ExitFailure);
+                             QGuiApplication::exit(ExitFailure);
                          }
                      });
     QObject::connect(&capture,
@@ -828,9 +821,7 @@ int main(int argc, char* argv[]) {
         handoff,
         startup,
         QCoreApplication::applicationFilePath(),
-        [&] {
-            return preflightRestart(application, *configSource, *overrides);
-        });
+        [&] { return preflightRestart(*configSource, *overrides); });
     if (bootstrap) {
         restartCoordinator.initializeReplacement(*bootstrap);
     }
@@ -840,5 +831,5 @@ int main(int argc, char* argv[]) {
     if (*quitAfterMs > 0) {
         QTimer::singleShot(*quitAfterMs, &application, &QCoreApplication::quit);
     }
-    return application.exec();
+    return QGuiApplication::exec();
 }

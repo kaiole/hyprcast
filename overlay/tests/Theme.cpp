@@ -784,7 +784,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     check(prepareSwitch(runtime, config, &error),
           "load Cascade through the normal catalog");
     runtime.applyAcceptedConfiguration(config);
-    const auto settle = [&]() {
+    const auto settle = [&] {
         for (int i = 0; i < 5; ++i) {
             QCoreApplication::processEvents();
             QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
@@ -1178,7 +1178,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
               && hasVisualText(ribbon, QStringLiteral("Ctrl"))
               && hasVisualText(ribbon, QStringLiteral("C")),
           "ribbon preserves Unicode and distinct chord caps");
-    const auto checkRibbon = [&]() {
+    const auto checkRibbon = [&] {
         if (!ribbon) {
             return;
         }
@@ -1268,7 +1268,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         const qreal fadeWidth = ribbon->property("edgeFadeWidth").toReal();
         check(edgeGroup->x() > 0 && edgeGroup->x() < fadeWidth
                   && fadeWidth <= 12
-                  && qAbs(edgeGroup->opacity() - edgeGroup->x() / fadeWidth)
+                  && qAbs(edgeGroup->opacity() - (edgeGroup->x() / fadeWidth))
                       < 0.01
                   && qFuzzyCompare(edgeGroup->scale(), 1.0),
               "only the far-left group fades in a narrow edge zone, without "

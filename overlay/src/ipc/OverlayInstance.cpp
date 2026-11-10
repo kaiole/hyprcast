@@ -114,7 +114,8 @@ OverlayInstance::acquire(Command command, CUniqueFd inheritedLock) {
 
 std::expected<void, QString>
 OverlayInstance::adoptLock(const QString& lockPath, CUniqueFd inheritedLock) {
-    struct stat fdInfo {}, pathInfo {};
+    struct stat fdInfo {};
+    struct stat pathInfo {};
     if (::fstat(inheritedLock.get(), &fdInfo)
         || ::lstat(lockPath.toLocal8Bit().constData(), &pathInfo)
         || !S_ISREG(fdInfo.st_mode) || fdInfo.st_uid != ::getuid()

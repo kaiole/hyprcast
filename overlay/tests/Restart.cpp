@@ -161,7 +161,9 @@ void testRestart() {
     check(f.peer->readLine() == "enable\n", "restore is explicit enable");
     check(caller.state() != QProcess::NotRunning,
           "no premature restart success");
-    QProcess busy, launch, toggle;
+    QProcess busy;
+    QProcess launch;
+    QProcess toggle;
     f.command(busy);
     f.command(toggle, {}, "toggle");
     launch.setProcessEnvironment(f.environment);
@@ -254,7 +256,8 @@ void testRestart() {
           "no delayed enable after restoration failure");
 }
 void testSessionSelectors() {
-    Fixture selected, other;
+    Fixture selected;
+    Fixture other;
     selected.socket =
         selected.directory.filePath("hyprcast/session/events.sock");
     check(QDir().mkpath(QFileInfo(selected.socket).absolutePath()),
@@ -581,8 +584,9 @@ void testFailedExecAndBadReplies() {
 int main(int argc, char** argv) {
     const QCoreApplication app(argc, argv);
     try {
-        check(app.arguments().size() == 2, "overlay executable argument");
-        executable = app.arguments().at(1);
+        check(QCoreApplication::arguments().size() == 2,
+              "overlay executable argument");
+        executable = QCoreApplication::arguments().at(1);
         testSessionSelectors();
         testInitialBusy();
         testRestart();

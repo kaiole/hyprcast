@@ -561,10 +561,10 @@ void testManualTapsCountWhenAutoRepeatIsDisabled() {
     for (int i = 0; i < 4; ++i) {
         const auto now = start + std::chrono::milliseconds(i * 200);
         presenter.processMessage(
-            key(1, 30, true, static_cast<std::uint32_t>(i * 200 + 1)),
+            key(1, 30, true, static_cast<std::uint32_t>((i * 200) + 1)),
             now);
         presenter.processMessage(
-            key(1, 30, false, static_cast<std::uint32_t>(i * 200 + 2)),
+            key(1, 30, false, static_cast<std::uint32_t>((i * 200) + 2)),
             now + std::chrono::milliseconds(2));
         presenter.advance(now + std::chrono::milliseconds(150));
         const QString expected = i < 3 ? QString(i + 1, QLatin1Char('a'))

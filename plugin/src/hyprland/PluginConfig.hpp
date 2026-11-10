@@ -30,7 +30,7 @@ public:
     CPluginConfig(CPluginConfig&&) = delete;
     CPluginConfig& operator=(CPluginConfig&&) = delete;
 
-    const SConfig& getAcceptedConfig() const noexcept {
+    [[nodiscard]] const SConfig& getAcceptedConfig() const noexcept {
         return m_config.accepted();
     }
 

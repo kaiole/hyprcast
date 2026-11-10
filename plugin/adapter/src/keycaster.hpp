@@ -1,9 +1,9 @@
 #pragma once
 
 #include "hyprcast/session/session.hpp"
-#include "hyprland/keyboard_registry.hpp"
-#include "hyprland/plugin_config.hpp"
+#include "keyboard_registry.hpp"
 #include "log.hpp"
+#include "plugin_config.hpp"
 
 #include <helpers/memory/Memory.hpp>
 

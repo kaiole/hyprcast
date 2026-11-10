@@ -1,7 +1,7 @@
 #pragma once
 
 #include "hyprcast/log/log_sink.hpp"
-#include "hyprland/plugin.hpp"
+#include "plugin.hpp"
 
 #include <hyprland/src/debug/log/Logger.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>

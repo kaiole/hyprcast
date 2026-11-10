@@ -188,8 +188,10 @@ void keyboard_registry::update_subscriptions(const config& accepted_config) {
                     "Cannot process keymap update; disconnecting client",
                     [this, id, info, &event] {
                         auto keymap = to_hyprcast_type(event);
-                        info->last_sent_keymap = keymap;
-                        session_->on_keymap_event(id, std::move(keymap));
+                        // The session may ask for a snapshot first, which
+                        // records the keymap of that moment.
+                        session_->on_keymap_event(id, keymap);
+                        info->last_sent_keymap = std::move(keymap);
                     });
             });
 

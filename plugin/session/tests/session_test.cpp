@@ -54,8 +54,9 @@ constexpr key_event release_a {
 };
 
 // Runs a real session on a real event loop and socket, in a directory of its
-// own. `keyboards` is what the keyboard source reports when asked. Expected
-// lines come from the wire encoder, whose format the wire tests pin.
+// own. `keyboards` is what the keyboard source reports when asked, and
+// `locked` what the session is told about the session lock. Expected lines
+// come from the wire encoder, whose format the wire tests pin.
 class SessionTest : public testing::Test {
 protected:
     [[nodiscard]] std::filesystem::path sock_path() const {
@@ -104,6 +105,7 @@ protected:
     test_support::temp_dir dir;
     test_support::recording_log log;
     registry_snapshot keyboards;
+    bool locked = false;
     std::function<void()> on_snapshot;
     int snapshots_taken = 0;
     // The loop outlives the session, which registers with it.
@@ -119,6 +121,7 @@ protected:
             }
             return keyboards;
         },
+        [this] { return locked; },
     };
 };
 
@@ -378,6 +381,102 @@ TEST_F(SessionTest, ForwardsKeyboardStateChangesAfterEnable) {
                      wire::modifiers_message(1, modifiers),
                      wire::keymap_message(1, "xkb_keymap { new };"),
                      wire::repeat_info_message(1, repeat),
+                 });
+}
+
+// The first report after the lock withdraws the keyboards, which ends what
+// the client holds: pressed keys, modifiers and the repeats it synthesizes.
+TEST_F(SessionTest, SendsNothingDerivedFromInputWhileLocked) {
+    keyboards = {keyboard(1, "first")};
+    auto client = connect();
+    send_command(client, "enable", false);
+
+    locked = true;
+    under_test.on_key_event(1, press_a);
+    under_test.on_modifiers_event(1, {.depressed = 1});
+    under_test.on_keymap_event(1, "xkb_keymap { new };");
+    under_test.on_repeat_info_event(1, {.rate = 40, .delay = 250});
+    under_test.on_key_event(1, release_a);
+    // Anything sent above would arrive before the answer to this.
+    send_command(client, "enable", false);
+
+    expect_lines(client,
+                 {
+                     wire::casting_state_message(true),
+                     wire::casting_state_message(false),
+                     wire::subscribe_message(keyboard(1, "first")),
+                     wire::unsubscribe_message(1),
+                     wire::casting_state_message(false),
+                 });
+    EXPECT_EQ(snapshots_taken, 1);
+}
+
+TEST_F(SessionTest, EnableWhileLockedAnnouncesNoKeyboards) {
+    keyboards = {keyboard(1, "first")};
+    locked = true;
+    auto client = connect();
+
+    send_command(client, "enable", false);
+    under_test.on_subscribe(keyboard(2, "second"));
+    send_command(client, "enable", false);
+
+    expect_lines(client,
+                 {
+                     wire::casting_state_message(true),
+                     wire::casting_state_message(false),
+                     wire::casting_state_message(false),
+                 });
+    EXPECT_EQ(snapshots_taken, 0);
+}
+
+// Modifiers may have changed behind the lock, so the client starts again
+// from a snapshot rather than from what it knew before.
+TEST_F(SessionTest, ResumesWithAFreshSnapshotAfterUnlock) {
+    keyboards = {keyboard(1, "first")};
+    auto client = connect();
+    send_command(client, "enable", false);
+    locked = true;
+    under_test.on_modifiers_event(1, {.depressed = 4});
+
+    locked = false;
+    auto first = keyboard(1, "first");
+    first.modifiers.depressed = 4;
+    keyboards = {first};
+    under_test.on_key_event(1, press_a);
+
+    expect_lines(client,
+                 {
+                     wire::casting_state_message(true),
+                     wire::casting_state_message(false),
+                     wire::subscribe_message(keyboard(1, "first")),
+                     wire::unsubscribe_message(1),
+                     wire::subscribe_message(first),
+                     wire::key_message(1, press_a),
+                 });
+}
+
+TEST_F(SessionTest, AnnouncesAKeyboardOnceWhenItAppearsAsInputResumes) {
+    locked = true;
+    auto client = connect();
+    send_command(client, "enable", false);
+
+    // The keyboard source lists a keyboard before it reports it.
+    locked = false;
+    keyboards = {keyboard(1, "first"), keyboard(2, "second")};
+    under_test.on_subscribe(keyboard(2, "second"));
+
+    under_test.on_unsubscribe(2);
+    send_command(client, "disable", true);
+
+    expect_lines(client,
+                 {
+                     wire::casting_state_message(true),
+                     wire::casting_state_message(false),
+                     wire::subscribe_message(keyboard(1, "first")),
+                     wire::subscribe_message(keyboard(2, "second")),
+                     wire::unsubscribe_message(2),
+                     wire::casting_state_message(true),
+                     wire::unsubscribe_message(1),
                  });
 }
 

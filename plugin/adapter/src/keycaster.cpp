@@ -8,17 +8,24 @@
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/devices/IKeyboard.hpp>
 #include <hyprland/src/helpers/memory/Memory.hpp>
+#include <hyprland/src/managers/SessionLockManager.hpp>
 
 #include <cstdlib>
 
 namespace hyprcast {
 
 keycaster::keycaster()
-    : session_(g_pCompositor->m_wlEventLoop,
-               event_socket_dir(std::getenv("XDG_RUNTIME_DIR"),
-                                g_pCompositor->m_instanceSignature),
-               log_,
-               [this] { return keyboard_registry_.get_registry_snapshot(); }),
+    : session_(
+          g_pCompositor->m_wlEventLoop,
+          event_socket_dir(std::getenv("XDG_RUNTIME_DIR"),
+                           g_pCompositor->m_instanceSignature),
+          log_,
+          [this] { return keyboard_registry_.get_registry_snapshot(); },
+          // Without a lock manager to ask, treat the session as locked.
+          [] {
+              return !g_pSessionLockManager
+                  || g_pSessionLockManager->isSessionLocked();
+          }),
       keyboard_registry_(log_, session_),
       config_(log_, make_plugin_config_callbacks()) {
     keyboard_registry_.update_subscriptions(config_.get_accepted_config());

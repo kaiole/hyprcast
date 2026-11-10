@@ -20,8 +20,10 @@ namespace hyprcast {
 session::session(wl_event_loop* loop,
                  const std::filesystem::path& sock_dir,
                  log_sink& log,
-                 snapshot_cb take_snapshot)
+                 snapshot_cb take_snapshot,
+                 locked_cb is_locked)
     : take_snapshot_(std::move(take_snapshot)),
+      is_locked_(std::move(is_locked)),
       server_(
           loop,
           sock_dir,
@@ -33,12 +35,19 @@ session::session(wl_event_loop* loop,
           [this] { forget_client(); }) {}
 
 void session::on_subscribe(keyboard_snapshot snapshot) {
+    const bool was_flowing = flowing_;
     if (!sync_flow()) {
         return;
     }
     const auto id = snapshot.id;
+    const bool known = std::ranges::contains(announced_, id);
+    if (!was_flowing && known) {
+        // Starting the flow has just announced it, along with every other
+        // keyboard the source lists.
+        return;
+    }
     auto message = wire::subscribe_message(std::move(snapshot));
-    if (!std::ranges::contains(announced_, id)) {
+    if (!known) {
         announced_.push_back(id);
     }
     server_.queue_message(std::move(message));
@@ -100,7 +109,7 @@ void session::set_paused(bool paused) {
 // queues anything, and nothing here relies on that state afterwards.
 
 bool session::sync_flow() {
-    const bool wanted = !paused_;
+    const bool wanted = !paused_ && !is_locked_();
     if (wanted && !flowing_) {
         start_flow();
     } else if (!wanted && flowing_) {

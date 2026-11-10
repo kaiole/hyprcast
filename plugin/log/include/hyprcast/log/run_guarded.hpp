@@ -1,17 +1,20 @@
 #pragma once
 
-#include "log.hpp"
+#include "hyprcast/log/log_sink.hpp"
 
 #include <exception>
-#include <format>
 #include <string_view>
 #include <type_traits>
 #include <utility>
 
 namespace hyprcast {
 
+// Runs `function` at a boundary no exception may cross (a compositor or event
+// loop callback). An exception is logged with `context` and then `recover`
+// runs.
 template <typename Function, typename Recovery>
-void run_guarded(std::string_view context,
+void run_guarded(log_sink& log,
+                 std::string_view context,
                  Function&& function,
                  Recovery&& recover) {
     static_assert(std::is_nothrow_invocable_v<Recovery&&>);
@@ -20,9 +23,9 @@ void run_guarded(std::string_view context,
         std::forward<Function>(function)();
         return;
     } catch (const std::exception& error) {
-        log_error("{}: {}", context, error.what());
+        log_error(log, "{}: {}", context, error.what());
     } catch (...) {
-        log_error("{}: unknown exception", context);
+        log_error(log, "{}: unknown exception", context);
     }
 
     std::forward<Recovery>(recover)();

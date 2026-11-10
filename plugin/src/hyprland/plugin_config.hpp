@@ -1,7 +1,8 @@
 #pragma once
 
-#include "callback_boundary.hpp"
 #include "hyprcast/config/config.hpp"
+#include "hyprcast/log/log_sink.hpp"
+#include "hyprcast/log/run_guarded.hpp"
 
 #include <hyprland/src/helpers/signal/Signal.hpp>
 
@@ -21,7 +22,8 @@ public:
         exception_cb on_exception;
     };
 
-    explicit plugin_config(callbacks cbs);
+    // `log` must outlive the object.
+    plugin_config(log_sink& log, callbacks cbs);
     // Unregisters hyprcast.configure, whose C callback reaches this object.
     ~plugin_config();
 
@@ -41,12 +43,14 @@ private:
 
     template <typename Function>
     void run_guarded(std::string_view context, Function&& function) {
-        hyprcast::run_guarded(context,
+        hyprcast::run_guarded(*log_,
+                              context,
                               std::forward<Function>(function),
                               callbacks_.on_exception);
     }
 
     // Callbacks are declared before the listeners that invoke them.
+    log_sink* log_;
     callbacks callbacks_;
     config_state config_;
     CHyprSignalListener pre_reload_, reloaded_;

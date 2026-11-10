@@ -3,6 +3,7 @@
 #include "hyprland/keyboard_registry.hpp"
 #include "hyprland/plugin_config.hpp"
 #include "ipc/event_server.hpp"
+#include "log.hpp"
 
 #include <helpers/memory/Memory.hpp>
 
@@ -32,6 +33,8 @@ private:
 
     void shutdown() noexcept;
 
+    // First, so that it outlives every member that reports through it.
+    hyprland_log_sink log_;
     event_server server_;
     keyboard_registry keyboard_registry_;
     plugin_config config_;

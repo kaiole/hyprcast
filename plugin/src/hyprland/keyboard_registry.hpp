@@ -1,7 +1,8 @@
 #pragma once
 
-#include "callback_boundary.hpp"
 #include "hyprcast/config/config.hpp"
+#include "hyprcast/log/log_sink.hpp"
+#include "hyprcast/log/run_guarded.hpp"
 #include "hyprcast/protocol/key_event.hpp"
 #include "hyprcast/protocol/keyboard_id.hpp"
 #include "hyprcast/protocol/keyboard_snapshot.hpp"
@@ -43,7 +44,8 @@ public:
         repeat_info_event_cb on_repeat_info_event;
     };
 
-    explicit keyboard_registry(callbacks cbs);
+    // `log` must outlive the registry.
+    keyboard_registry(log_sink& log, callbacks cbs);
 
     // Listeners capture `this` and per-keyboard record pointers, so the
     // registry must never move.
@@ -64,7 +66,8 @@ public:
 private:
     template <typename Function>
     void run_guarded(std::string_view context, Function&& function) {
-        hyprcast::run_guarded(context,
+        hyprcast::run_guarded(*log_,
+                              context,
                               std::forward<Function>(function),
                               callbacks_.on_exception);
     }
@@ -73,6 +76,7 @@ private:
     void schedule_removal(keyboard_info& info) noexcept;
     void unsubscribe_listeners(keyboard_info& info) noexcept;
 
+    log_sink* log_;
     callbacks callbacks_;
     keyboard_id next_id_ = 1;
     std::vector<std::unique_ptr<keyboard_info>> keyboard_registry_;

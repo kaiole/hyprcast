@@ -1,6 +1,7 @@
 #include "keyboard_registry.hpp"
 
 #include "hyprcast/config/config.hpp"
+#include "hyprcast/log/log_sink.hpp"
 #include "hyprcast/protocol/key_event.hpp"
 #include "hyprcast/protocol/key_state.hpp"
 #include "hyprcast/protocol/keyboard_id.hpp"
@@ -10,10 +11,8 @@
 #include "hyprcast/protocol/registry_snapshot.hpp"
 #include "hyprcast/protocol/repeat_info.hpp"
 #include "keyboard_info.hpp"
-#include "log.hpp"
 
 #include <hyprland/src/Compositor.hpp>
-#include <hyprland/src/debug/log/Logger.hpp>
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/helpers/memory/Memory.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
@@ -103,8 +102,9 @@ keyboard_snapshot get_keyboard_snapshot(const IKeyboard& keyboard,
 
 } // namespace
 
-keyboard_registry::keyboard_registry(callbacks cbs)
-    : callbacks_(std::move(cbs)) {
+keyboard_registry::keyboard_registry(log_sink& log, callbacks cbs)
+    : log_(&log),
+      callbacks_(std::move(cbs)) {
     for (auto& keyboard : g_pInputManager->m_keyboards) {
         add_keyboard(keyboard);
     }
@@ -213,7 +213,8 @@ void keyboard_registry::update_subscriptions(const config& accepted_config) {
                 });
 
         info->subscribed = true;
-        log_message(Log::TRACE,
+        log_message(*log_,
+                    log_level::trace,
                     "Subscribed to keyboard {} ('{}')",
                     id,
                     info->name);
@@ -314,7 +315,8 @@ void keyboard_registry::schedule_removal(keyboard_info& info) noexcept {
         },
         this));
     if (!wl_idle_keyboard_removal_) {
-        log_message(Log::WARN,
+        log_message(*log_,
+                    log_level::warning,
                     "Cannot schedule keyboard cleanup; retaining inactive "
                     "records until next removal");
     }
@@ -331,7 +333,8 @@ void keyboard_registry::unsubscribe_listeners(keyboard_info& info) noexcept {
     info.repeat_info_listener.reset();
 
     info.subscribed = false;
-    log_message(Log::TRACE,
+    log_message(*log_,
+                log_level::trace,
                 "Unsubscribed from keyboard {} ('{}')",
                 info.id,
                 info.name);

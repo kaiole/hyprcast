@@ -30,6 +30,7 @@ endblock()
 
 find_package(PkgConfig REQUIRED)
 
+add_subdirectory(log)
 add_subdirectory(config)
 add_subdirectory(wire)
 
@@ -66,8 +67,8 @@ endif()
 target_include_directories(hyprcast PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(
   hyprcast PRIVATE rt PkgConfig::HYPRLAND_DEPS hyprcast::config
-                   hyprcast::wire hyprcast::common hyprcast::protocol
-                   hyprcast::warnings)
+                   hyprcast::wire hyprcast::log hyprcast::common
+                   hyprcast::protocol hyprcast::warnings)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   # Hyprland's smart pointers return nullptr from operator-> when empty. Once

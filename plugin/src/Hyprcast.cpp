@@ -157,10 +157,12 @@ makeEvent(std::string_view eventName,
 }
 
 [[nodiscard]] std::string castingStateMessage(bool isPaused) {
-    return libjson::serialize(makeEvent(
-        EVENT_CASTING_STATE,
-        GLOBAL_KEYBOARD_ID,
-        libjson::json_value::object {{key(FIELD_PAUSED), {.data = isPaused}}}));
+    return libjson::serialize(
+        makeEvent(EVENT_CASTING_STATE,
+                  GLOBAL_KEYBOARD_ID,
+                  libjson::json_value::object {
+                      {key(FIELD_PAUSED), {.data = isPaused}},
+                  }));
 }
 
 } // namespace

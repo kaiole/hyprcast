@@ -18,6 +18,7 @@ public:
     CHyprcast& operator=(const CHyprcast&) = delete;
     CHyprcast(CHyprcast&&) = delete;
     CHyprcast& operator=(CHyprcast&&) = delete;
+    ~CHyprcast() = default;
 
     void addKeyboard(const SP<IKeyboard>& keyboard);
 

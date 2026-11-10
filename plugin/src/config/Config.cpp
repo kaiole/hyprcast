@@ -3,6 +3,7 @@
 #include <lua.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <exception>
 #include <format>
@@ -118,7 +119,7 @@ void CConfig::finishReload(bool successful) noexcept {
 
 int CConfig::configure(lua_State* L) noexcept {
     const int top = lua_gettop(L);
-    char error[512] = {};
+    std::array<char, 512> error {};
     // Reserve stack before constructing owning C++ locals. Parsing uses only
     // raw, non-allocating Lua reads and never invokes user code or coerces
     // strings.
@@ -135,17 +136,20 @@ int CConfig::configure(lua_State* L) noexcept {
         m_pending = parse(L);
     } catch (const std::exception& e) {
         m_failed = true;
-        std::snprintf(error, sizeof(error), "hyprcast.configure: %s", e.what());
+        std::snprintf(error.data(),
+                      error.size(),
+                      "hyprcast.configure: %s",
+                      e.what());
     } catch (...) {
         m_failed = true;
-        std::snprintf(error,
-                      sizeof(error),
+        std::snprintf(error.data(),
+                      error.size(),
                       "hyprcast.configure: unexpected C++ exception");
     }
     lua_settop(L, top);
     // No owning C++ locals or active catch scopes survive this Lua longjmp.
-    if (error[0]) {
-        return luaL_error(L, "%s", error);
+    if (error.front() != '\0') {
+        return luaL_error(L, "%s", error.data());
     }
     return 0;
 }

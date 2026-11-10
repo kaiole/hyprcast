@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -74,12 +75,14 @@ CEventServer::CEventServer(ConnectedCB onConnected,
 
     ::sockaddr_un sockAddress {};
     sockAddress.sun_family = AF_UNIX;
-    std::memcpy(sockAddress.sun_path,
+    std::memcpy(std::data(sockAddress.sun_path),
                 m_sockPaths.sockFile.c_str(),
                 m_sockPaths.sockFile.native().size() + 1);
 
     const int bindStatus =
         ::bind(m_sockFd.get(),
+               // bind(2) takes every address family as a sockaddr*.
+               // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
                reinterpret_cast<const ::sockaddr*>(&sockAddress),
                sizeof(sockAddress));
     if (bindStatus == -1) {

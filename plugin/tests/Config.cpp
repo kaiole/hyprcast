@@ -2,6 +2,7 @@
 
 #include <lua.hpp>
 
+#include <array>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -9,12 +10,18 @@
 #include <vector>
 
 using namespace Hyprcast;
-static void check(bool value) {
+
+namespace {
+
+void check(bool value) {
     if (!value) {
         std::cerr << "check failed\n";
-        std::exit(1);
+        std::_Exit(1);
     }
 }
+
+} // namespace
+
 int main() {
     CConfig state;
     lua_State* L = luaL_newstate();
@@ -38,7 +45,7 @@ int main() {
                       << (result == LUA_OK ? "unexpected success"
                                            : lua_tostring(L, -1))
                       << '\n';
-            std::exit(1);
+            std::_Exit(1);
         }
         if (result != LUA_OK) {
             check(std::string(lua_tostring(L, -1))
@@ -58,7 +65,7 @@ int main() {
     check(state.accepted().filteredKeyboards
           == std::vector<std::string>({" Foo ", "foo", "not connected"}));
     const auto previous = state.accepted();
-    const char* invalid[] = {
+    const std::array invalid {
         "configure()",
         "configure({}, {})",
         "configure(nil)",

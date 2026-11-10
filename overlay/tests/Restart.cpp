@@ -216,7 +216,7 @@ void testRestart() {
             state(*f.peer, true);
         }
         check(f.result(again) == 0, "paused restart complete");
-        check(!f.peer->bytesAvailable(), "no stray enable intent");
+        check(f.peer->bytesAvailable() == 0, "no stray enable intent");
     }
     const auto finalFdCount =
         QDir(QStringLiteral("/proc/%1/fd").arg(pid))
@@ -250,7 +250,7 @@ void testRestart() {
     QElapsedTimer quiet;
     quiet.start();
     until([&] { return quiet.elapsed() > 300; });
-    check(!f.peer->bytesAvailable(),
+    check(f.peer->bytesAvailable() == 0,
           "no delayed enable after restoration failure");
 }
 void testSessionSelectors() {
@@ -413,16 +413,16 @@ void testHistoryAndSpaceReload() {
     write(f.config, base);
     f.start(true);
     xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-    check(context, "XKB context");
+    check(context != nullptr, "XKB context");
     xkb_rule_names names {};
     names.rules = "evdev";
     names.model = "pc105";
     names.layout = "us";
     xkb_keymap* keymap =
         xkb_keymap_new_from_names(context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
-    check(keymap, "XKB keymap");
+    check(keymap != nullptr, "XKB keymap");
     char* text = xkb_keymap_get_as_string(keymap, XKB_KEYMAP_FORMAT_TEXT_V1);
-    check(text, "serialize keymap");
+    check(text != nullptr, "serialize keymap");
     const QJsonObject snapshot {
         {"event", "subscribe_keyboard"},
         {"keyboard_id", 1},
@@ -494,7 +494,7 @@ void testUnavailable() {
     QElapsedTimer quiet;
     quiet.start();
     until([&] { return quiet.elapsed() > 400; });
-    check(!f.peer->bytesAvailable(),
+    check(f.peer->bytesAvailable() == 0,
           "unavailable plugin restart has no pending enable");
 }
 void testFailedExecAndBadReplies() {

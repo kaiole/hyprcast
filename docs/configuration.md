@@ -127,13 +127,15 @@ See [themes](themes.md).
 By default every keyboard is captured. To limit it, add this to your Hyprland config. Names come from `hyprctl devices`.
 
 ```lua
-hyprcast.configure({
-    filter = "exclude", -- or "include"
-    keyboards = { "my-macro-pad" },
-})
+if hl.plugin.hyprcast then
+    hl.plugin.hyprcast.configure({
+        filter = "exclude", -- or "include"
+        keyboards = { "my-macro-pad" },
+    })
+end
 ```
 
-The filter applies on the next config reload after the plugin is loaded.
+The `if` is needed: Hyprland first reads the config before it has loaded any plugin, when `hl.plugin.hyprcast` does not exist yet, and calling it then is an error that stops the rest of the config. Hyprland reloads the config right after loading the plugin, and the filter applies from that reload on.
 
 ## Command line
 

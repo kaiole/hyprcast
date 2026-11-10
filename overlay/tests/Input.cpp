@@ -291,6 +291,85 @@ void testKeymapAndKeyboardRemovalResetInputState() {
           "removed keyboard cannot produce further output");
 }
 
+// The plugin withdraws the keyboards when input stops flowing (capture paused,
+// session locked) and announces them again, as they are then, when it resumes.
+// Nothing from before the gap may survive it.
+void testResentSnapshotReplacesKeyboardState() {
+    const auto keymap = makeKeymap("us");
+    KeyboardInterpreter interpreter;
+    const auto start = TimePoint {};
+    const auto holdShiftAndA = [&](TimePoint now) {
+        process(interpreter, key(1, 42, true), now);
+        send(interpreter,
+             ModifiersMessage {
+                 .keyboardId = 1,
+                 .modifiers = {.depressed = keymap.shiftMask},
+             },
+             now);
+        const auto shifted = process(interpreter, key(1, 30, true, 2), now);
+        check(shifted.size() == 1 && shifted.front().text == QStringLiteral("A")
+                  && heldLabels(interpreter).size() == 2
+                  && interpreter.nextRepeatDeadline() != TimePoint::max(),
+              "Shift+A is held and repeating before the gap");
+    };
+    const auto expectPlainA = [&](TimePoint now, const char* message) {
+        const auto plain = process(interpreter, key(1, 30, true, 3), now);
+        check(plain.size() == 1 && plain.front().text == QStringLiteral("a")
+                  && plain.front().modifiers.isEmpty()
+                  && heldLabels(interpreter)
+                      == QStringList {QStringLiteral("a")},
+              message);
+        process(interpreter, key(1, 30, false, 4), now);
+    };
+
+    // Paused and enabled again: the state first, then the keyboards.
+    send(interpreter, snapshot(keymap, 1, 20, 200), start);
+    holdShiftAndA(start);
+    auto now = start + std::chrono::milliseconds(50);
+    send(interpreter, CastingStateMessage {.paused = true}, now);
+    send(interpreter, UnsubscribeKeyboardMessage {.id = 1}, now);
+    check(heldLabels(interpreter).isEmpty()
+              && interpreter.nextRepeatDeadline() == TimePoint::max()
+              && interpreter.advance(start + std::chrono::seconds(5)).empty(),
+          "nothing stays held or repeats once input stops");
+    now = start + std::chrono::seconds(6);
+    send(interpreter, CastingStateMessage {.paused = false}, now);
+    send(interpreter, snapshot(keymap, 1, 20, 200), now);
+    check(heldLabels(interpreter).isEmpty()
+              && interpreter.nextRepeatDeadline() == TimePoint::max(),
+          "a keyboard announced again starts with nothing held");
+    expectPlainA(now, "Shift held before a pause does not shift text after it");
+
+    // Locked and unlocked while capture stays enabled: only the keyboards go
+    // and come back.
+    holdShiftAndA(now);
+    now += std::chrono::milliseconds(50);
+    send(interpreter, UnsubscribeKeyboardMessage {.id = 1}, now);
+    check(heldLabels(interpreter).isEmpty()
+              && interpreter.nextRepeatDeadline() == TimePoint::max(),
+          "nothing stays held or repeats while locked");
+    now += std::chrono::seconds(6);
+    send(interpreter, snapshot(keymap, 1, 20, 200), now);
+    expectPlainA(now, "Shift held before a lock does not shift text after it");
+
+    // A keyboard announced while it is already known is replaced as a whole,
+    // and what the snapshot says about its modifiers is what counts.
+    holdShiftAndA(now);
+    now += std::chrono::milliseconds(50);
+    send(interpreter, snapshot(keymap, 1, 20, 200), now);
+    check(heldLabels(interpreter).isEmpty()
+              && interpreter.nextRepeatDeadline() == TimePoint::max(),
+          "a repeated announcement drops held keys and repeats");
+    expectPlainA(now, "a repeated announcement drops stale modifiers");
+
+    auto shiftDown = snapshot(keymap, 1, 20, 200);
+    shiftDown.modifiers.depressed = keymap.shiftMask;
+    send(interpreter, shiftDown, now);
+    const auto shifted = process(interpreter, key(1, 30, true, 5), now);
+    check(shifted.size() == 1 && shifted.front().text == QStringLiteral("A"),
+          "modifiers down at the moment of the snapshot are applied");
+}
+
 void testPresenterPreservesHistoryAcrossPauseAndReset() {
     const auto keymap = makeKeymap("us");
     KeyboardPresenter presenter;
@@ -684,6 +763,7 @@ int main(int argc, char** argv) {
     testChordsAndPerKeyboardState();
     testLayoutAwareText();
     testKeymapAndKeyboardRemovalResetInputState();
+    testResentSnapshotReplacesKeyboardState();
     testPresenterPreservesHistoryAcrossPauseAndReset();
     testExplicitHistoryClear();
     testExpirationFadeSnapshotAndBackspaceLifecycle();

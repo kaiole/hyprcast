@@ -1,6 +1,5 @@
 #include "OverlayInstance.hpp"
 
-#include "Restart.hpp"
 #include "hyprcast/os/unique_fd.hpp"
 
 #include <fcntl.h>
@@ -33,6 +32,8 @@ constexpr auto ProbeTimeout = 100ms;
 constexpr auto ConnectRetry = 25ms;
 constexpr auto ConnectBudget = 3s;
 constexpr auto ToggleReplyWait = 4s;
+// A restart answers once the window is rebuilt, which loads the theme's QML.
+constexpr auto RestartReplyWait = 10s;
 
 } // namespace
 
@@ -49,7 +50,7 @@ OverlayInstance::OverlayInstance(const QString& eventSocket, QObject* parent)
                     &QLocalSocket::disconnected,
                     client,
                     &QObject::deleteLater);
-            QTimer::singleShot(RestartReplyTimeout + 1s, client, [client] {
+            QTimer::singleShot(RestartReplyWait + 1s, client, [client] {
                 client->abort();
                 client->deleteLater();
             });
@@ -74,16 +75,8 @@ OverlayInstance::OverlayInstance(const QString& eventSocket, QObject* parent)
 }
 
 std::expected<OverlayInstance::Ownership, QString>
-OverlayInstance::acquire(Command command, unique_fd inheritedLock) {
+OverlayInstance::acquire(Command command) {
     const QString lockPath = m_path + QStringLiteral(".owner-lock");
-    if (inheritedLock) {
-        if (auto adopted = adoptLock(lockPath, std::move(inheritedLock));
-            !adopted) {
-            return std::unexpected(adopted.error());
-        }
-        return listen();
-    }
-
     if (!QDir().mkpath(QFileInfo(m_path).absolutePath())) {
         return std::unexpected(
             QStringLiteral("Cannot create overlay socket directory"));
@@ -98,8 +91,8 @@ OverlayInstance::acquire(Command command, unique_fd inheritedLock) {
         return std::unexpected(
             QStringLiteral("Cannot safely open overlay ownership lock"));
     }
-    // A resident holds this lock for its whole life, including across a restart
-    // exec, so winning it means there is none.
+    // A resident holds this lock for its whole life, so winning it means there
+    // is none.
     const bool noResident = ::flock(lock.get(), LOCK_EX | LOCK_NB) == 0;
     if (noResident && command != Command::Restart) {
         m_lockFd = std::move(lock);
@@ -115,22 +108,6 @@ OverlayInstance::acquire(Command command, unique_fd inheritedLock) {
             "An overlay is already running for this session; use 'toggle'"));
     }
     return forward(command);
-}
-
-std::expected<void, QString>
-OverlayInstance::adoptLock(const QString& lockPath, unique_fd inheritedLock) {
-    struct stat fdInfo {};
-    struct stat pathInfo {};
-    if (::fstat(inheritedLock.get(), &fdInfo)
-        || ::lstat(lockPath.toLocal8Bit().constData(), &pathInfo)
-        || !S_ISREG(fdInfo.st_mode) || fdInfo.st_uid != ::getuid()
-        || fdInfo.st_dev != pathInfo.st_dev || fdInfo.st_ino != pathInfo.st_ino
-        || ::flock(inheritedLock.get(), LOCK_EX | LOCK_NB)) {
-        return std::unexpected(
-            QStringLiteral("Cannot adopt restart ownership lock"));
-    }
-    m_lockFd = std::move(inheritedLock);
-    return {};
 }
 
 std::expected<OverlayInstance::Ownership, QString>
@@ -158,7 +135,7 @@ OverlayInstance::forward(Command command) const {
     client.flush();
     QByteArray response;
     const QDeadlineTimer replyDeadline(
-        command == Command::Restart ? RestartReplyTimeout : ToggleReplyWait);
+        command == Command::Restart ? RestartReplyWait : ToggleReplyWait);
     while (!response.contains('\n') && response.size() < MaxReplyBytes
            && !replyDeadline.hasExpired()) {
         if (!client.bytesAvailable()

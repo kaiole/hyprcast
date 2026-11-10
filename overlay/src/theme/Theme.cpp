@@ -44,7 +44,6 @@ namespace {
 using Toml::TableReader;
 using Toml::toQString;
 
-constexpr QStringView BuiltinDefaultId = u"builtin:default";
 constexpr QStringView ManifestLabel = u"theme manifest";
 
 bool validOptionName(const QString& name) {

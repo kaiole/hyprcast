@@ -3,12 +3,10 @@
 #include "IpcClient.hpp"
 #include "OverlayInstance.hpp"
 #include "Protocol.hpp"
-#include "Restart.hpp"
 
 #include <QLocalSocket>
 #include <QObject>
 #include <QString>
-#include <algorithm>
 #include <chrono>
 #include <variant>
 
@@ -39,12 +37,11 @@ CaptureController::CaptureController(IpcClient& ipc, QObject* parent)
     // takes a new toggle.
     connect(&m_ipc, &IpcClient::connectionReset, this, [this] {
         emit activeChanged(false);
-        const bool pending = m_waiting || m_target || m_restoring;
-        if (pending && !m_ipc.incompatibility().isEmpty()) {
+        if (busy() && !m_ipc.incompatibility().isEmpty()) {
             // Waiting for this plugin to confirm would only end in the
             // timeout, which cannot say what is wrong.
             finish(m_ipc.incompatibility());
-        } else if (m_target || m_restoring) {
+        } else if (m_target) {
             finish(QStringLiteral(
                 "Plugin disconnected before confirming capture"));
         }
@@ -57,21 +54,10 @@ CaptureController::CaptureController(IpcClient& ipc, QObject* parent)
                 if (!state) {
                     return;
                 }
-                if (m_restoring && Clock::now() >= m_restoreDeadline) {
-                    finish(
-                        QStringLiteral("Capture restoration deadline expired"));
-                    return;
-                }
-                if (!m_restoring) {
-                    emit activeChanged(!state->paused);
-                }
+                emit activeChanged(!state->paused);
                 if (m_waiting) {
                     m_waiting = false;
-                    if (m_restoring && !m_waitingTarget && state->paused) {
-                        finish();
-                    } else {
-                        request(m_waitingTarget);
-                    }
+                    request(true);
                 } else if (m_target && *m_target == !state->paused) {
                     finish();
                 }
@@ -79,33 +65,11 @@ CaptureController::CaptureController(IpcClient& ipc, QObject* parent)
 }
 
 void CaptureController::enableWhenReady() {
-    m_waitingTarget = true;
     m_waiting = true;
     m_timeout.start(ConfirmTimeout);
     if (m_ipc.connected() && m_ipc.hasCastingState()) {
         m_waiting = false;
         request(true);
-    }
-}
-
-void CaptureController::restoreWhenReady(bool enabled, Deadline deadline) {
-    m_restoring = true;
-    m_restoreDeadline = deadline;
-    m_waitingTarget = enabled;
-    m_waiting = true;
-    if (Clock::now() >= deadline) {
-        finish(QStringLiteral("Capture restoration deadline expired"));
-        return;
-    }
-    m_timeout.setInterval(std::max(1, remainingMs(deadline)));
-    m_timeout.start();
-    if (m_ipc.connected() && m_ipc.hasCastingState()) {
-        m_waiting = false;
-        if (!enabled && m_ipc.paused()) {
-            finish();
-        } else {
-            request(enabled);
-        }
     }
 }
 
@@ -129,36 +93,19 @@ void CaptureController::toggle(QLocalSocket* requester) {
 }
 
 void CaptureController::request(bool enabled) {
-    if (m_restoring && Clock::now() >= m_restoreDeadline) {
-        finish(QStringLiteral("Capture restoration deadline expired"));
-        return;
-    }
     m_target = enabled;
-    if (m_restoring) {
-        m_timeout.start(remainingMs(m_restoreDeadline));
-    } else {
-        m_timeout.start(ConfirmTimeout);
-    }
+    m_timeout.start(ConfirmTimeout);
     if (!m_ipc.setCaptureEnabled(enabled)) {
         finish(QStringLiteral("Cannot send capture request to plugin"));
     }
 }
 
 void CaptureController::finish(const QString& error) {
-    const bool restoring = m_restoring;
-    m_restoring = false;
     m_timeout.stop();
     m_waiting = false;
     m_target.reset();
     OverlayInstance::reply(m_requester.data(), error);
     m_requester.clear();
-    if (restoring) {
-        if (!error.isEmpty() && m_ipc.connected()) {
-            m_ipc.restartConnection();
-        }
-        emit activeChanged(error.isEmpty() && !m_ipc.paused());
-        emit restorationFinished(error);
-    }
     if (!error.isEmpty()) {
         emit commandFailed(error);
     }

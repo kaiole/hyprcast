@@ -8,7 +8,8 @@ at `$XDG_RUNTIME_DIR/hyprcast/<instance signature>/events.sock`:
   lines. Runs on the compositor thread and must never block or throw into it.
 - **overlay** (`hyprcast-overlay`): a Qt 6 / QML layer-shell window that reads
   the events and renders them through a theme. One resident process per
-  session; further invocations forward `toggle` or `restart` to it.
+  session; further invocations forward `toggle` or `restart` to it, and
+  `restart` rebuilds the window and its QML engine inside that process.
 
 Both are single-threaded by design. The lint configuration bans threads and
 blocking sleeps; lifting a ban means adding a tsan preset to the gate first.
@@ -49,7 +50,7 @@ developed on. These rules have no exceptions.
 | `plugin/adapter/tests/` | Not tests of the adapter, which cannot run without a compositor: tests of the hyprutils behaviour the adapter relies on |
 | `protocol/include/hyprcast/protocol/` | Event types, their JSON wire format and the protocol version |
 | `common/` | Code shared by both components; `version.hpp.in` is configured by CMake |
-| `overlay/src/ipc/` | Socket client, message parsing, single-instance and restart handling |
+| `overlay/src/ipc/` | Socket client, message parsing, capture requests, and the single resident instance with the commands forwarded to it |
 | `overlay/src/input/` | xkb interpretation of key events into actions |
 | `overlay/src/history/` | The list of shown actions and its presentation model |
 | `overlay/src/config/` | `overlay.toml` parsing, validation and live reload |
@@ -81,7 +82,7 @@ owner asked for exactly that.
 | While the session is locked nothing derived from input is sent, enabled or not | `session_test.cpp` (`SendsNothingDerivedFromInputWhileLocked`, `EnableWhileLockedAnnouncesNoKeyboards`) |
 | Nothing from a gap leaks out after it: every keyboard is announced afresh when input flows again, and the release of a key whose press was not sent is dropped | `session_test.cpp` (`EveryEnableSendsAFreshSnapshot`, `ResumesWithAFreshSnapshotAfterUnlock`, `DropsTheReleaseOf...`); the overlay side in `overlay/tests/Input.cpp` (`KeyboardInterpreterTest.ResentSnapshotReplacesKeyboardState`) and `overlay/tests/Ipc.cpp` (`ConnectionStateTest.FollowsResentSnapshots`) |
 | Only the connected client's `enable` turns capture on: nothing on the compositor side (Lua function, config value, compositor event) does | `session_test.cpp` (`OnlyAClientCommandUnpauses`) |
-| The overlay asks nothing of a plugin that speaks another protocol version | `overlay/tests/Ipc.cpp` (`IncompatiblePlugin.*IsRefused`), `overlay/tests/Lifecycle.cpp` (`OverlayLifecycle.IncompatiblePluginIsAskedForNothing`) and `overlay/tests/Restart.cpp` (`OverlayRestart.IncompatiblePluginIsAskedForNothing`) |
+| The overlay asks nothing of a plugin that speaks another protocol version | `overlay/tests/Ipc.cpp` (`IncompatiblePlugin.*IsRefused`), `overlay/tests/Lifecycle.cpp` (`OverlayLifecycle.IncompatiblePluginIsAskedForNothing`) and `overlay/tests/Reload.cpp` (`OverlayStartup.IncompatiblePluginIsAskedForNothing`) |
 
 "Locked" is Hyprland's session lock (`ext-session-lock-v1`, as `hyprlock`
 takes it), which the adapter reads through the session's `locked_cb`; with no

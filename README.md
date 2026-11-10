@@ -11,7 +11,7 @@ Shows your keystrokes on screen in Hyprland.
 Requirements:
 
 - Hyprland with Lua config
-- CMake 3.27+ and a C++23 compiler
+- CMake 3.27+, Ninja and GCC with C++23 support
 - Plugin: Hyprland headers matching your running version, Lua 5.5, libdrm, libinput, libudev, pixman, wayland-server, libxkbcommon
 - Overlay: Qt 6.5+ (Core, Gui, Network, Qml, Quick), LayerShellQt, libxkbcommon
 

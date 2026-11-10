@@ -151,8 +151,8 @@ accepted configuration. Increase the surface height explicitly when migrating.
 ## Validation
 
 ```sh
-cmake --build build/debug --target overlay_theme_tests -j2
-ctest --preset debug -R overlay-theme --output-on-failure
+cmake --build build/dev --target overlay_theme_tests -j2
+ctest --preset dev -R overlay-theme --output-on-failure
 ```
 
 Tests exercise final-state geometry with reduced motion, Unicode/plain labels,

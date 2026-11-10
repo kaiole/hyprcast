@@ -145,6 +145,19 @@ std::string unsubscribe_message(keyboard_id id) {
                                          libjson::json_value::object {}));
 }
 
+std::string hello_message() {
+    libjson::json_value::object json_object;
+    json_object.emplace(key(field_event),
+                        libjson::json_value {.data = key(event_hello)});
+    json_object.emplace(
+        key(field_protocol_version),
+        libjson::json_value {
+            .data = static_cast<std::uint64_t>(protocol_version),
+        });
+
+    return libjson::serialize({.data = std::move(json_object)});
+}
+
 std::string casting_state_message(bool is_paused) {
     return libjson::serialize(
         make_event(event_casting_state,

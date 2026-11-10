@@ -14,6 +14,8 @@
 // names come from hyprcast/protocol/wire.hpp.
 namespace hyprcast::wire {
 
+// The first line of every connection: the protocol version the plugin speaks.
+[[nodiscard]] std::string hello_message();
 [[nodiscard]] std::string casting_state_message(bool is_paused);
 [[nodiscard]] std::string subscribe_message(keyboard_snapshot snapshot);
 [[nodiscard]] std::string unsubscribe_message(keyboard_id id);

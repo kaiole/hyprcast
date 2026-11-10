@@ -58,7 +58,13 @@ using ProtocolMessage = std::variant<CastingStateMessage,
                                      KeymapMessage,
                                      RepeatInfoMessage>;
 
-// Parses one JSON line from the plugin, or explains why it is invalid.
+// Checks the line that must open every connection: the plugin's hello with the
+// protocol version this overlay speaks. The error tells the user what to
+// restart, so it can be shown as it is.
+[[nodiscard]] std::expected<void, QString>
+checkHello(const QByteArray& jsonLine);
+
+// Parses one JSON line that follows the hello, or explains why it is invalid.
 [[nodiscard]] std::expected<ProtocolMessage, QString>
 parseMessage(const QByteArray& jsonLine);
 

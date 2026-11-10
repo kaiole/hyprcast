@@ -25,6 +25,9 @@ namespace hyprcast {
 // input flows only after the client's own `enable`. Nothing else can unpause
 // it.
 //
+// Every connection opens with the protocol version, so that a client built
+// for another one hangs up before it asks for anything.
+//
 // Input flows only while capture is enabled and the session is not locked.
 // Otherwise the client is told the capture state and nothing else: a
 // keyboard's modifiers, keymap and repeat settings are input too. The client

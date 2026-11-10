@@ -1,3 +1,4 @@
+#include "hyprcast/protocol/wire.hpp"
 #include "ipc/ConnectionState.hpp"
 #include "ipc/IpcClient.hpp"
 #include "ipc/LineFramer.hpp"
@@ -14,9 +15,11 @@
 #include <QTemporaryDir>
 #include <QTimer>
 #include <array>
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <iostream>
+#include <memory>
 #include <variant>
 #include <vector>
 
@@ -35,6 +38,12 @@ ProtocolMessage parse(const QByteArray& json) {
     const auto message = parseMessage(json);
     check(message.has_value(), "expected valid protocol message");
     return message.value_or(ProtocolMessage {});
+}
+
+// The line a plugin opens every connection with.
+QByteArray hello(std::uint32_t version = hyprcast::wire::protocol_version) {
+    return QByteArrayLiteral(R"({"event":"hello","protocol_version":)")
+        + QByteArray::number(version) + QByteArrayLiteral("}\n");
 }
 
 void testLineFraming() {
@@ -123,6 +132,8 @@ void testMessageParsing() {
         QByteArrayLiteral("{\"event\":\"repeat_info\",\"keyboard_id\":1,"
                           "\"rate\":-1,\"delay\":0}"),
         QByteArrayLiteral("{\"event\":\"future_event\",\"keyboard_id\":1}"),
+        // The hello opens a connection and is not a message within one.
+        hello(),
     };
     for (const auto& json : invalid) {
         const auto message = parseMessage(json);
@@ -130,6 +141,46 @@ void testMessageParsing() {
               "malformed or out-of-range message rejected");
         check(!message.has_value() && !message.error().isEmpty(),
               "parse failure has a diagnostic");
+    }
+}
+
+void testHello() {
+    using hyprcast::wire::protocol_version;
+
+    check(checkHello(hello()).has_value(), "matching version accepted");
+
+    const auto older = checkHello(hello(protocol_version - 1));
+    check(!older.has_value(), "older plugin refused");
+    check(!older.has_value() && older.error().contains("Reload the plugin")
+              && older.error().contains("restart Hyprland"),
+          "an older plugin is to be reloaded");
+    check(!older.has_value()
+              && older.error().contains(QString::number(protocol_version - 1)),
+          "the plugin's version is named");
+
+    const auto newer = checkHello(hello(protocol_version + 1));
+    check(!newer.has_value(), "newer plugin refused");
+    check(!newer.has_value() && newer.error().contains("Restart the overlay"),
+          "an older overlay is to be restarted");
+
+    // A plugin from before the hello existed starts with its capture state.
+    const std::array withoutVersion {
+        QByteArrayLiteral(
+            "{\"event\":\"casting_state\",\"keyboard_id\":0,\"paused\":true}"),
+        QByteArrayLiteral("{\"event\":\"hello\"}"),
+        QByteArrayLiteral("{\"event\":\"hello\",\"protocol_version\":\"1\"}"),
+        QByteArrayLiteral("{\"event\":\"hello\",\"protocol_version\":1.5}"),
+        QByteArrayLiteral("{\"event\":\"hello\",\"protocol_version\":-1}"),
+        QByteArrayLiteral("{\"protocol_version\":1}"),
+        QByteArrayLiteral("not json"),
+        QByteArrayLiteral(""),
+    };
+    for (const auto& line : withoutVersion) {
+        const auto result = checkHello(line);
+        check(!result.has_value(), "a line without a version is refused");
+        check(!result.has_value()
+                  && result.error().contains("Reload the plugin"),
+              "a plugin without a version is to be reloaded");
     }
 }
 
@@ -231,8 +282,9 @@ void testRetryUntilServerAppears() {
         while (server.hasPendingConnections()) {
             auto* peer = server.nextPendingConnection();
             peer->write(
-                QByteArrayLiteral("{\"event\":\"casting_state\",\"keyboard_"
-                                  "id\":0,\"paused\":false}\n"));
+                hello()
+                + QByteArrayLiteral("{\"event\":\"casting_state\",\"keyboard_"
+                                    "id\":0,\"paused\":false}\n"));
             peer->flush();
         }
     });
@@ -260,6 +312,7 @@ void testAsyncReconnect() {
             ++connectionCount;
             if (connectionCount == 1) {
                 firstPeer = peer;
+                peer->write(hello());
                 peer->write(QByteArrayLiteral(
                     "{\"event\":\"casting_state\",\"keyboard_id\":0,\"paused\":"
                     "true}\n"
@@ -272,6 +325,7 @@ void testAsyncReconnect() {
                     "\"keycode\":30,\"state\":\"pressed\"}\n"));
                 peer->flush();
             } else if (connectionCount == 2) {
+                peer->write(hello());
                 peer->write(QByteArrayLiteral(
                     "{\"event\":\"casting_state\",\"keyboard_id\":0,\"paused\":"
                     "false}\n"
@@ -361,6 +415,7 @@ void testRejectedTransitionIsNotDelivered() {
     QObject::connect(&server, &QLocalServer::newConnection, &server, [&] {
         while (server.hasPendingConnections()) {
             auto* peer = server.nextPendingConnection();
+            peer->write(hello());
             peer->write(QByteArrayLiteral(
                 "{\"event\":\"casting_state\",\"keyboard_id\":0,\"paused\":"
                 "false}\n"
@@ -399,6 +454,164 @@ void testRejectedTransitionIsNotDelivered() {
     QLocalServer::removeServer(socketPath);
 }
 
+// A plugin that does not open with this overlay's protocol version is hung up
+// on before anything it sends is believed, so capture cannot be requested.
+void testIncompatiblePluginIsRefused() {
+    using hyprcast::wire::protocol_version;
+
+    struct Case {
+        const char* name = "";
+        QByteArray greeting {};
+        const char* advice = "";
+    };
+    const std::array cases {
+        Case {
+            .name = "a plugin from before the hello",
+            .greeting = {},
+            .advice = "Reload the plugin",
+        },
+        Case {
+            .name = "an older plugin",
+            .greeting = hello(protocol_version - 1),
+            .advice = "Reload the plugin",
+        },
+        Case {
+            .name = "a newer plugin",
+            .greeting = hello(protocol_version + 1),
+            .advice = "Restart the overlay",
+        },
+    };
+
+    for (const auto& incompatible : cases) {
+        const QTemporaryDir tempDirectory;
+        check(tempDirectory.isValid(), "temporary directory created");
+        const QString socketPath =
+            tempDirectory.filePath(QStringLiteral("events.sock"));
+
+        QLocalServer server;
+        check(server.listen(socketPath), "incompatible plugin listens");
+        std::vector<std::unique_ptr<QLocalSocket>> peers;
+        QByteArray received;
+        QObject::connect(&server, &QLocalServer::newConnection, &server, [&] {
+            while (server.hasPendingConnections()) {
+                auto& peer = peers.emplace_back(server.nextPendingConnection());
+                QObject::connect(peer.get(),
+                                 &QLocalSocket::readyRead,
+                                 peer.get(),
+                                 [&received, socket = peer.get()] {
+                                     received += socket->readAll();
+                                 });
+                // Everything a plugin could say to get capture going.
+                peer->write(incompatible.greeting);
+                peer->write(QByteArrayLiteral(
+                    "{\"event\":\"casting_state\",\"keyboard_id\":0,\"paused\":"
+                    "false}\n"
+                    "{\"event\":\"subscribe_keyboard\",\"keyboard_id\":1,"
+                    "\"name\":\"kbd\",\"depressed\":0,\"latched\":0,"
+                    "\"locked\":0,\"group\":0,\"keymap\":\"xkb\",\"rate\":25,"
+                    "\"delay\":600}\n"
+                    "{\"event\":\"key\",\"keyboard_id\":1,\"time_ms\":1,"
+                    "\"keycode\":30,\"state\":\"pressed\"}\n"));
+                peer->flush();
+            }
+        });
+
+        IpcClient client(socketPath);
+        int delivered = 0;
+        QObject::connect(
+            &client,
+            &IpcClient::protocolMessageReceived,
+            &client,
+            [&] { ++delivered; },
+            Qt::DirectConnection);
+        client.start();
+
+        // Capture can be requested only once a capture state is known.
+        bool believed = false;
+        check(waitUntil(
+                  [&] {
+                      believed = believed || client.hasCastingState();
+                      return !client.incompatibility().isEmpty();
+                  },
+                  2000),
+              incompatible.name);
+        check(client.incompatibility().contains(incompatible.advice),
+              "the refusal says what to restart");
+        check(waitUntil(
+                  [&] {
+                      believed = believed || client.hasCastingState();
+                      return !peers.empty()
+                          && peers.front()->state()
+                          == QLocalSocket::UnconnectedState;
+                  },
+                  2000),
+              "the overlay hangs up on an incompatible plugin");
+        check(!believed && client.keyboardCount() == 0,
+              "nothing an incompatible plugin says is believed");
+        check(delivered == 0, "nothing an incompatible plugin says is shown");
+        check(!client.setCaptureEnabled(true),
+              "capture cannot be requested from an incompatible plugin");
+        check(received.isEmpty(), "an incompatible plugin is sent no command");
+
+        server.close();
+        QLocalServer::removeServer(socketPath);
+    }
+}
+
+// The overlay keeps trying, so a reloaded plugin is picked up. Until then the
+// reason stays, so that a toggle between two attempts can report it.
+void testIncompatibilityEndsWithTheIncompatiblePlugin() {
+    using hyprcast::wire::protocol_version;
+
+    const QTemporaryDir tempDirectory;
+    check(tempDirectory.isValid(), "temporary directory created");
+    const QString socketPath =
+        tempDirectory.filePath(QStringLiteral("events.sock"));
+
+    QLocalServer server;
+    check(server.listen(socketPath), "plugin listens");
+    QByteArray greeting = hello(protocol_version - 1);
+    QPointer<QLocalSocket> peer;
+    QObject::connect(&server, &QLocalServer::newConnection, &server, [&] {
+        while (server.hasPendingConnections()) {
+            peer = server.nextPendingConnection();
+            peer->write(greeting);
+            peer->write(
+                QByteArrayLiteral("{\"event\":\"casting_state\",\"keyboard_"
+                                  "id\":0,\"paused\":true}\n"));
+            peer->flush();
+        }
+    });
+
+    IpcClient client(socketPath);
+    client.start();
+    check(waitUntil([&] { return !client.incompatibility().isEmpty(); }, 2000),
+          "an older plugin is refused");
+
+    // The plugin is reloaded: the next attempt meets a compatible one.
+    greeting = hello();
+    check(waitUntil(
+              [&] { return client.connected() && client.hasCastingState(); },
+              3000),
+          "a reloaded plugin is accepted without restarting the overlay");
+    check(client.incompatibility().isEmpty(),
+          "a compatible plugin ends the incompatibility");
+
+    // A newer plugin replaces it.
+    greeting = hello(protocol_version + 1);
+    check(!peer.isNull(), "compatible connection accepted");
+    peer->abort();
+    check(waitUntil([&] { return !client.incompatibility().isEmpty(); }, 3000),
+          "a newer plugin is refused");
+
+    // The plugin is unloaded: nothing is left to be incompatible with.
+    server.close();
+    QLocalServer::removeServer(socketPath);
+    check(waitUntil([&] { return client.incompatibility().isEmpty(); }, 5000),
+          "an unloaded plugin is not reported as incompatible");
+    check(!client.connected(), "no plugin is connected");
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -406,10 +619,13 @@ int main(int argc, char* argv[]) {
     try {
         testLineFraming();
         testMessageParsing();
+        testHello();
         testConnectionState();
         testRetryUntilServerAppears();
         testAsyncReconnect();
         testRejectedTransitionIsNotDelivered();
+        testIncompatiblePluginIsRefused();
+        testIncompatibilityEndsWithTheIncompatiblePlugin();
         std::cout << "overlay IPC tests passed\n";
         return 0;
     } catch (const std::exception& error) {

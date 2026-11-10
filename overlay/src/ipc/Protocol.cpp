@@ -141,18 +141,68 @@ std::expected<ProtocolMessage, QString> finish(const FieldReader& reader,
     return ProtocolMessage {std::move(message)};
 }
 
-} // namespace
-
-std::expected<ProtocolMessage, QString>
-parseMessage(const QByteArray& jsonLine) {
+std::expected<QJsonObject, QString> parseObject(const QByteArray& jsonLine) {
     QJsonParseError parseError {};
     const auto document = QJsonDocument::fromJson(jsonLine, &parseError);
     if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
         return std::unexpected(QStringLiteral("invalid JSON object: %1")
                                    .arg(parseError.errorString()));
     }
+    return document.object();
+}
 
-    const QJsonObject object = document.object();
+// A plugin stays loaded in the compositor until it is reloaded, so after an
+// update the running one can be older than the overlay.
+QString reloadPluginAdvice() {
+    return QStringLiteral("Reload the plugin or restart Hyprland after "
+                          "updating Hyprcast.");
+}
+
+} // namespace
+
+std::expected<void, QString> checkHello(const QByteArray& jsonLine) {
+    const auto object = parseObject(jsonLine);
+    if (!object
+        || object->value(latin1(field_event)).toString()
+            != latin1(event_hello)) {
+        return std::unexpected(
+            QStringLiteral("The loaded Hyprcast plugin did not announce a "
+                           "protocol version, so it is older than this "
+                           "overlay. %1")
+                .arg(reloadPluginAdvice()));
+    }
+
+    FieldReader read(*object);
+    const std::uint32_t version = read.uint32(field_protocol_version);
+    if (!read.ok()) {
+        return std::unexpected(
+            QStringLiteral("The loaded Hyprcast plugin announced no usable "
+                           "protocol version (%1). %2")
+                .arg(read.error(), reloadPluginAdvice()));
+    }
+    if (version == protocol_version) {
+        return {};
+    }
+    return std::unexpected(
+        QStringLiteral("The loaded Hyprcast plugin speaks protocol version %1 "
+                       "and this overlay speaks version %2. %3")
+            .arg(version)
+            .arg(protocol_version)
+            .arg(version < protocol_version
+                     ? reloadPluginAdvice()
+                     : QStringLiteral("Restart the overlay with "
+                                      "'hyprcast-overlay restart' after "
+                                      "updating Hyprcast.")));
+}
+
+std::expected<ProtocolMessage, QString>
+parseMessage(const QByteArray& jsonLine) {
+    const auto parsedObject = parseObject(jsonLine);
+    if (!parsedObject) {
+        return std::unexpected(parsedObject.error());
+    }
+
+    const QJsonObject& object = *parsedObject;
     FieldReader read(object);
     const QString event = read.string(field_event);
     if (!read.ok()) {

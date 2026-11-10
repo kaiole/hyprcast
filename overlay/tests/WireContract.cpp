@@ -65,6 +65,17 @@ void expectEqual(const repeat_info& actual, const repeat_info& expected) {
     EXPECT_EQ(actual.delay, expected.delay);
 }
 
+TEST(WireContract, Hello) {
+    const auto accepted =
+        checkHello(QByteArray::fromStdString(wire::hello_message()));
+    EXPECT_TRUE(accepted.has_value())
+        << (accepted ? std::string {} : accepted.error().toStdString());
+
+    // The hello opens a connection; it is not one of the messages inside it.
+    EXPECT_FALSE(
+        parseMessage(QByteArray::fromStdString(wire::hello_message())));
+}
+
 TEST(WireContract, CastingState) {
     EXPECT_TRUE(
         parsed<CastingStateMessage>(wire::casting_state_message(true)).paused);

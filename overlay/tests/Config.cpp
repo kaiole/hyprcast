@@ -218,6 +218,23 @@ TEST(OverlayConfigParsing, RejectsValuesOutsideTheirRange) {
         << "reject unknown behavior enums";
 }
 
+TEST(OverlayConfigParsing, BoundsRetainedHistory) {
+    const auto smallest = parse("[history]\nmax_retained_utf16_code_units=1\n");
+    ASSERT_TRUE(smallest) << smallest.error().toStdString();
+    EXPECT_EQ(smallest->maxRetainedUtf16CodeUnits, 1);
+    const auto largest =
+        parse("[history]\nmax_retained_utf16_code_units=16384\n");
+    ASSERT_TRUE(largest) << largest.error().toStdString();
+    EXPECT_EQ(largest->maxRetainedUtf16CodeUnits, 16384);
+
+    const QString range = QStringLiteral(
+        "'history.max_retained_utf16_code_units' must be in the range "
+        "1..16384");
+    EXPECT_EQ(rejection("[history]\nmax_retained_utf16_code_units=0\n"), range);
+    EXPECT_EQ(rejection("[history]\nmax_retained_utf16_code_units=16385\n"),
+              range);
+}
+
 TEST(OverlayConfigParsing, DynamicMinimumOnlyBindsADynamicSurface) {
     EXPECT_FALSE(
         parse("[window]\ndynamic_size=true\nwidth=100\nmin_width=101\n"))

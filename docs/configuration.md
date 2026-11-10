@@ -88,7 +88,7 @@ Sizes are in logical pixels. Colors are names (`white`) or hex (`#RRGGBB`, `#AAR
 | Key | Default | Values |
 |---|---|---|
 | `backspace` | `"delete"` | `delete`: Backspace erases. `symbol`: Backspace is shown as a key. |
-| `max_retained_utf16_code_units` | `4096` | How much history to keep (about one per character), 1–1048576 |
+| `max_retained_utf16_code_units` | `4096` | How much history to keep (about one per character), 1–16384 |
 
 ### `[repeat]`
 

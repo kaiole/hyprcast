@@ -77,7 +77,7 @@ inline constexpr Range<int> ExpireAfterMs {.minimum = 0, .maximum = 86'400'000};
 inline constexpr Range<int> FadeDurationMs {.minimum = 0, .maximum = 60'000};
 inline constexpr Range<qsizetype> RetainedUtf16CodeUnits {
     .minimum = 1,
-    .maximum = 1'048'576,
+    .maximum = 16'384,
 };
 
 } // namespace Limits

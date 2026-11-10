@@ -19,13 +19,10 @@
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
-#include <xkbcommon/xkbcommon.h>
 
 #include <algorithm>
 #include <cstdint>
-#include <cstdlib>
 #include <memory>
-#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -50,27 +47,6 @@ to_hyprcast_type(const IKeyboard::SModifiersEvent& event) noexcept {
     };
 }
 
-// Stateless, so the unique_ptr stays pointer-sized (a function-pointer deleter
-// would not).
-struct free_deleter {
-    void operator()(char* string) const noexcept {
-        // libxkbcommon allocates this with malloc.
-        // NOLINTNEXTLINE(cppcoreguidelines-no-malloc)
-        std::free(string);
-    }
-};
-
-keymap_text to_hyprcast_type(const IKeyboard::SKeymapEvent& event) {
-    const std::unique_ptr<char, free_deleter> keymap_string {
-        ::xkb_keymap_get_as_string(event.keymap, XKB_KEYMAP_FORMAT_TEXT_V1)
-    };
-    if (!keymap_string) {
-        throw std::runtime_error("Cannot serialize XKB keymap");
-    }
-
-    return keymap_string.get();
-}
-
 // Hyprland stores these as int; clamp so a bogus negative value cannot wrap.
 repeat_info to_hyprcast_type(int repeat_rate, int repeat_delay) noexcept {
     return {
@@ -92,9 +68,8 @@ keyboard_snapshot get_keyboard_snapshot(const IKeyboard& keyboard,
                 .locked = keyboard.m_modifiersState.locked,
                 .group = keyboard.m_modifiersState.group,
             },
-        // Keep subscription snapshots consistent with incremental keymap events
-        // and interoperable with Wayland clients: both use libxkbcommon text
-        // V1.
+        // The text Hyprland keeps for Wayland clients, in libxkbcommon's
+        // text format V1. sync_keymap() reports changes from the same string.
         .keymap = keyboard.m_xkbKeymapV1String,
         .repeat_info =
             to_hyprcast_type(keyboard.m_repeatRate, keyboard.m_repeatDelay),
@@ -110,9 +85,10 @@ keyboard_registry::keyboard_registry(log_sink& log, session& events)
         add_keyboard(keyboard);
     }
 
-    // In Lua config reloads, config.reloaded fires before the deferred keyboard
-    // refresh. This notification fires after applyConfigToKeyboard sets the
-    // keymap.
+    // Hyprland sends this after every change to a keyboard's keymap: when it
+    // applies the config to the keyboard, which on a Lua config reload is
+    // after config.reloaded, and when a virtual keyboard sets its own keymap.
+    // It also sends it when only the active layout changed.
     layout_listener_ = Event::bus()->m_events.input.keyboard.layout.listen(
         [this](SP<IKeyboard> keyboard, const std::string&) {
             run_guarded(
@@ -178,20 +154,6 @@ void keyboard_registry::update_subscriptions(const config& accepted_config) {
                     [this, id, &event] {
                         session_->on_modifiers_event(id,
                                                      to_hyprcast_type(event));
-                    });
-            });
-
-        info->keymap_listener = keyboard->m_keyboardEvents.keymap.listen(
-            [this, id, info = info.get()](
-                const IKeyboard::SKeymapEvent& event) {
-                run_guarded(
-                    "Cannot process keymap update; disconnecting client",
-                    [this, id, info, &event] {
-                        auto keymap = to_hyprcast_type(event);
-                        // The session may ask for a snapshot first, which
-                        // records the keymap of that moment.
-                        session_->on_keymap_event(id, keymap);
-                        info->last_sent_keymap = std::move(keymap);
                     });
             });
 
@@ -261,7 +223,6 @@ void keyboard_registry::shutdown() noexcept {
     for (auto& info : keyboard_registry_) {
         info->key_event_listener.reset();
         info->modifiers_listener.reset();
-        info->keymap_listener.reset();
         info->repeat_info_listener.reset();
         info->destroy_listener.reset();
 
@@ -332,7 +293,6 @@ void keyboard_registry::unsubscribe_listeners(keyboard_info& info) noexcept {
 
     info.key_event_listener.reset();
     info.modifiers_listener.reset();
-    info.keymap_listener.reset();
     info.repeat_info_listener.reset();
 
     info.subscribed = false;

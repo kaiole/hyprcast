@@ -477,19 +477,22 @@ std::expected<OverlayConfig, QString> parseOverlayConfig(const QString& path) {
     }
 }
 
-std::expected<void, QString>
-validateOverlayConfig(const OverlayConfig& config) {
+namespace {
+
+// The parts of validateOverlayConfig(), which runs them in this order and
+// reports the first failure.
+std::expected<void, QString> validateWindow(const OverlayConfig& config) {
     if (config.monitor.size() > 256 || config.monitor.contains(QChar::Null)) {
         return std::unexpected(
             QStringLiteral("'window.monitor' must be at most 256 characters "
                            "and contain no NUL"));
     }
-    const std::pair<int, const char*> sizes[] = {
+    const auto sizes = std::to_array<std::pair<int, const char*>>({
         {config.width, "window.width"},
         {config.height, "window.height"},
         {config.minWidth, "window.min_width"},
         {config.minHeight, "window.min_height"},
-    };
+    });
     for (const auto& [value, name] : sizes) {
         if (auto ok = checkRange(value,
                                  Limits::SurfaceSize,
@@ -518,27 +521,62 @@ validateOverlayConfig(const OverlayConfig& config) {
             return ok;
         }
     }
+    return {};
+}
+
+std::expected<void, QString> validateAppearance(const OverlayConfig& config) {
     if (!std::isfinite(config.backgroundOpacity) || config.backgroundOpacity < 0
         || config.backgroundOpacity > 1) {
         return std::unexpected(QStringLiteral(
             "'appearance.background_opacity' must be a number from 0 to 1"));
     }
-    const std::tuple<int, Range<int>, const char*> appearance[] = {
-        {config.cornerRadius, {0, 256}, "appearance.corner_radius"},
-        {config.panelBorderWidth, {0, 64}, "appearance.panel_border_width"},
-        {config.fontSize, {1, 256}, "appearance.font_size"},
-        {config.fontWeight, {100, 900}, "appearance.font_weight"},
-        {config.historyPaddingX, {0, 512}, "appearance.history_padding_x"},
-        {config.textExtraPaddingX, {0, 512}, "appearance.text_extra_padding_x"},
-        {config.repeatCountThreshold, {2, 10000}, "repeat.count_threshold"},
+    // The repeat and expiration ranges are checked here as well, which keeps
+    // the order in which errors are reported.
+    using Bounded = std::tuple<int, Range<int>, const char*>;
+    const auto integers = std::to_array<Bounded>({
+        {
+            config.cornerRadius,
+            {.minimum = 0, .maximum = 256},
+            "appearance.corner_radius",
+        },
+        {
+            config.panelBorderWidth,
+            {.minimum = 0, .maximum = 64},
+            "appearance.panel_border_width",
+        },
+        {
+            config.fontSize,
+            {.minimum = 1, .maximum = 256},
+            "appearance.font_size",
+        },
+        {
+            config.fontWeight,
+            {.minimum = 100, .maximum = 900},
+            "appearance.font_weight",
+        },
+        {
+            config.historyPaddingX,
+            {.minimum = 0, .maximum = 512},
+            "appearance.history_padding_x",
+        },
+        {
+            config.textExtraPaddingX,
+            {.minimum = 0, .maximum = 512},
+            "appearance.text_extra_padding_x",
+        },
+        {
+            config.repeatCountThreshold,
+            {.minimum = 2, .maximum = 10000},
+            "repeat.count_threshold",
+        },
         {config.expireAfterMs, Limits::ExpireAfterMs, "expiration.after_ms"},
         {
             config.fadeDurationMs,
             Limits::FadeDurationMs,
             "expiration.fade_duration_ms",
         },
-    };
-    for (const auto& [value, range, name] : appearance) {
+    });
+    for (const auto& [value, range, name] : integers) {
         if (auto ok = checkRange(value, range, QString::fromLatin1(name));
             !ok) {
             return ok;
@@ -562,6 +600,10 @@ validateOverlayConfig(const OverlayConfig& config) {
             return ok;
         }
     }
+    return {};
+}
+
+std::expected<void, QString> validateSymbols(const OverlayConfig& config) {
     if (!config.symbolFontFamily.isEmpty()
         && (config.symbolFontFamily.trimmed().isEmpty()
             || !isLabel(config.symbolFontFamily, 128))) {
@@ -582,6 +624,22 @@ validateOverlayConfig(const OverlayConfig& config) {
     if (auto ok = validateSymbolMap(config.modifierSymbols,
                                     QStringLiteral("symbols.modifiers"));
         !ok) {
+        return ok;
+    }
+    return {};
+}
+
+} // namespace
+
+std::expected<void, QString>
+validateOverlayConfig(const OverlayConfig& config) {
+    if (auto ok = validateWindow(config); !ok) {
+        return ok;
+    }
+    if (auto ok = validateAppearance(config); !ok) {
+        return ok;
+    }
+    if (auto ok = validateSymbols(config); !ok) {
         return ok;
     }
     if (config.themeId.trimmed().isEmpty() || !isLabel(config.themeId, 128)) {
@@ -622,7 +680,7 @@ OverlayConfig applyOverrides(OverlayConfig config,
     return config;
 }
 
-OverlayConfigManager::OverlayConfigManager(QString path,
+OverlayConfigManager::OverlayConfigManager(const QString& path,
                                            bool requireExisting,
                                            ConfigOverrides overrides,
                                            QObject* parent)

@@ -13,11 +13,9 @@
 #include "hyprcast/session/session.hpp"
 #include "keyboard_info.hpp"
 
-#include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/helpers/memory/Memory.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
-#include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 
 #include <algorithm>
@@ -104,18 +102,18 @@ void keyboard_registry::add_keyboard(const SP<IKeyboard>& keyboard) {
     info->id = next_id_++;
     info->name = keyboard->m_hlName;
 
+    // By id and not by record: remove_keyboard() destroys the record, and
+    // this listener with it, while the listener is running. hyprutils holds
+    // on to a listener for the length of the emission that calls it, which
+    // tests/signal_contract_test.cpp pins.
     info->destroy_listener = keyboard->m_events.destroy.listen(
-        [this, record = info.get()] { schedule_removal(*record); });
+        [this, id = info->id] { remove_keyboard(id); });
 
     keyboard_registry_.push_back(std::move(info));
 }
 
 void keyboard_registry::update_subscriptions(const config& accepted_config) {
     for (const auto& info : keyboard_registry_) {
-        if (info->pending_removal) {
-            continue;
-        }
-
         const auto it =
             std::ranges::find(accepted_config.filtered_keyboards, info->name);
         if ((accepted_config.filter_setting == keyboard_filter_setting::include
@@ -218,7 +216,6 @@ registry_snapshot keyboard_registry::get_registry_snapshot() {
 
 void keyboard_registry::shutdown() noexcept {
     layout_listener_.reset();
-    wl_idle_keyboard_removal_.reset();
 
     for (auto& info : keyboard_registry_) {
         info->key_event_listener.reset();
@@ -253,37 +250,19 @@ void keyboard_registry::sync_keymap(const SP<IKeyboard>& keyboard) {
     info.last_sent_keymap = active_keymap;
 }
 
-void keyboard_registry::schedule_removal(keyboard_info& info) noexcept {
-    info.pending_removal = true;
-    unsubscribe_listeners(info);
-
-    if (wl_idle_keyboard_removal_) {
+// Hyprland can announce the end of one keyboard twice, from the device and
+// again from the keyboard's destructor; the second time finds nothing.
+void keyboard_registry::remove_keyboard(keyboard_id id) noexcept {
+    const auto it =
+        std::ranges::find(keyboard_registry_, id, [](const auto& info) {
+            return info->id;
+        });
+    if (it == keyboard_registry_.end()) {
         return;
     }
 
-    // If scheduling fails, retain the inactive records and retry on the next
-    // schedule_removal() call.
-    wl_idle_keyboard_removal_.reset(::wl_event_loop_add_idle(
-        g_pCompositor->m_wlEventLoop,
-        [](void* data) {
-            auto* self = static_cast<keyboard_registry*>(data);
-
-            // Wayland removes this source after the callback returns; release
-            // ownership to avoid double removal.
-            [[maybe_unused]] auto* obj =
-                self->wl_idle_keyboard_removal_.release();
-
-            std::erase_if(self->keyboard_registry_, [](const auto& record) {
-                return record->pending_removal;
-            });
-        },
-        this));
-    if (!wl_idle_keyboard_removal_) {
-        log_message(*log_,
-                    log_level::warning,
-                    "Cannot schedule keyboard cleanup; retaining inactive "
-                    "records until next removal");
-    }
+    unsubscribe_listeners(**it);
+    keyboard_registry_.erase(it);
 }
 
 void keyboard_registry::unsubscribe_listeners(keyboard_info& info) noexcept {

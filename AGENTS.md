@@ -46,6 +46,7 @@ developed on. These rules have no exceptions.
 | `plugin/log/` | The log sink the libraries report through, and `run_guarded` |
 | `plugin/test_support/` | Test helpers: temporary directory, event loop, socket client, recording log |
 | `plugin/<library>/tests/` | GoogleTest tests of that library; nothing loads the plugin |
+| `plugin/adapter/tests/` | Not tests of the adapter, which cannot run without a compositor: tests of the hyprutils behaviour the adapter relies on |
 | `protocol/include/hyprcast/protocol/` | Event types, their JSON wire format and the protocol version |
 | `common/` | Code shared by both components; `version.hpp.in` is configured by CMake |
 | `overlay/src/ipc/` | Socket client, message parsing, single-instance and restart handling |

@@ -5,7 +5,6 @@
 #include "hyprcast/log/run_guarded.hpp"
 #include "hyprcast/protocol/keyboard_id.hpp"
 #include "hyprcast/protocol/registry_snapshot.hpp"
-#include "hyprcast/server/wl_event_source.hpp"
 #include "hyprcast/session/session.hpp"
 #include "keyboard_info.hpp"
 
@@ -25,8 +24,7 @@ public:
     // must outlive the registry.
     keyboard_registry(log_sink& log, session& events);
 
-    // Listeners capture `this` and per-keyboard record pointers, so the
-    // registry must never move.
+    // Listeners capture `this`, so the registry must never move.
     keyboard_registry(const keyboard_registry&) = delete;
     keyboard_registry& operator=(const keyboard_registry&) = delete;
     keyboard_registry(keyboard_registry&&) = delete;
@@ -52,7 +50,7 @@ private:
     }
 
     void sync_keymap(const SP<IKeyboard>& keyboard);
-    void schedule_removal(keyboard_info& info) noexcept;
+    void remove_keyboard(keyboard_id id) noexcept;
     void unsubscribe_listeners(keyboard_info& info) noexcept;
 
     log_sink* log_;
@@ -61,7 +59,6 @@ private:
     std::vector<std::unique_ptr<keyboard_info>> keyboard_registry_;
 
     CHyprSignalListener layout_listener_;
-    unique_wl_event_source wl_idle_keyboard_removal_;
 };
 
 } // namespace hyprcast

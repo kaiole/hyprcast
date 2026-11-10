@@ -20,7 +20,6 @@ struct keyboard_info {
     // Track what was sent so that only changes are reported.
     std::string last_sent_keymap;
 
-    bool pending_removal = false;
     bool subscribed = false;
 
     CHyprSignalListener key_event_listener, modifiers_listener,

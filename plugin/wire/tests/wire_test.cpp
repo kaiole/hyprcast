@@ -1,55 +1,72 @@
 #include "hyprcast/protocol/key_state.hpp"
 #include "hyprcast/wire/messages.hpp"
-#include "libjson/json_value.hpp"
-#include "libjson/parser.hpp"
-#include "libjson/serializer.hpp"
 
 #include <gtest/gtest.h>
 
-#include <map>
+#include <algorithm>
+#include <cstddef>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <variant>
+#include <vector>
 
 namespace {
 
 using namespace hyprcast;
 
+// Cuts the text between the braces of a JSON object at its top-level commas.
+// Nothing is parsed or re-serialized: each member is the encoder's own bytes.
+std::vector<std::string_view> raw_members(std::string_view body) {
+    std::vector<std::string_view> members;
+    std::size_t start = 0;
+    int depth = 0;
+    bool in_string = false;
+    for (std::size_t i = 0; i < body.size(); ++i) {
+        const char c = body[i];
+        if (in_string) {
+            if (c == '\\') {
+                ++i; // the escaped character cannot end the string
+            } else if (c == '"') {
+                in_string = false;
+            }
+        } else if (c == '"') {
+            in_string = true;
+        } else if (c == '{' || c == '[') {
+            ++depth;
+        } else if (c == '}' || c == ']') {
+            --depth;
+        } else if (c == ',' && depth == 0) {
+            members.push_back(body.substr(start, i - start));
+            start = i + 1;
+        }
+    }
+    members.push_back(body.substr(start));
+    return members;
+}
+
 // The encoder keeps members in an unordered map, so their order on the wire is
-// unspecified. Golden lines are therefore compared with the members sorted by
-// name; everything else (spelling, escaping, number format) is compared as
-// written.
+// unspecified. Golden lines are therefore written with the members sorted, and
+// the encoded line is compared after sorting its members the same way. Sorting
+// only moves the encoder's bytes around, so every other difference (white
+// space, spelling, escaping, number format) fails the comparison.
 std::string sorted_members(std::string_view message) {
     // One message is one line: the server appends the only newline.
     EXPECT_EQ(message.find('\n'), std::string_view::npos) << message;
 
-    const auto parsed = libjson::parser {message}.parse();
-    if (!parsed) {
-        ADD_FAILURE() << "not JSON: " << message;
-        return {};
-    }
-    const auto* object =
-        std::get_if<libjson::json_value::object>(&parsed->data);
-    if (object == nullptr) {
-        ADD_FAILURE() << "not a JSON object: " << message;
-        return {};
+    if (message.size() < 2 || message.front() != '{' || message.back() != '}') {
+        ADD_FAILURE() << "not a bare JSON object: " << message;
+        return std::string {message};
     }
 
-    std::map<std::string, std::string> members;
-    for (const auto& [name, value] : *object) {
-        members.emplace(libjson::serialize({.data = name}),
-                        libjson::serialize(value));
-    }
+    auto members = raw_members(message.substr(1, message.size() - 2));
+    std::ranges::sort(members);
 
     std::string result {"{"};
-    for (const auto& [name, value] : members) {
+    for (const auto member : members) {
         if (result.size() > 1) {
             result += ',';
         }
-        result += name;
-        result += ':';
-        result += value;
+        result += member;
     }
     result += '}';
     return result;

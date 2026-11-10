@@ -8,6 +8,8 @@
 
 namespace Hyprcast {
 
+// Set once by PLUGIN_INIT; every HyprlandAPI call needs it.
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 inline HANDLE PHANDLE = nullptr;
 
 inline constexpr std::string_view PLUGIN_NAME = "Hyprcast";

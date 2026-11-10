@@ -31,6 +31,7 @@ public:
     CEventServer& operator=(const CEventServer&) = delete;
     CEventServer(CEventServer&&) = delete;
     CEventServer& operator=(CEventServer&&) = delete;
+    ~CEventServer() = default;
 
     void queueMessage(std::string message);
     void disconnectClient() noexcept;

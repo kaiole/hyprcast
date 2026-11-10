@@ -3,13 +3,14 @@
 #include <unistd.h>
 
 #include <filesystem>
+#include <utility>
 
 namespace Hyprcast {
 
 class CSockFile {
 public:
-    explicit CSockFile(const std::filesystem::path& sockPath)
-        : m_sockPath(sockPath) {};
+    explicit CSockFile(std::filesystem::path sockPath)
+        : m_sockPath(std::move(sockPath)) {}
     ~CSockFile() noexcept {
         if (m_bound) {
             ::unlink(m_sockPath.c_str());

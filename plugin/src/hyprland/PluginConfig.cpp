@@ -12,6 +12,8 @@
 namespace Hyprcast {
 namespace {
 
+// Lua calls configure() as a plain function, which cannot carry `this`.
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 CPluginConfig* instance = nullptr;
 
 } // namespace

@@ -51,6 +51,7 @@ public:
     CKeyboardRegistry& operator=(const CKeyboardRegistry&) = delete;
     CKeyboardRegistry(CKeyboardRegistry&&) = delete;
     CKeyboardRegistry& operator=(CKeyboardRegistry&&) = delete;
+    ~CKeyboardRegistry() = default;
 
     void addKeyboard(const SP<IKeyboard>& keyboard);
     void updateSubscriptions(const SConfig& acceptedConfig);

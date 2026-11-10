@@ -16,12 +16,22 @@
 
 namespace {
 
+// Hyprland calls the entry points and the hook below as plain functions, so
+// the state they share is global. teardown() empties both before the plugin
+// is unloaded, which leaves the unique_ptr destructor nothing to do.
+// NOLINTBEGIN(cppcoreguidelines-avoid-non-const-global-variables)
+// NOLINTNEXTLINE(clang-diagnostic-global-constructors)
 std::unique_ptr<Hyprcast::CHyprcast> g_pHyprcast;
 
 CFunctionHook* g_pSetupKeyboardHook = nullptr;
+// NOLINTEND(cppcoreguidelines-avoid-non-const-global-variables)
 using ogSetupKeyboard = void (*)(void*, SP<IKeyboard>);
 
+// The signature has to match the hooked CInputManager::setupKeyboard().
+// NOLINTNEXTLINE(performance-unnecessary-value-param)
 void setupKeyboardHook(void* thisPtr, SP<IKeyboard> keyboard) {
+    // The hook API hands the original function back as a void*.
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
     reinterpret_cast<ogSetupKeyboard>(
         g_pSetupKeyboardHook->m_original)(thisPtr, keyboard);
     if (g_pHyprcast) {
@@ -97,6 +107,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) try {
     g_pSetupKeyboardHook = HyprlandAPI::createFunctionHook(
         handle,
         methods.front().address,
+        // The hook API takes the replacement function as a void*.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
         reinterpret_cast<void*>(&setupKeyboardHook));
     if (!g_pSetupKeyboardHook || !g_pSetupKeyboardHook->hook()) {
         throw std::runtime_error("Cannot install Hyprland setupKeyboard hook");

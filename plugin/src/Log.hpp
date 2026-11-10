@@ -19,8 +19,8 @@ void logMessage(Hyprutils::CLI::eLogLevel level,
         Log::logger->log(level,
                          "[hyprcast] {}",
                          std::format(fmt, std::forward<Args>(args)...));
-    } catch (...) {
-        // Best-effort logging.
+    } catch (...) { // NOLINT(bugprone-empty-catch)
+        // Best effort: nowhere is left to report a failure to log.
     }
 }
 
@@ -35,8 +35,8 @@ inline void notifyFailure(std::string_view message) noexcept {
                                      std::format("[hyprcast] {}", message),
                                      CHyprColor {1.0f, 0.2f, 0.2f, 1.0f},
                                      8000);
-    } catch (...) {
-        // Best-effort logging.
+    } catch (...) { // NOLINT(bugprone-empty-catch)
+        // Best effort: nowhere is left to report a failure to log.
     }
 }
 

@@ -1,5 +1,11 @@
 #include "ConnectionState.hpp"
 
+#include "Protocol.hpp"
+
+#include <QString>
+#include <expected>
+#include <variant>
+
 namespace Hyprcast::Overlay {
 namespace {
 

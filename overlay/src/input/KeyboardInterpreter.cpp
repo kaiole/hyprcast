@@ -1,16 +1,32 @@
 #include "KeyboardInterpreter.hpp"
 
+#include "../history/InterpretedAction.hpp"
+#include "../ipc/Protocol.hpp"
+#include "hyprcast/protocol/Modifiers.hpp"
+#include "hyprcast/protocol/RepeatInfo.hpp"
+
+#include <QLatin1StringView>
 #include <xkbcommon/xkbcommon-keysyms.h>
 #include <xkbcommon/xkbcommon.h>
 
+#include <QByteArray>
+#include <QChar>
+#include <QString>
 #include <algorithm>
 #include <array>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
 #include <limits>
 #include <map>
+#include <memory>
 #include <optional>
 #include <ranges>
 #include <type_traits>
 #include <utility>
+#include <variant>
+#include <vector>
 
 namespace Hyprcast::Overlay {
 namespace {
@@ -35,6 +51,9 @@ constexpr std::uint32_t EvdevToXkbOffset = 8;
 // The XKB modifiers reported on chords, in display order.
 struct ModifierDefinition {
     const char* xkbName;
+    // The alias lives in qstringfwd.h, which is not self-contained, so the
+    // check wants whichever header happens to include that one first.
+    // NOLINTNEXTLINE(misc-include-cleaner)
     QLatin1StringView label;
 };
 

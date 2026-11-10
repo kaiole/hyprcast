@@ -1,11 +1,16 @@
 #include "CaptureController.hpp"
 
+#include "IpcClient.hpp"
 #include "OverlayInstance.hpp"
+#include "Protocol.hpp"
 #include "Restart.hpp"
 
 #include <QLocalSocket>
+#include <QObject>
+#include <QString>
 #include <algorithm>
 #include <chrono>
+#include <variant>
 
 namespace Hyprcast::Overlay {
 namespace {

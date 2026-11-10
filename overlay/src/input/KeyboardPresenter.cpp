@@ -1,7 +1,16 @@
 #include "KeyboardPresenter.hpp"
 
+#include "../history/InputHistory.hpp"
+#include "../history/InterpretedAction.hpp"
+#include "../ipc/Protocol.hpp"
+#include "KeyboardInterpreter.hpp"
+
 #include <QDebug>
+#include <QObject>
+#include <QString>
 #include <algorithm>
+#include <chrono>
+#include <cstdint>
 #include <limits>
 #include <utility>
 

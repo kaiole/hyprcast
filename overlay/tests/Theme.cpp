@@ -1,21 +1,40 @@
 #include "theme/Theme.hpp"
 
+#include "config/OverlayConfig.hpp"
+#include "history/BackspaceMode.hpp"
+#include "history/InputHistory.hpp"
+#include "history/InterpretedAction.hpp"
+#include "input/KeyboardPresenter.hpp"
+#include "ipc/Protocol.hpp"
+
 #include <xkbcommon/xkbcommon.h>
 
+#include <QByteArray>
+#include <QChar>
 #include <QColor>
 #include <QCoreApplication>
 #include <QDir>
+#include <QEvent>
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QIODevice>
+#include <QList>
+#include <QMetaObject>
+#include <QObject>
 #include <QQuickView>
+#include <QString>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QUrl>
 #include <QtMath>
+#include <chrono>
 #include <cstdlib>
+#include <expected>
 #include <iostream>
+#include <optional>
+#include <utility>
 
 using namespace Hyprcast::Overlay;
 

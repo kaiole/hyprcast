@@ -1,25 +1,31 @@
 #include "ipc/Restart.hpp"
 
+#include "hyprcast/os/UniqueFd.hpp"
 #include "ipc/OverlayInstance.hpp"
 
 #include <fcntl.h>
 #include <sys/file.h>
 #include <xkbcommon/xkbcommon.h>
 
+#include <QByteArray>
 #include <QCoreApplication>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QIODevice>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocalServer>
 #include <QLocalSocket>
+#include <QObject>
 #include <QProcess>
 #include <QProcessEnvironment>
+#include <QString>
 #include <QTemporaryDir>
 #include <QThread>
 #include <cstdlib>
+#include <exception>
 #include <functional>
 #include <iostream>
 #include <memory>

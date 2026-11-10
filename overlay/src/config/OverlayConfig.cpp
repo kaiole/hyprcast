@@ -1,14 +1,29 @@
 #include "OverlayConfig.hpp"
 
+#include "../history/BackspaceMode.hpp"
 #include "TomlReader.hpp"
 
+#include <QChar>
 #include <QColor>
 #include <QDebug>
 #include <QDir>
 #include <QFileInfo>
+#include <QFileSystemWatcher>
+#include <QMargins>
+#include <QObject>
+#include <QString>
+#include <QStringView>
 #include <array>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <exception>
+#include <expected>
+#include <limits>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <tuple>
 #include <utility>
 
 namespace Hyprcast::Overlay {

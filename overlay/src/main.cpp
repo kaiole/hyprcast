@@ -1,14 +1,17 @@
 #include "config/OverlayConfig.hpp"
+#include "history/InputHistory.hpp"
 #include "hyprcast/Version.hpp"
 #include "input/KeyboardPresenter.hpp"
 #include "ipc/CaptureController.hpp"
 #include "ipc/IpcClient.hpp"
 #include "ipc/OverlayInstance.hpp"
+#include "ipc/Protocol.hpp"
 #include "ipc/Restart.hpp"
 #include "theme/Theme.hpp"
 
 #include <LayerShellQt/Window>
 
+#include <QChar>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCoreApplication>
@@ -16,13 +19,16 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QList>
 #include <QMargins>
+#include <QObject>
 #include <QQmlEngine>
 #include <QQmlError>
 #include <QQuickView>
 #include <QScreen>
 #include <QSize>
 #include <QStandardPaths>
+#include <QString>
 #include <QSurfaceFormat>
 #include <QTextStream>
 #include <QTimer>
@@ -33,7 +39,7 @@
 #include <expected>
 #include <limits>
 #include <optional>
-#include <utility>
+#include <tuple>
 
 namespace {
 

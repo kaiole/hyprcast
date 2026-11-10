@@ -1,22 +1,42 @@
 #include "Theme.hpp"
 
+#include "../config/OverlayConfig.hpp"
 #include "../config/TomlReader.hpp"
+#include "../history/InputHistory.hpp"
+#include "../input/KeyboardPresenter.hpp"
+#include "../util/QObjectOwner.hpp"
 
+#include <QAbstractItemModel>
+#include <QChar>
 #include <QColor>
 #include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
+#include <QObject>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <QQuickItem>
+#include <QQuickView>
 #include <QRegularExpression>
 #include <QSet>
+#include <QSizeF>
+#include <QString>
+#include <QStringView>
 #include <QUrl>
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <exception>
+#include <expected>
+#include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace Hyprcast::Overlay {
 namespace {

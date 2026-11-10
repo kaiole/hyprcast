@@ -1,11 +1,13 @@
 #include "IpcClient.hpp"
 
+#include "LineFramer.hpp"
 #include "Protocol.hpp"
 #include "hyprcast/protocol/Wire.hpp"
 
 #include <QDebug>
 #include <QIODevice>
 #include <QLocalSocket>
+#include <QObject>
 #include <algorithm>
 #include <string_view>
 #include <utility>

@@ -1,5 +1,8 @@
 #include "LineFramer.hpp"
 
+#include <QList>
+#include <QString>
+#include <expected>
 #include <utility>
 
 namespace Hyprcast::Overlay {

@@ -171,6 +171,13 @@ public:
     void startWatching();
     void setRuntimeValidator(RuntimeValidator validator);
     void reloadNow();
+    // The configuration on disk with the overrides applied, checked on its own
+    // and not by the runtime validator. Changes nothing.
+    [[nodiscard]] std::expected<OverlayConfig, QString> loadCandidate() const;
+    // Makes `config` the current configuration without asking the runtime
+    // validator and without configurationChanged(): for a caller that has
+    // checked it and applies it itself.
+    void adopt(OverlayConfig config);
 
     [[nodiscard]] const OverlayConfig& config() const noexcept {
         return m_config;
@@ -182,7 +189,6 @@ signals:
     void reloadRejected(const QString& reason);
 
 private:
-    [[nodiscard]] std::expected<OverlayConfig, QString> loadCandidate() const;
     [[nodiscard]] std::expected<void, QString> accept(OverlayConfig candidate);
     void refreshWatchTargets();
     void onFileSystemChange();

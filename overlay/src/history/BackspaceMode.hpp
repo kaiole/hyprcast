@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 
 // What plain Backspace does to history.
 enum class BackspaceMode : std::uint8_t {
@@ -10,4 +10,4 @@ enum class BackspaceMode : std::uint8_t {
     Symbol, // Records Backspace like any other key.
 };
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

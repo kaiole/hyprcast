@@ -20,7 +20,7 @@
 #include <variant>
 #include <vector>
 
-using namespace Hyprcast::Overlay;
+using namespace hyprcast::overlay;
 
 namespace {
 

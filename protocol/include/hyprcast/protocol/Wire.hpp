@@ -7,7 +7,7 @@
 // Names used on the event socket. The plugin writes one JSON object per line;
 // the overlay writes newline-terminated commands. Both sides use these
 // constants so the wire format is defined in one place.
-namespace Hyprcast::Wire {
+namespace hyprcast::wire {
 
 // Events (plugin -> overlay).
 inline constexpr std::string_view EVENT_CASTING_STATE = "casting_state";
@@ -48,4 +48,4 @@ inline constexpr KeyboardId GLOBAL_KEYBOARD_ID = 0;
 inline constexpr std::string_view COMMAND_ENABLE = "enable";
 inline constexpr std::string_view COMMAND_DISABLE = "disable";
 
-} // namespace Hyprcast::Wire
+} // namespace hyprcast::wire

@@ -27,7 +27,7 @@
 #include <variant>
 #include <vector>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 namespace {
 
 // Stateless deleter calling an xkbcommon unref function. unique_ptr never
@@ -634,4 +634,4 @@ void KeyboardInterpreter::reset() noexcept {
     m_impl->paused = false;
 }
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

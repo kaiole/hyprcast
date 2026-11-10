@@ -29,7 +29,7 @@
 #include <string>
 #include <utility>
 
-namespace Hyprcast {
+namespace hyprcast {
 namespace {
 
 SKeyEvent toHyprcastType(const IKeyboard::SKeyEvent& event) noexcept {
@@ -343,4 +343,4 @@ void CKeyboardRegistry::unsubscribeListeners(
         [this, &keyboardInfo] { m_callbacks.onUnsubscribe(keyboardInfo.id); });
 }
 
-} // namespace Hyprcast
+} // namespace hyprcast

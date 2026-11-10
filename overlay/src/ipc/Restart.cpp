@@ -31,7 +31,7 @@
 #include <utility>
 #include <vector>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 namespace {
 
 constexpr qsizetype MaxContextBytes = 65536;
@@ -337,4 +337,4 @@ void RestartCoordinator::initializeReplacement(
     }
 }
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

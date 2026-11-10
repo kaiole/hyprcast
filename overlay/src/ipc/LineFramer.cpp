@@ -5,7 +5,7 @@
 #include <expected>
 #include <utility>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 
 std::expected<QList<QByteArray>, QString>
 LineFramer::append(const QByteArray& bytes) {
@@ -40,4 +40,4 @@ void LineFramer::reset() noexcept {
     m_partialLine.clear();
 }
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

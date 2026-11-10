@@ -6,7 +6,7 @@
 
 #include <helpers/memory/Memory.hpp>
 
-namespace Hyprcast {
+namespace hyprcast {
 
 class CHyprcast {
 public:
@@ -40,4 +40,4 @@ private:
     bool m_paused = true;
 };
 
-} // namespace Hyprcast
+} // namespace hyprcast

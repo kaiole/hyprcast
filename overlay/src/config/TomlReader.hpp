@@ -12,7 +12,7 @@
 #include <utility>
 
 // Small helpers shared by the overlay config and theme manifest parsers.
-namespace Hyprcast::Overlay::Toml {
+namespace hyprcast::overlay::Toml {
 
 [[nodiscard]] QString toQString(std::string_view text);
 
@@ -108,4 +108,4 @@ private:
     QString m_error;
 };
 
-} // namespace Hyprcast::Overlay::Toml
+} // namespace hyprcast::overlay::Toml

@@ -14,7 +14,7 @@
 #include <functional>
 #include <optional>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 
 // Layer-shell placement: one edge, or a corner when both axes are set.
 struct Anchor {
@@ -197,4 +197,4 @@ private:
     QTimer m_reloadTimer;
 };
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

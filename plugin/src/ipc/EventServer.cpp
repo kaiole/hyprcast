@@ -26,7 +26,7 @@
 #include <system_error>
 #include <utility>
 
-namespace Hyprcast {
+namespace hyprcast {
 namespace {
 
 constexpr int BACKLOG_SIZE = 1;
@@ -36,7 +36,7 @@ constexpr std::string_view SOCK_FILE = "events.sock";
 constexpr std::string_view LOCK_FILE = "server.lock";
 // A longer unterminated buffer can never become a valid command.
 constexpr std::size_t MAX_COMMAND_LENGTH =
-    std::max(Wire::COMMAND_ENABLE.size(), Wire::COMMAND_DISABLE.size());
+    std::max(wire::COMMAND_ENABLE.size(), wire::COMMAND_DISABLE.size());
 
 } // namespace
 
@@ -335,12 +335,12 @@ void CEventServer::readCommands() {
             return;
         }
         const std::string_view command {m_commandBuffer.data(), end};
-        if (command != Wire::COMMAND_ENABLE
-            && command != Wire::COMMAND_DISABLE) {
+        if (command != wire::COMMAND_ENABLE
+            && command != wire::COMMAND_DISABLE) {
             disconnectClient();
             return;
         }
-        const bool enable = command == Wire::COMMAND_ENABLE;
+        const bool enable = command == wire::COMMAND_ENABLE;
         m_commandBuffer.erase(0, end + 1);
         m_onCapture(enable);
         if (!m_clientFd.valid()) {
@@ -412,4 +412,4 @@ void CEventServer::updateWlDispatchEvent(std::uint32_t mask) {
     }
 }
 
-} // namespace Hyprcast
+} // namespace hyprcast

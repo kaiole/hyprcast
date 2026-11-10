@@ -19,7 +19,7 @@
 #include <utility>
 #include <vector>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 namespace {
 
 // Count semantic neighbors by canonical input and interpretation, not hold
@@ -847,4 +847,4 @@ void InputHistory::removeTextSuffix(qsizetype length, std::size_t entryCount) {
     }
 }
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

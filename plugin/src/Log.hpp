@@ -9,7 +9,7 @@
 #include <string_view>
 #include <utility>
 
-namespace Hyprcast {
+namespace hyprcast {
 
 template <typename... Args>
 void logMessage(Hyprutils::CLI::eLogLevel level,
@@ -40,4 +40,4 @@ inline void notifyFailure(std::string_view message) noexcept {
     }
 }
 
-} // namespace Hyprcast
+} // namespace hyprcast

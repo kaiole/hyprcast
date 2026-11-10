@@ -3,7 +3,7 @@
 #include <QPointer>
 #include <utility>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 
 // Unique owner for a QObject that also has a Qt parent (for example so it shows
 // up in findChild()). Deletes the object on destruction unless Qt already did
@@ -36,4 +36,4 @@ private:
     QPointer<T> m_object;
 };
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

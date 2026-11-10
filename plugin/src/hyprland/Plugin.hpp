@@ -6,7 +6,7 @@
 
 #include <string_view>
 
-namespace Hyprcast {
+namespace hyprcast {
 
 // Set once by PLUGIN_INIT; every HyprlandAPI call needs it.
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
@@ -17,4 +17,4 @@ inline constexpr std::string_view DESCRIPTION = "Keycaster for Hyprland";
 inline constexpr std::string_view AUTHOR = "kaiole";
 inline constexpr std::string_view VERSION = PROJECT_VERSION;
 
-} // namespace Hyprcast
+} // namespace hyprcast

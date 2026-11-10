@@ -24,6 +24,7 @@ CheckOptions:
   # Without this a const member is checked as a constant, not as a member.
   readability-identifier-naming.ConstantMemberCase: camelBack
   readability-identifier-naming.ConstantMemberPrefix: m_
-  # Temporary: the namespace is still Hyprcast::Overlay. The rename step makes
-  # it hyprcast::overlay and deletes this line.
+  # Namespaces declared by the overlay are CamelCase like its types. The two
+  # enclosing ones carry the project-wide lower-case name.
   readability-identifier-naming.NamespaceCase: CamelCase
+  readability-identifier-naming.NamespaceIgnoredRegexp: "^(hyprcast|overlay)$"

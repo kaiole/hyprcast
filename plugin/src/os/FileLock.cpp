@@ -7,7 +7,7 @@
 #include <filesystem>
 #include <system_error>
 
-namespace Hyprcast {
+namespace hyprcast {
 
 CFileLock::CFileLock(const std::filesystem::path& lockPath)
     : m_lockFd(::open(lockPath.c_str(), O_CREAT | O_CLOEXEC | O_RDWR, 0600)) {
@@ -27,4 +27,4 @@ CFileLock::CFileLock(const std::filesystem::path& lockPath)
     }
 }
 
-} // namespace Hyprcast
+} // namespace hyprcast

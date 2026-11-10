@@ -10,7 +10,7 @@
 #include <optional>
 #include <vector>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 
 class KeyboardPresenter final : public QObject {
     Q_OBJECT
@@ -83,4 +83,4 @@ private:
     std::optional<Clock::time_point> m_fadeDeadline;
 };
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

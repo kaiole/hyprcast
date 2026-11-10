@@ -6,7 +6,7 @@
 // The generated copy sits in the build tree, where the root naming rules
 // apply instead of the ones of common/. The rename step removes this.
 // NOLINTBEGIN(readability-identifier-naming)
-namespace Hyprcast {
+namespace hyprcast {
     inline constexpr std::string_view PROJECT_VERSION = "@PROJECT_VERSION@";
 }
 // NOLINTEND(readability-identifier-naming)

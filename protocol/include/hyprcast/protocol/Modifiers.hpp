@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace Hyprcast {
+namespace hyprcast {
 
 struct SModifiers {
     std::uint32_t depressed = 0;
@@ -11,4 +11,4 @@ struct SModifiers {
     std::uint32_t group = 0;
 };
 
-} // namespace Hyprcast
+} // namespace hyprcast

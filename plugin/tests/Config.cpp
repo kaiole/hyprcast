@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-using namespace Hyprcast;
+using namespace hyprcast;
 
 namespace {
 

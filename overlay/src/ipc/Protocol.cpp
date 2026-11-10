@@ -17,10 +17,10 @@
 #include <string_view>
 #include <utility>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 namespace {
 
-using namespace Wire;
+using namespace wire;
 
 // The alias lives in qstringfwd.h, which is not self-contained, so the check
 // wants whichever header happens to include that one first.
@@ -226,4 +226,4 @@ parseMessage(const QByteArray& jsonLine) {
     return std::unexpected(QStringLiteral("unsupported event '%1'").arg(event));
 }
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

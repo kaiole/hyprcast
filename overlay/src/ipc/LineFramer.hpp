@@ -5,7 +5,7 @@
 #include <QString>
 #include <expected>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 
 // Splits a byte stream into newline-terminated frames (CRLF tolerated).
 class LineFramer {
@@ -22,4 +22,4 @@ private:
     QByteArray m_partialLine;
 };
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

@@ -32,7 +32,7 @@
 #include <memory>
 #include <stdexcept>
 
-using namespace Hyprcast::Overlay;
+using namespace hyprcast::overlay;
 namespace {
 
 // The overlay binary under test: the only command-line argument.
@@ -560,7 +560,7 @@ void testFailedExecAndBadReplies() {
         check(bad.listen(badPath + ".overlay"), "bad response fixture");
         // Hold the ownership lock as a resident would, so the caller forwards
         // here.
-        const Hyprcast::CUniqueFd lock {::open(
+        const hyprcast::CUniqueFd lock {::open(
             (badPath + ".overlay.owner-lock").toLocal8Bit().constData(),
             O_RDWR | O_CREAT | O_CLOEXEC,
             0600)};

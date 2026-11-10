@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-namespace Hyprcast {
+namespace hyprcast {
 
 struct SKeyEvent {
     std::uint32_t timeMs = 0;
@@ -12,4 +12,4 @@ struct SKeyEvent {
     eKeyState state = eKeyState::RELEASED;
 };
 
-} // namespace Hyprcast
+} // namespace hyprcast

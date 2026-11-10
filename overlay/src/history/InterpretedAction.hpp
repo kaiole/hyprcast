@@ -10,7 +10,7 @@
 #include <chrono>
 #include <cstdint>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 
 // Modifier identities: the values in InterpretedAction::modifiers, the key of a
 // lone modifier tap, and the keys of [symbols.modifiers]. Defined once so the
@@ -55,4 +55,4 @@ struct InterpretedAction {
     std::chrono::steady_clock::time_point generatedAt {};
 };
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

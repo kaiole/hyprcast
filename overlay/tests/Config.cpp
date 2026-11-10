@@ -19,7 +19,7 @@
 #include <optional>
 #include <utility>
 
-using namespace Hyprcast::Overlay;
+using namespace hyprcast::overlay;
 
 namespace {
 
@@ -56,7 +56,7 @@ bool waitFor(const std::function<bool()>& condition, int timeoutMs = 2500) {
 }
 
 bool parse(const QByteArray& source,
-           Hyprcast::Overlay::OverlayConfig* config,
+           hyprcast::overlay::OverlayConfig* config,
            QString* error) {
     const QTemporaryDir directory;
     const QString path = directory.filePath(QStringLiteral("overlay.toml"));
@@ -66,7 +66,7 @@ bool parse(const QByteArray& source,
         return false;
     }
     file.close();
-    auto parsed = Hyprcast::Overlay::parseOverlayConfig(path);
+    auto parsed = hyprcast::overlay::parseOverlayConfig(path);
     if (!parsed) {
         *error = parsed.error();
         return false;

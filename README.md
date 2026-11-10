@@ -25,7 +25,7 @@ This installs `hyprcast-overlay` to `~/.local/bin`, `libhyprcast.so` to `~/.loca
 
 Rebuild and reload the plugin after every Hyprland update.
 
-After updating Hyprcast, reload the plugin (or restart Hyprland) and run `hyprcast-overlay restart`. The overlay refuses to capture with a plugin from another version of the protocol and tells you which of the two to restart.
+After updating Hyprcast, reload the plugin (or restart Hyprland) and end the running overlay, for example with `killall hyprcast-overlay`: the next `hyprcast-overlay toggle` starts the new one. `hyprcast-overlay restart` is not enough, because it keeps the running program. The overlay refuses to capture with a plugin from another version of the protocol and tells you which of the two to restart.
 
 ## Setup
 

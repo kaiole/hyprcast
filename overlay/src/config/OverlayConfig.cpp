@@ -772,6 +772,11 @@ OverlayConfigManager::loadCandidate() const {
     return loaded;
 }
 
+void OverlayConfigManager::adopt(OverlayConfig config) {
+    m_config = std::move(config);
+    m_initialized = true;
+}
+
 std::expected<void, QString>
 OverlayConfigManager::accept(OverlayConfig candidate) {
     if (m_runtimeValidator) {

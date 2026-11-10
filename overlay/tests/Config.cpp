@@ -313,6 +313,49 @@ TEST_F(OverlayConfigInitialLoad, InvalidConfigFailsWithItsPath) {
         << "an invalid initial config fails with its path";
 }
 
+TEST_F(OverlayConfigInitialLoad, CandidateIsReadWithoutBeingApplied) {
+    ConfigOverrides overrides;
+    overrides.width = 640;
+    OverlayConfigManager manager(path, false, overrides);
+    int changes = 0;
+    int validations = 0;
+    QObject::connect(&manager,
+                     &OverlayConfigManager::configurationChanged,
+                     QCoreApplication::instance(),
+                     [&] { ++changes; });
+    manager.setRuntimeValidator(
+        [&](const std::optional<OverlayConfig>&,
+            const OverlayConfig&) -> std::expected<void, QString> {
+            ++validations;
+            return {};
+        });
+    ASSERT_TRUE(manager.initialize().has_value()) << "start from defaults";
+    ASSERT_TRUE(changes == 1 && validations == 1) << "the initial load";
+
+    ASSERT_TRUE(writeAtomically(path, "[appearance]\nfont_size=41\n"))
+        << "save a config behind the manager's back";
+    const auto candidate = manager.loadCandidate();
+    ASSERT_TRUE(candidate.has_value()) << "the saved config is valid";
+    EXPECT_TRUE(candidate->fontSize == 41 && candidate->width == 640)
+        << "a candidate is the file on disk with the overrides applied";
+    EXPECT_NE(manager.config().fontSize, 41)
+        << "reading a candidate leaves the current configuration alone";
+
+    manager.adopt(*candidate);
+    EXPECT_EQ(manager.config().fontSize, 41)
+        << "an adopted candidate is the current configuration";
+    EXPECT_TRUE(changes == 1 && validations == 1)
+        << "adopting asks no validator and announces no change";
+
+    ASSERT_TRUE(writeAtomically(path, "[appearance\n"))
+        << "save a malformed config";
+    const auto malformed = manager.loadCandidate();
+    EXPECT_TRUE(!malformed && malformed.error().contains(path))
+        << "a malformed candidate fails with its path";
+    EXPECT_EQ(manager.config().fontSize, 41)
+        << "a failed candidate leaves the current configuration alone";
+}
+
 // A manager that watches a config file with font size 30 and refuses, as the
 // running overlay would, any reload that changes the width.
 class OverlayConfigLiveReload : public testing::Test {

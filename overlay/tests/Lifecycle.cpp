@@ -32,6 +32,10 @@ using tests::waitFor;
 constexpr std::string_view ForwardMode = "forward";
 constexpr std::string_view CrashMode = "crash";
 
+// How long a request the overlay must not send is given to show up. A request
+// that is sent arrives within a few milliseconds.
+constexpr int ReplayWaitMs = 500;
+
 void state(QLocalSocket* peer, bool paused) {
     peer->write(paused ? "{\"event\":\"casting_state\",\"keyboard_id\":0,"
                          "\"paused\":true}\n"
@@ -188,8 +192,11 @@ TEST_F(OverlayLifecycle, ReconnectDoesNotEnableCaptureAgain) {
     state(peer.get(), true);
     ASSERT_TRUE(waitFor([&] { return ipc.hasCastingState(); }))
         << "reconnect snapshot received";
-    QCoreApplication::processEvents();
-    EXPECT_TRUE(!active && peer->bytesAvailable() == 0)
+    // A replayed request takes several passes of the event loop to reach the
+    // mock plugin, so one pass shows nothing. This returns as soon as capture
+    // comes back and waits out the bound when it does not.
+    EXPECT_FALSE(waitFor([&] { return active || peer->bytesAvailable() > 0; },
+                         ReplayWaitMs))
         << "reconnect does not re-enable capture";
 }
 

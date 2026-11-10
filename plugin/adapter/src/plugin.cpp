@@ -39,26 +39,6 @@ void on_setup_keyboard(void* this_ptr, SP<IKeyboard> keyboard) {
     }
 }
 
-int toggle_casting(lua_State*) noexcept {
-    try {
-        if (!keycaster_instance) {
-            return 0;
-        }
-
-        keycaster_instance->set_pause(!keycaster_instance->is_paused());
-    } catch (const std::exception& error) {
-        hyprcast::hyprland_log_sink log;
-        hyprcast::log_error(log, "Cannot toggle casting: {}", error.what());
-        log.notify_failure("Cannot toggle casting; see Hyprland logs.");
-    } catch (...) {
-        hyprcast::hyprland_log_sink log;
-        hyprcast::log_error(log, "Cannot toggle casting: unknown exception");
-        log.notify_failure("Cannot toggle casting; see Hyprland logs.");
-    }
-
-    return 0;
-}
-
 // Removes every entry point before destroying the state they use. Hyprland also
 // cleans these up on unload, but doing it here keeps the teardown order
 // explicit.
@@ -68,9 +48,6 @@ void teardown() noexcept {
                                         setup_keyboard_hook);
         setup_keyboard_hook = nullptr;
     }
-    HyprlandAPI::removeLuaFunction(hyprcast::plugin_handle,
-                                   "hyprcast",
-                                   "toggle");
     keycaster_instance.reset();
 }
 
@@ -117,14 +94,6 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) try {
         reinterpret_cast<void*>(&on_setup_keyboard));
     if (!setup_keyboard_hook || !setup_keyboard_hook->hook()) {
         throw std::runtime_error("Cannot install Hyprland setupKeyboard hook");
-    }
-
-    if (!HyprlandAPI::addLuaFunction(handle,
-                                     "hyprcast",
-                                     "toggle",
-                                     &toggle_casting)) {
-        throw std::runtime_error(
-            "Cannot register Lua function hyprcast.toggle");
     }
 
     hyprcast::hyprland_log_sink log;

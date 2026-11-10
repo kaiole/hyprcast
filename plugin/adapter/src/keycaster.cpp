@@ -10,7 +10,6 @@
 #include <hyprland/src/helpers/memory/Memory.hpp>
 
 #include <cstdlib>
-#include <stdexcept>
 
 namespace hyprcast {
 
@@ -39,18 +38,6 @@ void keycaster::add_keyboard(const SP<IKeyboard>& keyboard) {
                 config_.get_accepted_config());
         },
         [this] noexcept { shutdown(); });
-}
-
-void keycaster::set_pause(bool paused) {
-    if (shutdown_) {
-        throw std::runtime_error("Hyprcast is stopped; reload the plugin");
-    }
-
-    session_.set_paused(paused);
-}
-
-bool keycaster::is_paused() const noexcept {
-    return session_.paused();
 }
 
 plugin_config::callbacks keycaster::make_plugin_config_callbacks() {

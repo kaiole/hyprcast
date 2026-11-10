@@ -19,8 +19,8 @@ namespace hyprcast {
 
 // Decides what the connected client is told about the keyboards, and when.
 // Capture starts paused and pauses again whenever the client goes away, so
-// key events flow only after an explicit request: the client's `enable`, or
-// set_paused(false).
+// key events flow only after the client's own `enable`. Nothing else can
+// unpause it.
 //
 // The keyboard source reports to the on_*() functions and is asked for the
 // current keyboards through one callback. Everything runs on the thread that
@@ -54,9 +54,6 @@ public:
     void on_keymap_event(keyboard_id id, keymap_text keymap);
     void on_repeat_info_event(keyboard_id id, const repeat_info& info);
 
-    // Pauses or resumes capture and tells the client the resulting state,
-    // even if it did not change.
-    void set_paused(bool paused);
     [[nodiscard]] bool paused() const noexcept;
 
     void disconnect_client() noexcept;
@@ -65,6 +62,9 @@ public:
     void shutdown() noexcept;
 
 private:
+    // Pauses or resumes capture and tells the client the resulting state,
+    // even if it did not change.
+    void set_paused(bool paused);
     void send_snapshot();
 
     snapshot_cb take_snapshot_;

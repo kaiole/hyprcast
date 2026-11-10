@@ -5,10 +5,7 @@ set(HYPRCAST_PLUGIN_SOURCES
     src/keycaster.cpp
     src/hyprland/plugin.cpp
     src/hyprland/plugin_config.cpp
-    src/hyprland/keyboard_registry.cpp
-    src/ipc/event_server.cpp
-    src/os/file_lock.cpp
-    src/wayland/wl_event_source.cpp)
+    src/hyprland/keyboard_registry.cpp)
 
 include(FetchContent)
 
@@ -37,6 +34,7 @@ endif()
 add_subdirectory(log)
 add_subdirectory(config)
 add_subdirectory(wire)
+add_subdirectory(server)
 
 pkg_check_modules(
   HYPRLAND_DEPS
@@ -70,9 +68,16 @@ endif()
 
 target_include_directories(hyprcast PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(
-  hyprcast PRIVATE rt PkgConfig::HYPRLAND_DEPS hyprcast::config
-                   hyprcast::wire hyprcast::log hyprcast::common
-                   hyprcast::protocol hyprcast::warnings)
+  hyprcast
+  PRIVATE rt
+          PkgConfig::HYPRLAND_DEPS
+          hyprcast::config
+          hyprcast::wire
+          hyprcast::server
+          hyprcast::log
+          hyprcast::common
+          hyprcast::protocol
+          hyprcast::warnings)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   # Hyprland's smart pointers return nullptr from operator-> when empty. Once

@@ -7,10 +7,10 @@
 #include "hyprcast/protocol/keymap_text.hpp"
 #include "hyprcast/protocol/modifier_state.hpp"
 #include "hyprcast/protocol/repeat_info.hpp"
+#include "hyprcast/server/event_server.hpp"
 #include "hyprcast/wire/messages.hpp"
 #include "hyprland/keyboard_registry.hpp"
 #include "hyprland/plugin_config.hpp"
-#include "ipc/event_server.hpp"
 
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/devices/IKeyboard.hpp>

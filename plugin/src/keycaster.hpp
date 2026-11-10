@@ -1,8 +1,8 @@
 #pragma once
 
+#include "hyprcast/server/event_server.hpp"
 #include "hyprland/keyboard_registry.hpp"
 #include "hyprland/plugin_config.hpp"
-#include "ipc/event_server.hpp"
 #include "log.hpp"
 
 #include <helpers/memory/Memory.hpp>

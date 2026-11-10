@@ -10,8 +10,8 @@
 #include "hyprcast/protocol/modifier_state.hpp"
 #include "hyprcast/protocol/registry_snapshot.hpp"
 #include "hyprcast/protocol/repeat_info.hpp"
+#include "hyprcast/server/wl_event_source.hpp"
 #include "keyboard_info.hpp"
-#include "wayland/wl_event_source.hpp"
 
 #include <hyprland/src/helpers/memory/Memory.hpp>
 

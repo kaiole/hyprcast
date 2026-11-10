@@ -38,12 +38,14 @@ developed on. These rules have no exceptions.
 
 | Path | Contents |
 |---|---|
-| `plugin/src/keycaster.*` | Plugin root object: wires registry, config and event server |
-| `plugin/src/hyprland/` | Plugin entry points, keyboard registry, Lua config glue |
-| `plugin/src/ipc/` | Event server: socket, client connection, outgoing queue |
-| `plugin/src/os/`, `plugin/src/wayland/` | RAII wrappers: file lock, Wayland event source |
-| `plugin/src/config/`, `plugin/include/` | Plugin configuration parsing, free of Hyprland headers so it is testable |
-| `plugin/tests/` | Plugin tests (configuration only; nothing loads the plugin) |
+| `plugin/adapter/` | The module Hyprland loads and the only code that includes Hyprland headers: entry points, `setupKeyboard` hook, keyboard registry, Lua config glue, log sink, and the `keycaster` object that wires them to the session |
+| `plugin/session/` | Capture rules: the paused flag, what a client is told on connect, routing of keyboard events to the encoder and the server |
+| `plugin/server/` | Event server: socket, lock file, the one client connection, outgoing queue; RAII wrappers for the file lock and Wayland event sources |
+| `plugin/wire/` | Encodes each protocol message as one JSON line |
+| `plugin/config/` | Plugin configuration parsing |
+| `plugin/log/` | The log sink the libraries report through, and `run_guarded` |
+| `plugin/test_support/` | Test helpers: temporary directory, event loop, socket client, recording log |
+| `plugin/<library>/tests/` | GoogleTest tests of that library; nothing loads the plugin |
 | `protocol/include/hyprcast/protocol/` | Event types and their JSON wire format |
 | `common/` | Code shared by both components; `version.hpp.in` is configured by CMake |
 | `overlay/src/ipc/` | Socket client, message parsing, single-instance and restart handling |
@@ -52,9 +54,16 @@ developed on. These rules have no exceptions.
 | `overlay/src/config/` | `overlay.toml` parsing, validation and live reload |
 | `overlay/src/theme/` | Theme discovery, manifests and the QML runtime |
 | `overlay/qml/`, `overlay/examples/themes/` | Theme host, bundled default theme, example themes |
-| `overlay/tests/` | Overlay tests, one executable per area |
+| `overlay/tests/` | Overlay tests, one executable per area; `WireContract.cpp` feeds the plugin's encoder output to the overlay's parser |
 | `docs/` | User documentation for configuration and themes |
 | `cmake/`, `CMakePresets.json` | Build helpers and the `dev`, `lint` and `release` presets |
+
+Every plugin library has the same layout: `CMakeLists.txt`,
+`include/hyprcast/<library>/` and, where it has any, `src/` and `tests/`, with
+the target `hyprcast_<library>` and the alias `hyprcast::<library>`. The libraries build
+and are tested without Hyprland; `./check` rejects a Hyprland include outside
+`plugin/adapter/`. Logic belongs in a library, and the adapter stays as thin
+as the Hyprland API allows.
 
 ## Build and gate
 
@@ -62,7 +71,7 @@ developed on. These rules have no exceptions.
 cmake --workflow --preset dev      # clang, ASan + UBSan, runs the tests
 cmake --workflow --preset lint     # clang + clang-tidy, findings are errors
 cmake --workflow --preset release  # gcc, RelWithDebInfo, runs the tests
-./check                            # the gate: clang-format, then all three
+./check                            # the gate: format, layering, then all three
 ```
 
 `./check` must pass before every commit. Run it with the session variables

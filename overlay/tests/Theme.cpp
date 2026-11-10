@@ -29,10 +29,12 @@
 #include <QTimer>
 #include <QUrl>
 #include <QtMath>
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <expected>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <utility>
 
@@ -40,6 +42,9 @@ using namespace Hyprcast::Overlay;
 
 namespace {
 
+// Counts failed checks for the exit status; every test reports through
+// check().
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 int failures = 0;
 
 void check(bool condition, const char* message) {
@@ -110,24 +115,26 @@ QString testKeymap() {
     names.layout = "us";
     xkb_keymap* map =
         xkb_keymap_new_from_names(context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
-    char* text = xkb_keymap_get_as_string(map, XKB_KEYMAP_FORMAT_TEXT_V1);
-    const QString result = QString::fromUtf8(text);
-    std::free(text);
+    // xkb_keymap_get_as_string() returns a malloc()ed string.
+    const std::unique_ptr<char, decltype(&std::free)> text(
+        xkb_keymap_get_as_string(map, XKB_KEYMAP_FORMAT_TEXT_V1),
+        &std::free);
+    const QString result = QString::fromUtf8(text.get());
     xkb_keymap_unref(map);
     xkb_context_unref(context);
     return result;
 }
 
+// The next three helpers walk the QML item tree of a theme under test, which
+// is a few levels deep.
+// NOLINTBEGIN(misc-no-recursion)
 bool hasVisualText(QQuickItem* item, const QString& text) {
     if (item->property("text").toString() == text) {
         return true;
     }
-    for (auto* child : item->childItems()) {
-        if (hasVisualText(child, text)) {
-            return true;
-        }
-    }
-    return false;
+    return std::ranges::any_of(item->childItems(), [&text](auto* child) {
+        return hasVisualText(child, text);
+    });
 }
 
 QQuickItem* findVisualItem(QQuickItem* item, const QString& name) {
@@ -148,6 +155,7 @@ void polishVisualTree(QQuickItem* item) {
     }
     item->ensurePolished();
 }
+// NOLINTEND(misc-no-recursion)
 
 bool writeFile(const QString& path, const QByteArray& contents) {
     QDir().mkpath(QFileInfo(path).absolutePath());
@@ -372,6 +380,9 @@ void testOptions(const QString& userRoot, const QString& bundledRoot) {
           "enforce declared enum values");
 }
 
+// One sequential scenario of about 1500 lines whose steps share a live view
+// and theme runtime. Splitting it is a test refactor of its own.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     const QByteArray gapDeclaration = QByteArrayLiteral(
         "[options.gap]\ntype='integer'\ndefault=5\nminimum=0\nmaximum=20\n");

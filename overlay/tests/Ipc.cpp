@@ -12,8 +12,10 @@
 #include <QObject>
 #include <QPointer>
 #include <QTemporaryDir>
-#include <QThread>
+#include <QTimer>
+#include <array>
 #include <cstdlib>
+#include <exception>
 #include <iostream>
 #include <variant>
 #include <vector>
@@ -25,7 +27,7 @@ namespace {
 void check(bool condition, const char* message) {
     if (!condition) {
         std::cerr << "check failed: " << message << '\n';
-        std::exit(1);
+        std::_Exit(1);
     }
 }
 
@@ -98,7 +100,7 @@ void testMessageParsing() {
                                       "id\":7,\"rate\":25,\"delay\":600}"))),
           "repeat update accepted");
 
-    const QByteArray invalid[] = {
+    const std::array invalid {
         QByteArrayLiteral("not json"),
         QByteArrayLiteral("[]"),
         QByteArrayLiteral(
@@ -195,8 +197,9 @@ bool waitUntil(Predicate predicate, int timeoutMs) {
     QElapsedTimer timer;
     timer.start();
     while (!predicate() && timer.elapsed() < timeoutMs) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
-        QThread::msleep(2);
+        QEventLoop loop;
+        QTimer::singleShot(2, &loop, &QEventLoop::quit);
+        loop.exec();
     }
     QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
     return predicate();
@@ -400,12 +403,18 @@ void testRejectedTransitionIsNotDelivered() {
 
 int main(int argc, char* argv[]) {
     const QCoreApplication application(argc, argv);
-    testLineFraming();
-    testMessageParsing();
-    testConnectionState();
-    testRetryUntilServerAppears();
-    testAsyncReconnect();
-    testRejectedTransitionIsNotDelivered();
-    std::cout << "overlay IPC tests passed\n";
-    return 0;
+    try {
+        testLineFraming();
+        testMessageParsing();
+        testConnectionState();
+        testRetryUntilServerAppears();
+        testAsyncReconnect();
+        testRejectedTransitionIsNotDelivered();
+        std::cout << "overlay IPC tests passed\n";
+        return 0;
+    } catch (const std::exception& error) {
+        // std::get on a message of the wrong type throws.
+        std::cerr << "check failed: " << error.what() << '\n';
+        return 1;
+    }
 }

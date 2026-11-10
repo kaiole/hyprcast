@@ -4,6 +4,7 @@
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QEventLoop>
 #include <QFile>
 #include <QLocalServer>
 #include <QLocalSocket>
@@ -11,7 +12,7 @@
 #include <QProcess>
 #include <QString>
 #include <QTemporaryDir>
-#include <QThread>
+#include <QTimer>
 #include <cstdlib>
 #include <expected>
 #include <functional>
@@ -25,15 +26,16 @@ namespace {
 void check(bool condition, const char* message) {
     if (!condition) {
         std::cerr << "check failed: " << message << '\n';
-        std::exit(1);
+        std::_Exit(1);
     }
 }
 bool until(const std::function<bool()>& predicate, int timeout = 2000) {
     QElapsedTimer timer;
     timer.start();
     while (!predicate() && timer.elapsed() < timeout) {
-        QCoreApplication::processEvents();
-        QThread::msleep(1);
+        QEventLoop loop;
+        QTimer::singleShot(1, &loop, &QEventLoop::quit);
+        loop.exec();
     }
     return predicate();
 }

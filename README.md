@@ -74,5 +74,7 @@ Select one with `[theme] id`. See [themes](docs/themes.md) for options and makin
 ## Privacy
 
 - Capture is off until you press the toggle key, and stops when the overlay closes.
+- Nothing is sent to the overlay while the session is locked, so a password typed at the lock screen is never shown.
+- A password typed anywhere else, such as a terminal or a polkit prompt, is shown like any other input while capture is on.
 - Keystrokes go over a local socket in your Hyprland session only.
 - Themes run as code with your user's permissions. Only install themes you trust.

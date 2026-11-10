@@ -16,8 +16,10 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <functional>
+#include <ranges>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -60,12 +62,11 @@ protected:
         return dir.path() / "events.sock";
     }
 
-    // Connects and waits until the session has asked for the keyboards, which
-    // it does once per accepted client.
+    // Connects and waits for the first line, which the session sends as soon
+    // as it has accepted the client.
     [[nodiscard]] socket_client connect() {
-        const int snapshots_before = snapshots_taken;
         socket_client client {sock_path()};
-        EXPECT_TRUE(wait([&] { return snapshots_taken > snapshots_before; }))
+        EXPECT_TRUE(wait([&] { return !client.lines().empty(); }))
             << "the session did not accept the connection";
         return client;
     }
@@ -93,7 +94,8 @@ protected:
         client.send(command + "\n");
         ASSERT_TRUE(wait([&] {
             const auto lines = client.lines();
-            return lines.size() > lines_before && lines.back() == echo;
+            return std::ranges::contains(lines | std::views::drop(lines_before),
+                                         echo);
         })) << "no answer to "
             << command;
         EXPECT_EQ(under_test.paused(), paused_afterwards);
@@ -126,24 +128,83 @@ TEST_F(SessionTest, StartsPausedWithoutAskingForKeyboards) {
     EXPECT_TRUE(std::filesystem::is_socket(sock_path()));
 }
 
-TEST_F(SessionTest, TellsANewClientTheStateAndEveryKeyboard) {
+// A keyboard snapshot carries modifier state, so a paused client gets none.
+TEST_F(SessionTest, TellsANewClientOnlyTheState) {
     keyboards = {keyboard(1, "first"), keyboard(2, "second")};
 
     auto client = connect();
+    send_command(client, "disable", true);
 
     expect_lines(client,
                  {
                      wire::casting_state_message(true),
+                     wire::casting_state_message(true),
+                 });
+    EXPECT_EQ(snapshots_taken, 0);
+}
+
+TEST_F(SessionTest, SendsNothingDerivedFromInputWhilePaused) {
+    auto client = connect();
+
+    under_test.on_subscribe(keyboard(1, "first"));
+    under_test.on_key_event(1, press_a);
+    under_test.on_modifiers_event(1, {.depressed = 1});
+    under_test.on_keymap_event(1, "xkb_keymap { new };");
+    under_test.on_repeat_info_event(1, {.rate = 40, .delay = 250});
+    under_test.on_unsubscribe(1);
+    // Anything sent above would arrive before the answer to this.
+    send_command(client, "disable", true);
+
+    expect_lines(client,
+                 {
+                     wire::casting_state_message(true),
+                     wire::casting_state_message(true),
+                 });
+}
+
+TEST_F(SessionTest, EnableAnnouncesEveryKeyboard) {
+    keyboards = {keyboard(1, "first"), keyboard(2, "second")};
+    auto client = connect();
+
+    send_command(client, "enable", false);
+
+    expect_lines(client,
+                 {
+                     wire::casting_state_message(true),
+                     wire::casting_state_message(false),
                      wire::subscribe_message(keyboard(1, "first")),
                      wire::subscribe_message(keyboard(2, "second")),
                  });
     EXPECT_EQ(snapshots_taken, 1);
 }
 
-TEST_F(SessionTest, TellsANewClientTheStateWhenThereAreNoKeyboards) {
+// Pausing withdraws the keyboards, so the client holds no state across the
+// gap, and the next enable describes them as they are then.
+TEST_F(SessionTest, EveryEnableSendsAFreshSnapshot) {
+    keyboards = {keyboard(1, "first"), keyboard(2, "second")};
     auto client = connect();
+    send_command(client, "enable", false);
 
-    expect_lines(client, {wire::casting_state_message(true)});
+    send_command(client, "disable", true);
+    auto second = keyboard(2, "second");
+    second.modifiers.depressed = 4;
+    keyboards = {second, keyboard(3, "third")};
+    send_command(client, "enable", false);
+
+    expect_lines(client,
+                 {
+                     wire::casting_state_message(true),
+                     wire::casting_state_message(false),
+                     wire::subscribe_message(keyboard(1, "first")),
+                     wire::subscribe_message(keyboard(2, "second")),
+                     wire::casting_state_message(true),
+                     wire::unsubscribe_message(1),
+                     wire::unsubscribe_message(2),
+                     wire::casting_state_message(false),
+                     wire::subscribe_message(second),
+                     wire::subscribe_message(keyboard(3, "third")),
+                 });
+    EXPECT_EQ(snapshots_taken, 2);
 }
 
 TEST_F(SessionTest, SendsNoKeyEventsWhilePaused) {
@@ -198,15 +259,18 @@ TEST_F(SessionTest, DisablePausesAgain) {
 }
 
 TEST_F(SessionTest, AnswersEveryCommandEvenWithoutAChange) {
+    keyboards = {keyboard(1, "first")};
     auto client = connect();
 
     client.send("disable\nenable\nenable\n");
 
+    // The keyboards are announced once, not with every answer.
     expect_lines(client,
                  {
                      wire::casting_state_message(true),
                      wire::casting_state_message(true),
                      wire::casting_state_message(false),
+                     wire::subscribe_message(keyboard(1, "first")),
                      wire::casting_state_message(false),
                  });
     EXPECT_FALSE(under_test.paused());
@@ -270,19 +334,25 @@ TEST_F(SessionTest, PausesWhenTheClientIsDisconnected) {
     EXPECT_TRUE(wait([&] { return client.closed(); }));
 }
 
-TEST_F(SessionTest, ForwardsKeyboardsComingAndGoing) {
+TEST_F(SessionTest, ForwardsKeyboardsComingAndGoingAfterEnable) {
     keyboards = {keyboard(1, "first")};
     auto client = connect();
+    send_command(client, "enable", false);
 
     under_test.on_subscribe(keyboard(2, "second"));
     under_test.on_unsubscribe(1);
+    send_command(client, "disable", true);
 
+    // Pausing withdraws only what the client still knows about.
     expect_lines(client,
                  {
                      wire::casting_state_message(true),
+                     wire::casting_state_message(false),
                      wire::subscribe_message(keyboard(1, "first")),
                      wire::subscribe_message(keyboard(2, "second")),
                      wire::unsubscribe_message(1),
+                     wire::casting_state_message(true),
+                     wire::unsubscribe_message(2),
                  });
 }
 
@@ -330,31 +400,54 @@ TEST_F(SessionTest, DropsEverythingWhileNoClientIsConnected) {
 
 TEST_F(SessionTest, DisconnectsAClientWhoseKeyboardsCannotBeListed) {
     on_snapshot = [] { throw std::runtime_error("no keyboards today"); };
-
     auto failed = connect();
 
+    failed.send("enable\n");
+
     EXPECT_TRUE(wait([&] { return failed.closed(); }));
+    EXPECT_TRUE(under_test.paused());
     EXPECT_TRUE(log.contains(log_level::error, "no keyboards today"));
 
     // The session itself carries on with the next client.
     on_snapshot = nullptr;
     auto client = connect();
-    expect_lines(client, {wire::casting_state_message(true)});
+    send_command(client, "enable", false);
 }
 
-// A name that is not UTF-8 cannot be encoded. The caller decides what that
-// means for the client; the session keeps running.
+// A name that is not UTF-8 cannot be encoded. The client is told about all
+// of the keyboards or about none.
+TEST_F(SessionTest, DisconnectsAClientWhenAKeyboardCannotBeEncoded) {
+    keyboards = {keyboard(1, "first"), keyboard(2, "\xff")};
+    auto client = connect();
+
+    client.send("enable\n");
+
+    EXPECT_TRUE(wait([&] { return client.closed(); }));
+    EXPECT_TRUE(under_test.paused());
+    EXPECT_EQ(client.lines(),
+              (line_list {
+                  wire::casting_state_message(true),
+                  wire::casting_state_message(false),
+              }));
+}
+
+// For a keyboard that appears later, the caller decides what an unencodable
+// one means for the client; the session keeps running and never withdraws a
+// keyboard it did not announce.
 TEST_F(SessionTest, ReportsAnUnencodableMessageToTheCaller) {
     auto client = connect();
+    send_command(client, "enable", false);
 
     EXPECT_THROW(under_test.on_subscribe(keyboard(1, "\xff")),
                  std::invalid_argument);
 
     under_test.on_unsubscribe(1);
+    under_test.on_key_event(2, press_a);
     expect_lines(client,
                  {
                      wire::casting_state_message(true),
-                     wire::unsubscribe_message(1),
+                     wire::casting_state_message(false),
+                     wire::key_message(2, press_a),
                  });
 }
 

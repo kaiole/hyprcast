@@ -203,7 +203,7 @@ QHash<int, QByteArray> HistoryProjectionModel::roleNames() const {
         {DisplayKeyRole, "displayKey"},
         {DisplayModifiersRole, "displayModifiers"},
         {CountedRole, "counted"},
-        {RepeatCountRole, "repeatCount"}
+        {RepeatCountRole, "repeatCount"},
     };
 }
 
@@ -488,7 +488,7 @@ QHash<int, QByteArray> HistoryListModel::roleNames() const {
         {KeycodeRole, "keycode"},
         {EventTimeMsRole, "eventTimeMs"},
         {RepeatedRole, "repeated"},
-        {RepeatCountRole, "repeatCount"}
+        {RepeatCountRole, "repeatCount"},
     };
 }
 
@@ -603,10 +603,11 @@ bool InputHistory::apply(const InterpretedAction& action) {
 
     const int row = rowCount();
     beginInsertRows({}, row, row);
-    m_entries.push_back(
-        {.id = m_nextEntryId,
-         .action = action,
-         .repeatGroupId = repeatGroupId});
+    m_entries.push_back({
+        .id = m_nextEntryId,
+        .action = action,
+        .repeatGroupId = repeatGroupId,
+    });
     endInsertRows();
 
     ++m_nextEntryId;

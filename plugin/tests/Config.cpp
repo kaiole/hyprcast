@@ -126,15 +126,21 @@ int main() {
     check(state.accepted() == SConfig {});
     for (const auto& [code, expected] :
          std::vector<std::pair<std::string, std::string>> {
-             {"configure({wat=true})",
-              "unknown configuration field \"wat\"; expected filter or "
-              "keyboards"},
+             {
+                 "configure({wat=true})",
+                 "unknown configuration field \"wat\"; expected filter or "
+                 "keyboards",
+             },
              {"configure({keyboards='x'})", "keyboards must be a table"},
-             {"configure({keyboards={'ok', 1}})",
-              "keyboards[2] must be a string"},
+             {
+                 "configure({keyboards={'ok', 1}})",
+                 "keyboards[2] must be a string",
+             },
              {"configure({keyboards={''}})", "keyboards[1] must not be empty"},
-             {"configure({keyboards={'a\\0b'}})",
-              "keyboards[1] must not contain NUL bytes"},
+             {
+                 "configure({keyboards={'a\\0b'}})",
+                 "keyboards[1] must not contain NUL bytes",
+             },
          }) {
         state.beginReload();
         check(luaL_dostring(L, code.c_str()) != LUA_OK);

@@ -183,22 +183,23 @@ public:
                 "toggle: launch/enable or toggle capture; restart: replace "
                 "this session's overlay and restore capture (selectors only)."),
             QStringLiteral("[toggle|restart]"));
-        m_parser.addOptions(
-            {m_config,
-             m_monitor,
-             m_anchor,
-             m_margins,
-             m_width,
-             m_height,
-             m_opacity,
-             m_expireAfter,
-             m_fadeDuration,
-             m_backspace,
-             m_retention,
-             m_repeatEnabled,
-             m_socket,
-             m_instance,
-             m_quitAfter});
+        m_parser.addOptions({
+            m_config,
+            m_monitor,
+            m_anchor,
+            m_margins,
+            m_width,
+            m_height,
+            m_opacity,
+            m_expireAfter,
+            m_fadeDuration,
+            m_backspace,
+            m_retention,
+            m_repeatEnabled,
+            m_socket,
+            m_instance,
+            m_quitAfter,
+        });
     }
 
     // Handles --help and --version itself (they exit), then validates the
@@ -291,19 +292,20 @@ public:
             }
             overrides.margins = *margins;
         }
-        for (const auto& [option, target, range] :
-             {std::tuple {&m_width, &overrides.width, Limits::SurfaceSize},
-              std::tuple {&m_height, &overrides.height, Limits::SurfaceSize},
-              std::tuple {
-                  &m_expireAfter,
-                  &overrides.expireAfterMs,
-                  Limits::ExpireAfterMs
-              },
-              std::tuple {
-                  &m_fadeDuration,
-                  &overrides.fadeDurationMs,
-                  Limits::FadeDurationMs
-              }}) {
+        for (const auto& [option, target, range] : {
+                 std::tuple {&m_width, &overrides.width, Limits::SurfaceSize},
+                 std::tuple {&m_height, &overrides.height, Limits::SurfaceSize},
+                 std::tuple {
+                     &m_expireAfter,
+                     &overrides.expireAfterMs,
+                     Limits::ExpireAfterMs
+                 },
+                 std::tuple {
+                     &m_fadeDuration,
+                     &overrides.fadeDurationMs,
+                     Limits::FadeDurationMs
+                 },
+             }) {
             if (!m_parser.isSet(*option)) {
                 continue;
             }
@@ -335,7 +337,7 @@ public:
         if (m_parser.isSet(m_retention)) {
             constexpr Range<int> retention {
                 static_cast<int>(Limits::RetainedUtf16CodeUnits.minimum),
-                static_cast<int>(Limits::RetainedUtf16CodeUnits.maximum)
+                static_cast<int>(Limits::RetainedUtf16CodeUnits.maximum),
             };
             const auto units = parseInteger(m_parser.value(m_retention),
                                             retention,
@@ -474,7 +476,7 @@ resolveConfigSource(const CommandLine& commandLine,
     if (bootstrap) {
         return ConfigSource {
             .path = bootstrap->configPath,
-            .explicitPath = bootstrap->explicitConfig
+            .explicitPath = bootstrap->explicitConfig,
         };
     }
     if (const auto path = commandLine.configPath()) {
@@ -484,7 +486,7 @@ resolveConfigSource(const CommandLine& commandLine,
         }
         return ConfigSource {
             .path = QFileInfo(*path).absoluteFilePath(),
-            .explicitPath = true
+            .explicitPath = true,
         };
     }
     QString warning;
@@ -494,7 +496,7 @@ resolveConfigSource(const CommandLine& commandLine,
     }
     return ConfigSource {
         .path = QFileInfo(path).absoluteFilePath(),
-        .explicitPath = false
+        .explicitPath = false,
     };
 }
 

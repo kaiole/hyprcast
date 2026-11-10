@@ -175,7 +175,7 @@ QString execReplacement(const RestartContext& context,
         {"args", QJsonArray::fromStringList(context.arguments)},
         {"deadline", toWire(context.deadline)},
         {"lock", lockFd},
-        {"reply", reply.get()}
+        {"reply", reply.get()},
     };
     if (context.target) {
         object.insert("target", *context.target);

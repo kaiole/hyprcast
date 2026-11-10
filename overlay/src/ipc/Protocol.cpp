@@ -92,14 +92,14 @@ public:
             .depressed = uint32(FIELD_DEPRESSED),
             .latched = uint32(FIELD_LATCHED),
             .locked = uint32(FIELD_LOCKED),
-            .group = uint32(FIELD_GROUP)
+            .group = uint32(FIELD_GROUP),
         };
     }
 
     SRepeatInfo repeatInfo() {
         const SRepeatInfo info {
             .rate = uint32(FIELD_RATE),
-            .delay = uint32(FIELD_DELAY)
+            .delay = uint32(FIELD_DELAY),
         };
         constexpr auto intMax =
             static_cast<std::uint32_t>(std::numeric_limits<int>::max());
@@ -182,7 +182,7 @@ parseMessage(const QByteArray& jsonLine) {
         KeyMessage key {
             .keyboardId = keyboardId,
             .timeMs = read.uint32(FIELD_TIME_MS),
-            .keycode = read.uint32(FIELD_KEYCODE)
+            .keycode = read.uint32(FIELD_KEYCODE),
         };
         const QString state = read.string(FIELD_STATE);
         if (read.ok() && state != latin1(STATE_PRESSED)
@@ -197,21 +197,21 @@ parseMessage(const QByteArray& jsonLine) {
         return finish(read,
                       ModifiersMessage {
                           .keyboardId = keyboardId,
-                          .modifiers = read.modifiers()
+                          .modifiers = read.modifiers(),
                       });
     }
     if (event == latin1(EVENT_KEYMAP)) {
         return finish(read,
                       KeymapMessage {
                           .keyboardId = keyboardId,
-                          .keymap = read.nonEmptyString(FIELD_KEYMAP)
+                          .keymap = read.nonEmptyString(FIELD_KEYMAP),
                       });
     }
     if (event == latin1(EVENT_REPEAT_INFO)) {
         return finish(read,
                       RepeatInfoMessage {
                           .keyboardId = keyboardId,
-                          .repeatInfo = read.repeatInfo()
+                          .repeatInfo = read.repeatInfo(),
                       });
     }
     return std::unexpected(QStringLiteral("unsupported event '%1'").arg(event));

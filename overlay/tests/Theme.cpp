@@ -311,7 +311,7 @@ void testOptions(const QString& userRoot, const QString& bundledRoot) {
     QVariantMap valid {
         {QStringLiteral("gap"), 12},
         {QStringLiteral("mode"), QStringLiteral("compact")},
-        {QStringLiteral("tint"), QStringLiteral("red")}
+        {QStringLiteral("tint"), QStringLiteral("red")},
     };
     check(validateOptions(catalog,
                           QStringLiteral("options"),
@@ -381,12 +381,13 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     const QString heldCopy =
         QDir(userRoot).filePath(QStringLiteral("text-held"));
     check(QDir().mkpath(heldCopy), "create isolated held-key example package");
-    for (const QString& file :
-         {QStringLiteral("theme.toml"),
-          QStringLiteral("Main.qml"),
-          QStringLiteral("Keycap.qml"),
-          QStringLiteral("RibbonGroup.qml"),
-          QStringLiteral("RibbonStage.qml")}) {
+    for (const QString& file : {
+             QStringLiteral("theme.toml"),
+             QStringLiteral("Main.qml"),
+             QStringLiteral("Keycap.qml"),
+             QStringLiteral("RibbonGroup.qml"),
+             QStringLiteral("RibbonStage.qml"),
+         }) {
         check(QFile::copy(QDir(heldSource).filePath(file),
                           QDir(heldCopy).filePath(file)),
               "copy standalone text-held package");
@@ -395,11 +396,12 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         QDir(sampleThemes).filePath(QStringLiteral("keycaps"));
     const QString capCopy = QDir(userRoot).filePath(QStringLiteral("keycaps"));
     check(QDir().mkpath(capCopy), "create isolated user theme package");
-    for (const QString& file :
-         {QStringLiteral("theme.toml"),
-          QStringLiteral("Main.qml"),
-          QStringLiteral("KeycapEntry.qml"),
-          QStringLiteral("KeycapPresentation.qml")}) {
+    for (const QString& file : {
+             QStringLiteral("theme.toml"),
+             QStringLiteral("Main.qml"),
+             QStringLiteral("KeycapEntry.qml"),
+             QStringLiteral("KeycapPresentation.qml"),
+         }) {
         check(QFile::copy(QDir(capSource).filePath(file),
                           QDir(capCopy).filePath(file)),
               "copy self-contained keycaps package");
@@ -509,13 +511,13 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         presenter.processMessage(KeyboardSnapshotMessage {
             .id = 1,
             .name = QStringLiteral("test"),
-            .keymap = testKeymap()
+            .keymap = testKeymap(),
         });
         presenter.processMessage(KeyMessage {
             .keyboardId = 1,
             .timeMs = 1,
             .keycode = 42,
-            .pressed = true
+            .pressed = true,
         });
         QCoreApplication::processEvents();
         check(presenter.heldKeyCount() == 1 && !panelFill->isVisible()
@@ -527,7 +529,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
             .keyboardId = 1,
             .timeMs = 2,
             .keycode = 42,
-            .pressed = false
+            .pressed = false,
         });
         presenter.historyModel().clear();
         QCoreApplication::processEvents();
@@ -536,7 +538,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         config.height = 60;
         config.themeOptions = {
             {QStringLiteral("height"), 44},
-            {QStringLiteral("border_width"), 0}
+            {QStringLiteral("border_width"), 0},
         };
         check(prepareSwitch(runtime, config, &error),
               "load keycaps through ordinary theme discovery");
@@ -545,7 +547,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         config.symbolFontFamily = QStringLiteral("Symbols Nerd Font");
         config.keySymbols = {{QStringLiteral("C"), QStringLiteral("COPY")}};
         config.modifierSymbols = {
-            {QStringLiteral("Ctrl"), QStringLiteral("CTRL")}
+            {QStringLiteral("Ctrl"), QStringLiteral("CTRL")},
         };
         InputHistoryOptions historyOptions;
         historyOptions.presentation.countedRepeats = true;
@@ -684,14 +686,14 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
             {QStringLiteral("height"), 1},
             {QStringLiteral("edge_depth"), 24},
             {QStringLiteral("radius"), 256},
-            {QStringLiteral("border_width"), 64}
+            {QStringLiteral("border_width"), 64},
         };
         runtime.applyAcceptedConfiguration(config);
         QCoreApplication::processEvents();
         checkCapGeometry(1, 0.5);
         config.themeOptions = {
             {QStringLiteral("height"), 44},
-            {QStringLiteral("border_width"), 0}
+            {QStringLiteral("border_width"), 0},
         };
         runtime.applyAcceptedConfiguration(config);
         QCoreApplication::processEvents();
@@ -707,7 +709,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         historyOptions.presentation.countedRepeats = false;
         historyOptions.presentation.keySymbols = {
             {QStringLiteral("Backspace"), QStringLiteral("ERASE")},
-            {QStringLiteral("Enter"), QStringLiteral("RETURN")}
+            {QStringLiteral("Enter"), QStringLiteral("RETURN")},
         };
         presenter.setHistoryOptions(historyOptions);
         InterpretedAction special;
@@ -720,11 +722,11 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
 
         historyOptions.presentation.keySymbols = {
             {QStringLiteral("Backspace"), QStringLiteral("⌫")},
-            {QStringLiteral("Enter"), QStringLiteral("↵")}
+            {QStringLiteral("Enter"), QStringLiteral("↵")},
         };
         historyOptions.presentation.modifierSymbols = {
             {QStringLiteral("Ctrl"), QStringLiteral("⌃")},
-            {QStringLiteral("Shift"), QStringLiteral("⇧")}
+            {QStringLiteral("Shift"), QStringLiteral("⇧")},
         };
         presenter.setHistoryOptions(historyOptions);
         QCoreApplication::processEvents();
@@ -774,7 +776,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     config.height = 320;
     config.dynamicSize = false;
     config.themeOptions = {
-        {QStringLiteral("motion"), QStringLiteral("reduced")}
+        {QStringLiteral("motion"), QStringLiteral("reduced")},
     };
     view.resize(420, 320);
     check(prepareSwitch(runtime, config, &error),
@@ -784,9 +786,10 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         for (int i = 0; i < 5; ++i) {
             QCoreApplication::processEvents();
             QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-            for (const auto& name :
-                 {QStringLiteral("cascadeModelView"),
-                  QStringLiteral("ribbonModelView")}) {
+            for (const auto& name : {
+                     QStringLiteral("cascadeModelView"),
+                     QStringLiteral("ribbonModelView"),
+                 }) {
                 for (auto* modelView :
                      view.rootObject()->findChildren<QQuickItem*>(name)) {
                     QMetaObject::invokeMethod(modelView, "forceLayout");
@@ -842,11 +845,12 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     const QString cascadeCapture =
         qEnvironmentVariable("HYPRCAST_CASCADE_SCREENSHOT");
     if (!cascadeCapture.isEmpty()) {
-        for (const QString& key :
-             {QStringLiteral("Enter"),
-              QStringLiteral("Tab"),
-              QStringLiteral("Escape"),
-              QStringLiteral("Space")}) {
+        for (const QString& key : {
+                 QStringLiteral("Enter"),
+                 QStringLiteral("Tab"),
+                 QStringLiteral("Escape"),
+                 QStringLiteral("Space"),
+             }) {
             InterpretedAction cap;
             cap.kind = InterpretedActionKind::Key;
             cap.key = key;
@@ -876,7 +880,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     config.themeOptions = {
         {QStringLiteral("motion"), QStringLiteral("reduced")},
         {QStringLiteral("visible_groups"), 3},
-        {QStringLiteral("group_alignment"), QStringLiteral("left")}
+        {QStringLiteral("group_alignment"), QStringLiteral("left")},
     };
     runtime.applyAcceptedConfiguration(config);
     settle();
@@ -919,7 +923,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
               "transition queue");
     }
     config.themeOptions = {
-        {QStringLiteral("motion"), QStringLiteral("reduced")}
+        {QStringLiteral("motion"), QStringLiteral("reduced")},
     };
     runtime.applyAcceptedConfiguration(config);
     presenter.clearHistory();
@@ -1009,7 +1013,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         .keyboardId = 1,
         .timeMs = 3,
         .keycode = 42,
-        .pressed = true
+        .pressed = true,
     });
     QCoreApplication::processEvents();
     check(heldPanel && heldFill && heldFill->isVisible()
@@ -1052,7 +1056,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         .keyboardId = 1,
         .timeMs = 4,
         .keycode = 42,
-        .pressed = false
+        .pressed = false,
     });
     QCoreApplication::processEvents();
     check(presenter.heldKeyCount() == 0
@@ -1078,13 +1082,14 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
 
     config.dynamicSize = false;
     config.height = 60;
-    for (const auto& alignment :
-         {QStringLiteral("left"),
-          QStringLiteral("center"),
-          QStringLiteral("right")}) {
+    for (const auto& alignment : {
+             QStringLiteral("left"),
+             QStringLiteral("center"),
+             QStringLiteral("right"),
+         }) {
         config.themeOptions = {
             {QStringLiteral("dock_alignment"), alignment},
-            {QStringLiteral("motion"), QStringLiteral("reduced")}
+            {QStringLiteral("motion"), QStringLiteral("reduced")},
         };
         check(prepareSwitch(runtime, config, &error),
               "prepare fixed dock alignment");
@@ -1111,7 +1116,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
             .keyboardId = 1,
             .timeMs = 5,
             .keycode = 42,
-            .pressed = true
+            .pressed = true,
         });
         settle();
         check(shift->property("pressed").toBool()
@@ -1126,7 +1131,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
             .keyboardId = 1,
             .timeMs = 6,
             .keycode = 42,
-            .pressed = false
+            .pressed = false,
         });
         settle();
         check(!shift->property("pressed").toBool()
@@ -1152,7 +1157,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     view.resize(600, 140);
     config.themeOptions = {
         {QStringLiteral("motion"), QStringLiteral("reduced")},
-        {QStringLiteral("show_altgr"), true}
+        {QStringLiteral("show_altgr"), true},
     };
     runtime.applyAcceptedConfiguration(config);
     settle();
@@ -1284,7 +1289,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     ribbonOptions.presentation.repeatThreshold = 3;
     ribbonOptions.presentation.modifierSymbols = {
         {QStringLiteral("Ctrl"), QStringLiteral("same")},
-        {QStringLiteral("Shift"), QStringLiteral("same")}
+        {QStringLiteral("Shift"), QStringLiteral("same")},
     };
     presenter.clearHistory();
     presenter.setHistoryOptions(ribbonOptions);
@@ -1307,19 +1312,19 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     presenter.processMessage(KeyboardSnapshotMessage {
         .id = 2,
         .name = QStringLiteral("second"),
-        .keymap = testKeymap()
+        .keymap = testKeymap(),
     });
     presenter.processMessage(KeyMessage {
         .keyboardId = 1,
         .timeMs = 10,
         .keycode = 42,
-        .pressed = true
+        .pressed = true,
     });
     presenter.processMessage(KeyMessage {
         .keyboardId = 2,
         .timeMs = 10,
         .keycode = 42,
-        .pressed = true
+        .pressed = true,
     });
     settle();
     check(shiftSlot && shiftSlot->property("pressed").toBool() && ctrlSlot
@@ -1331,7 +1336,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         .keyboardId = 1,
         .timeMs = 11,
         .keycode = 42,
-        .pressed = false
+        .pressed = false,
     });
     settle();
     check(shiftSlot && shiftSlot->property("pressed").toBool(),
@@ -1354,7 +1359,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         .keyboardId = 2,
         .timeMs = 12,
         .keycode = 42,
-        .pressed = false
+        .pressed = false,
     });
     settle();
     check(shiftSlot && !shiftSlot->property("pressed").toBool(),
@@ -1365,10 +1370,11 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     settle();
     auto* fadingDock = findVisualItem(view.rootObject(),
                                       QStringLiteral("hyprcastHeldViewport"));
-    for (const PanelVisibility visibility :
-         {PanelVisibility::WithContent,
-          PanelVisibility::Never,
-          PanelVisibility::Always}) {
+    for (const PanelVisibility visibility : {
+             PanelVisibility::WithContent,
+             PanelVisibility::Never,
+             PanelVisibility::Always,
+         }) {
         config.panelVisibility = visibility;
         runtime.applyAcceptedConfiguration(config);
         settle();
@@ -1395,7 +1401,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         .keyboardId = 1,
         .timeMs = 13,
         .keycode = 42,
-        .pressed = true
+        .pressed = true,
     });
     settle();
     if (expiredRibbon) {
@@ -1409,7 +1415,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         .keyboardId = 1,
         .timeMs = 14,
         .keycode = 42,
-        .pressed = false
+        .pressed = false,
     });
     presenter.clearHistory();
     presenter.setExpiration(0, 0);
@@ -1422,7 +1428,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         QStringLiteral("Ctrl"),
         QStringLiteral("Shift"),
         QStringLiteral("Alt"),
-        QStringLiteral("Super")
+        QStringLiteral("Super"),
     };
     presenter.historyModel().apply(longChord);
     config.width = 100;
@@ -1450,11 +1456,12 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     const QString ribbonCapture =
         qEnvironmentVariable("HYPRCAST_TEXT_HELD_SCREENSHOT");
     if (!ribbonCapture.isEmpty()) {
-        for (const QString& key :
-             {QStringLiteral("Tab"),
-              QStringLiteral("Enter"),
-              QStringLiteral("Escape"),
-              QStringLiteral("Space")}) {
+        for (const QString& key : {
+                 QStringLiteral("Tab"),
+                 QStringLiteral("Enter"),
+                 QStringLiteral("Escape"),
+                 QStringLiteral("Space"),
+             }) {
             InterpretedAction cap;
             cap.kind = InterpretedActionKind::Key;
             cap.key = key;
@@ -1465,7 +1472,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
             .keyboardId = 1,
             .timeMs = 13,
             .keycode = 29,
-            .pressed = true
+            .pressed = true,
         });
         settle();
         QEventLoop captureLoop;
@@ -1477,7 +1484,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
             .keyboardId = 1,
             .timeMs = 14,
             .keycode = 29,
-            .pressed = false
+            .pressed = false,
         });
     }
     config.themeOptions = {{QStringLiteral("motion"), QStringLiteral("full")}};
@@ -1499,7 +1506,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
           "queue");
     config.themeOptions = {
         {QStringLiteral("motion"), QStringLiteral("reduced")},
-        {QStringLiteral("edge_depth"), 0}
+        {QStringLiteral("edge_depth"), 0},
     };
     runtime.applyAcceptedConfiguration(config);
     InputHistoryOptions ribbonTrim;
@@ -1511,7 +1518,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         .keyboardId = 1,
         .timeMs = 15,
         .keycode = 42,
-        .pressed = true
+        .pressed = true,
     });
     presenter.resetConnection();
     settle();
@@ -1522,7 +1529,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     presenter.processMessage(KeyboardSnapshotMessage {
         .id = 1,
         .name = QStringLiteral("test"),
-        .keymap = testKeymap()
+        .keymap = testKeymap(),
     });
     presenter.clearHistory();
     presenter.setHistoryOptions(InputHistoryOptions {});
@@ -1548,9 +1555,11 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     QVariantMap ledgerOptions;
     check(validateOptions(catalog,
                           QStringLiteral("ledger"),
-                          {{QStringLiteral("rail_width"), 0},
-                           {QStringLiteral("inner_padding"), 8},
-                           {QStringLiteral("text_scale"), 1.5}},
+                          {
+                              {QStringLiteral("rail_width"), 0},
+                              {QStringLiteral("inner_padding"), 8},
+                              {QStringLiteral("text_scale"), 1.5},
+                          },
                           &ledgerOptions,
                           &error),
           "ledger validates curated layout options");
@@ -1565,7 +1574,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     config.themeId = QStringLiteral("ledger");
     config.themeOptions = {
         {QStringLiteral("item_spacing"), 8},
-        {QStringLiteral("accent"), QStringLiteral("#40ccaa")}
+        {QStringLiteral("accent"), QStringLiteral("#40ccaa")},
     };
     check(prepareSwitch(runtime, config, &error),
           "load the shipped, distinctly composed QML example");
@@ -1674,7 +1683,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         .keyboardId = 1,
         .timeMs = 5,
         .keycode = 42,
-        .pressed = true
+        .pressed = true,
     });
     QCoreApplication::processEvents();
     check(manager.config()
@@ -1696,7 +1705,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         .keyboardId = 1,
         .timeMs = 6,
         .keycode = 42,
-        .pressed = false
+        .pressed = false,
     });
     presenter.clearHistory();
     presenter.historyModel().apply(typed);

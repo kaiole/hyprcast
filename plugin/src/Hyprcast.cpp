@@ -32,37 +32,58 @@ using namespace Wire;
 [[nodiscard]] libjson::json_value::object
 toJsonObject(const SKeyEvent& keyEvent) {
     return libjson::json_value::object {
-        {key(FIELD_TIME_MS),
-         {.data = static_cast<std::uint64_t>(keyEvent.timeMs)}},
-        {key(FIELD_KEYCODE),
-         {.data = static_cast<std::uint64_t>(keyEvent.keycode)}},
-        {key(FIELD_STATE),
-         {.data = key(keyEvent.state == eKeyState::PRESSED ? STATE_PRESSED
-                                                           : STATE_RELEASED)}},
+        {
+            key(FIELD_TIME_MS),
+            {.data = static_cast<std::uint64_t>(keyEvent.timeMs)},
+        },
+        {
+            key(FIELD_KEYCODE),
+            {.data = static_cast<std::uint64_t>(keyEvent.keycode)},
+        },
+        {
+            key(FIELD_STATE),
+            {
+                .data =
+                    key(keyEvent.state == eKeyState::PRESSED ? STATE_PRESSED
+                                                             : STATE_RELEASED),
+            },
+        },
     };
 }
 
 [[nodiscard]] libjson::json_value::object
 toJsonObject(const SModifiers& modifiers) {
     return libjson::json_value::object {
-        {key(FIELD_DEPRESSED),
-         {.data = static_cast<std::uint64_t>(modifiers.depressed)}},
-        {key(FIELD_LATCHED),
-         {.data = static_cast<std::uint64_t>(modifiers.latched)}},
-        {key(FIELD_LOCKED),
-         {.data = static_cast<std::uint64_t>(modifiers.locked)}},
-        {key(FIELD_GROUP),
-         {.data = static_cast<std::uint64_t>(modifiers.group)}},
+        {
+            key(FIELD_DEPRESSED),
+            {.data = static_cast<std::uint64_t>(modifiers.depressed)},
+        },
+        {
+            key(FIELD_LATCHED),
+            {.data = static_cast<std::uint64_t>(modifiers.latched)},
+        },
+        {
+            key(FIELD_LOCKED),
+            {.data = static_cast<std::uint64_t>(modifiers.locked)},
+        },
+        {
+            key(FIELD_GROUP),
+            {.data = static_cast<std::uint64_t>(modifiers.group)},
+        },
     };
 }
 
 [[nodiscard]] libjson::json_value::object
 toJsonObject(const SRepeatInfo& repeatInfo) {
     return libjson::json_value::object {
-        {key(FIELD_RATE),
-         {.data = static_cast<std::uint64_t>(repeatInfo.rate)}},
-        {key(FIELD_DELAY),
-         {.data = static_cast<std::uint64_t>(repeatInfo.delay)}},
+        {
+            key(FIELD_RATE),
+            {.data = static_cast<std::uint64_t>(repeatInfo.rate)},
+        },
+        {
+            key(FIELD_DELAY),
+            {.data = static_cast<std::uint64_t>(repeatInfo.delay)},
+        },
     };
 }
 

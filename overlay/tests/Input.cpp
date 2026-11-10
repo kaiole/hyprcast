@@ -86,7 +86,7 @@ KeyboardSnapshotMessage snapshot(const KeymapFixture& keymap,
         .id = id,
         .name = QStringLiteral("test keyboard"),
         .keymap = keymap.text,
-        .repeatInfo = {.rate = rate, .delay = delay}
+        .repeatInfo = {.rate = rate, .delay = delay},
     };
 }
 
@@ -98,7 +98,7 @@ KeyMessage key(std::uint32_t id,
         .keyboardId = id,
         .timeMs = timeMs,
         .keycode = code,
-        .pressed = pressed
+        .pressed = pressed,
     };
 }
 
@@ -140,7 +140,7 @@ void testShiftAndStandaloneModifier() {
     send(interpreter,
          ModifiersMessage {
              .keyboardId = 1,
-             .modifiers = {.depressed = keymap.shiftMask}
+             .modifiers = {.depressed = keymap.shiftMask},
          },
          now);
     const auto shifted = process(interpreter, key(1, 30, true, 2), now);
@@ -162,7 +162,7 @@ void testShiftAndStandaloneModifier() {
     send(interpreter,
          ModifiersMessage {
              .keyboardId = 1,
-             .modifiers = {.depressed = keymap.shiftMask}
+             .modifiers = {.depressed = keymap.shiftMask},
          },
          now);
     const auto shiftedNavigation =
@@ -200,7 +200,7 @@ void testChordsAndPerKeyboardState() {
     send(interpreter,
          ModifiersMessage {
              .keyboardId = 1,
-             .modifiers = {.depressed = keymap.controlMask}
+             .modifiers = {.depressed = keymap.controlMask},
          },
          now);
     const auto otherKeyboard = process(interpreter, key(2, 46, true), now);
@@ -481,7 +481,7 @@ void testCountedProjectionSurvivesBackspaceAndReconnect() {
     options.presentation.countedRepeats = true;
     options.presentation.repeatThreshold = 3;
     options.presentation.modifierSymbols = {
-        {QStringLiteral("Ctrl"), QStringLiteral("⌃")}
+        {QStringLiteral("Ctrl"), QStringLiteral("⌃")},
     };
     presenter.setHistoryOptions(options);
     presenter.processMessage(snapshot(keymap, 1, 10, 100), start);
@@ -613,7 +613,7 @@ void testDeterministicRepeatsAndCancellation() {
     send(interpreter,
          RepeatInfoMessage {
              .keyboardId = 1,
-             .repeatInfo = {.rate = 20, .delay = 300}
+             .repeatInfo = {.rate = 20, .delay = 300},
          },
          start + std::chrono::milliseconds(650));
     check(interpreter.advance(start + std::chrono::milliseconds(949)).empty(),

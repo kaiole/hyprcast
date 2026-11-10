@@ -158,6 +158,8 @@ public:
 
     void clear();
     void setSnapshot(const std::deque<HistoryEntry>& entries,
+                     // False positive: this comma separates parameters.
+                     // NOLINTNEXTLINE(readability-trailing-comma)
                      const HistoryPresentationOptions& presentationOptions = {},
                      const QSet<quint64>& collapsedRuns = {});
     void setPresentationOptions(
@@ -177,6 +179,8 @@ protected:
 
 class InputHistory final : public HistoryListModel {
 public:
+    // False positive: this comma separates parameters.
+    // NOLINTNEXTLINE(readability-trailing-comma)
     explicit InputHistory(InputHistoryOptions options = {},
                           QObject* parent = nullptr);
 

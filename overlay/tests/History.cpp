@@ -87,22 +87,25 @@ void testRuntimeHistoryOptions() {
     history.apply(text(QStringLiteral("abcd")));
     const auto stableId = history.entries().front().id;
 
-    history.setOptions(
-        {.backspaceMode = BackspaceMode::Delete,
-         .maxRetainedUtf16CodeUnits = 3});
+    history.setOptions({
+        .backspaceMode = BackspaceMode::Delete,
+        .maxRetainedUtf16CodeUnits = 3,
+    });
     check(history.displayText() == QStringLiteral("bcd"),
           "lowering retention applies immediately at a grapheme boundary");
     check(history.entries().front().id == stableId,
           "live retention changes preserve surviving entry identity");
-    history.setOptions(
-        {.backspaceMode = BackspaceMode::Symbol,
-         .maxRetainedUtf16CodeUnits = 16});
+    history.setOptions({
+        .backspaceMode = BackspaceMode::Symbol,
+        .maxRetainedUtf16CodeUnits = 16,
+    });
     history.apply(key(QStringLiteral("Backspace")));
     check(history.displayText() == QStringLiteral("bcd [Backspace] "),
           "live Backspace mode changes affect only future actions");
-    history.setOptions(
-        {.backspaceMode = BackspaceMode::Delete,
-         .maxRetainedUtf16CodeUnits = 16});
+    history.setOptions({
+        .backspaceMode = BackspaceMode::Delete,
+        .maxRetainedUtf16CodeUnits = 16,
+    });
     history.apply(key(QStringLiteral("Backspace")));
     history.apply(key(QStringLiteral("Backspace")));
     check(history.displayText() == QStringLiteral("bc"),
@@ -353,9 +356,10 @@ void testCountedRepeatProjectionAndBackspace() {
     check(history.presentationModel().displayText().isEmpty(),
           "Backspace removes the final underlying occurrence");
 
-    InputHistory retained(
-        {.maxRetainedUtf16CodeUnits = 4,
-         .presentation = {.countedRepeats = true, .repeatThreshold = 4}});
+    InputHistory retained({
+        .maxRetainedUtf16CodeUnits = 4,
+        .presentation = {.countedRepeats = true, .repeatThreshold = 4},
+    });
     auto retainedAction = text(QStringLiteral("x"));
     for (std::uint32_t i = 0; i < 5; ++i) {
         retainedAction.repeated = i > 0;
@@ -471,11 +475,11 @@ void testAdjacentCountedInputsAndUnicodeEligibility() {
     sharedGlyphs.repeatThreshold = 2;
     sharedGlyphs.keySymbols = {
         {QStringLiteral("A"), QStringLiteral("★")},
-        {QStringLiteral("B"), QStringLiteral("★")}
+        {QStringLiteral("B"), QStringLiteral("★")},
     };
     sharedGlyphs.modifierSymbols = {
         {QStringLiteral("Ctrl"), QStringLiteral("M")},
-        {QStringLiteral("Shift"), QStringLiteral("M")}
+        {QStringLiteral("Shift"), QStringLiteral("M")},
     };
     InputHistory canonicalKeys({.presentation = sharedGlyphs});
     canonicalKeys.apply(key(QStringLiteral("A"), 1, 30));
@@ -535,15 +539,16 @@ void testSymbolProjectionAndRetentionAccounting() {
     presentation.symbolFontFamily = QStringLiteral("Symbols & Friends");
     presentation.keySymbols = {
         {QStringLiteral("Backspace"), QStringLiteral("⌫")},
-        {QStringLiteral("C"), QStringLiteral("COPY")}
+        {QStringLiteral("C"), QStringLiteral("COPY")},
     };
     presentation.modifierSymbols = {
-        {QStringLiteral("Ctrl"), QStringLiteral("CTRL")}
+        {QStringLiteral("Ctrl"), QStringLiteral("CTRL")},
     };
-    InputHistory history(
-        {.backspaceMode = BackspaceMode::Symbol,
-         .maxRetainedUtf16CodeUnits = 64,
-         .presentation = presentation});
+    InputHistory history({
+        .backspaceMode = BackspaceMode::Symbol,
+        .maxRetainedUtf16CodeUnits = 64,
+        .presentation = presentation,
+    });
     history.apply(chord({QStringLiteral("Ctrl")}, QStringLiteral("C")));
     history.apply(key(QStringLiteral("Backspace")));
     check(history.displayText() == QStringLiteral("[Ctrl+C] [Backspace] "),
@@ -560,12 +565,13 @@ void testSymbolProjectionAndRetentionAccounting() {
               QStringLiteral("Symbols &amp; Friends")),
           "rich text escapes configured symbol font names");
 
-    InputHistory wrapped(
-        {.presentation = {
-             .keySymbols = {
-                 {QStringLiteral("Enter"), QStringLiteral("[Enter]")}
-             }
-         }});
+    InputHistory wrapped({
+        .presentation = {
+            .keySymbols = {
+                {QStringLiteral("Enter"), QStringLiteral("[Enter]")},
+            },
+        },
+    });
     wrapped.apply(text(QStringLiteral("a")));
     wrapped.apply(key(QStringLiteral("Enter")));
     wrapped.apply(text(QStringLiteral("b")));
@@ -580,10 +586,11 @@ void testSymbolProjectionAndRetentionAccounting() {
     presentation.keySymbols.insert(
         QStringLiteral("C"),
         QStringLiteral("a much longer presentation-only label"));
-    history.setOptions(
-        {.backspaceMode = BackspaceMode::Symbol,
-         .maxRetainedUtf16CodeUnits = 64,
-         .presentation = presentation});
+    history.setOptions({
+        .backspaceMode = BackspaceMode::Symbol,
+        .maxRetainedUtf16CodeUnits = 64,
+        .presentation = presentation,
+    });
     check(history.retainedUtf16CodeUnits() == before,
           "symbol changes do not change the stable canonical retention budget");
 
@@ -593,13 +600,14 @@ void testSymbolProjectionAndRetentionAccounting() {
     check(deletion.displayText() == QStringLiteral("ab"),
           "a Backspace symbol mapping cannot alter deletion identity");
 
-    InputHistory backspaceSymbols(
-        {.backspaceMode = BackspaceMode::Symbol,
-         .presentation = {
-             .countedRepeats = true,
-             .repeatThreshold = 3,
-             .keySymbols = {{QStringLiteral("Backspace"), QStringLiteral("⌫")}}
-         }});
+    InputHistory backspaceSymbols({
+        .backspaceMode = BackspaceMode::Symbol,
+        .presentation = {
+            .countedRepeats = true,
+            .repeatThreshold = 3,
+            .keySymbols = {{QStringLiteral("Backspace"), QStringLiteral("⌫")}},
+        },
+    });
     auto backspace = key(QStringLiteral("Backspace"));
     backspaceSymbols.apply(backspace);
     for (std::uint32_t i = 1; i <= 2; ++i) {
@@ -614,13 +622,14 @@ void testSymbolProjectionAndRetentionAccounting() {
 }
 
 void testDisplayOnlySpaces() {
-    InputHistory history(
-        {.maxRetainedUtf16CodeUnits = 64,
-         .presentation = {
-             .countedRepeats = true,
-             .repeatThreshold = 2,
-             .spaceSymbol = QStringLiteral("␣")
-         }});
+    InputHistory history({
+        .maxRetainedUtf16CodeUnits = 64,
+        .presentation = {
+            .countedRepeats = true,
+            .repeatThreshold = 2,
+            .spaceSymbol = QStringLiteral("␣"),
+        },
+    });
     history.apply(text(QStringLiteral("a b")));
     history.apply(key(QStringLiteral("Enter")));
     history.apply(text(QStringLiteral(" "), 1, 57));

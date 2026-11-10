@@ -112,7 +112,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) try {
         .name {Hyprcast::PLUGIN_NAME},
         .description {Hyprcast::DESCRIPTION},
         .author {Hyprcast::AUTHOR},
-        .version {Hyprcast::VERSION}
+        .version {Hyprcast::VERSION},
     };
 } catch (const std::exception& error) {
     Hyprcast::logError("Cannot load plugin: {}", error.what());

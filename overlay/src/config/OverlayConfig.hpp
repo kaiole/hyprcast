@@ -158,6 +158,8 @@ public:
 
     OverlayConfigManager(QString path,
                          bool requireExisting,
+                         // False positive: this comma separates parameters.
+                         // NOLINTNEXTLINE(readability-trailing-comma)
                          ConfigOverrides overrides = {},
                          QObject* parent = nullptr);
 

@@ -14,7 +14,7 @@
 namespace Hyprcast::Overlay {
 
 struct HeldKey {
-    enum class Kind {
+    enum class Kind : std::uint8_t {
         Modifier,
         Text,
         Key,

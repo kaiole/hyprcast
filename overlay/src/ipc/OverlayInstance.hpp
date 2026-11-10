@@ -6,6 +6,7 @@
 #include <QLocalServer>
 #include <QObject>
 #include <QString>
+#include <cstdint>
 #include <expected>
 
 class QLocalSocket;
@@ -17,8 +18,8 @@ namespace Hyprcast::Overlay {
 class OverlayInstance final : public QObject {
     Q_OBJECT
 public:
-    enum class Command { Start, Toggle, Restart };
-    enum class Ownership {
+    enum class Command : std::uint8_t { Start, Toggle, Restart };
+    enum class Ownership : std::uint8_t {
         Owner,     // This process is now the resident overlay.
         Forwarded, // The command was delivered to the existing resident.
     };

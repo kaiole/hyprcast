@@ -35,7 +35,7 @@ inline constexpr std::array All {Shift, Ctrl, Alt, Super, AltGr, Meta, Hyper};
 
 } // namespace Modifier
 
-enum class InterpretedActionKind {
+enum class InterpretedActionKind : std::uint8_t {
     Text,
     Key,
     Chord,

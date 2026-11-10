@@ -85,7 +85,7 @@ std::expected<void, QString> RestartHandoff::adopt() {
     bool ok = false;
     const int rawFd = value.toInt(&ok);
     // Own the bootstrap descriptor immediately so every early return closes it.
-    CUniqueFd stateFd {ok && rawFd >= FirstPrivateFd ? rawFd : -1};
+    unique_fd stateFd {ok && rawFd >= FirstPrivateFd ? rawFd : -1};
     struct stat st {};
     if (!stateFd || ::fstat(stateFd.get(), &st) || !S_ISREG(st.st_mode)
         || st.st_uid != ::getuid() || st.st_size <= 0
@@ -123,8 +123,8 @@ std::expected<void, QString> RestartHandoff::adopt() {
             QStringLiteral("Invalid private restart descriptors/context"));
     }
     // From here on the descriptors are ours, so validation failures close them.
-    CUniqueFd lock {lockFd};
-    CUniqueFd reply {replyFd};
+    unique_fd lock {lockFd};
+    unique_fd reply {replyFd};
     int type = 0;
     socklen_t length = sizeof(type);
     if (::getsockopt(reply.get(), SOL_SOCKET, SO_TYPE, &type, &length)
@@ -164,10 +164,10 @@ QString execReplacement(const RestartContext& context,
                         int lockFd,
                         int requesterFd,
                         const QString& executable) {
-    const CUniqueFd reply {
+    const unique_fd reply {
         ::fcntl(requesterFd, F_DUPFD_CLOEXEC, FirstPrivateFd)
     };
-    const CUniqueFd state {::memfd_create("hyprcast-restart",
+    const unique_fd state {::memfd_create("hyprcast-restart",
                                           MFD_CLOEXEC | MFD_ALLOW_SEALING)};
     if (!reply || !state) {
         return QStringLiteral("Cannot create restart handoff descriptors");

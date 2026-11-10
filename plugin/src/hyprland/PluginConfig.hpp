@@ -11,45 +11,45 @@
 
 namespace hyprcast {
 
-class CPluginConfig {
+class plugin_config {
 public:
-    using ConfigReloadCB = std::function<void()>;
-    using ExceptionCB = std::move_only_function<void() noexcept>;
+    using config_reload_cb = std::function<void()>;
+    using exception_cb = std::move_only_function<void() noexcept>;
 
-    struct SCallbacks {
-        ConfigReloadCB onConfigReload;
-        ExceptionCB onException;
+    struct callbacks {
+        config_reload_cb on_config_reload;
+        exception_cb on_exception;
     };
 
-    explicit CPluginConfig(SCallbacks callbacks);
+    explicit plugin_config(callbacks cbs);
     // Unregisters hyprcast.configure, whose C callback reaches this object.
-    ~CPluginConfig();
+    ~plugin_config();
 
-    CPluginConfig(const CPluginConfig&) = delete;
-    CPluginConfig& operator=(const CPluginConfig&) = delete;
-    CPluginConfig(CPluginConfig&&) = delete;
-    CPluginConfig& operator=(CPluginConfig&&) = delete;
+    plugin_config(const plugin_config&) = delete;
+    plugin_config& operator=(const plugin_config&) = delete;
+    plugin_config(plugin_config&&) = delete;
+    plugin_config& operator=(plugin_config&&) = delete;
 
-    [[nodiscard]] const SConfig& getAcceptedConfig() const noexcept {
-        return m_config.accepted();
+    [[nodiscard]] const config& get_accepted_config() const noexcept {
+        return config_.accepted();
     }
 
 private:
-    static int configure(lua_State* L) noexcept;
+    static int configure(lua_State* lua) noexcept;
 
-    void handleConfigReload();
+    void handle_config_reload();
 
     template <typename Function>
-    void runGuarded(std::string_view context, Function&& function) {
-        hyprcast::runGuarded(context,
-                             std::forward<Function>(function),
-                             m_callbacks.onException);
+    void run_guarded(std::string_view context, Function&& function) {
+        hyprcast::run_guarded(context,
+                              std::forward<Function>(function),
+                              callbacks_.on_exception);
     }
 
     // Callbacks are declared before the listeners that invoke them.
-    SCallbacks m_callbacks;
-    CConfig m_config;
-    CHyprSignalListener m_preReload, m_reloaded;
+    callbacks callbacks_;
+    config_state config_;
+    CHyprSignalListener pre_reload_, reloaded_;
 };
 
 } // namespace hyprcast

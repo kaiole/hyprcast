@@ -849,7 +849,7 @@ int main(int argc, char* argv[]) {
     QGuiApplication application(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("hyprcast-overlay"));
     QCoreApplication::setApplicationVersion(
-        QString::fromLatin1(hyprcast::PROJECT_VERSION));
+        QString::fromLatin1(hyprcast::project_version));
 
     CommandLine commandLine;
     const auto command = commandLine.parse(QGuiApplication::arguments());

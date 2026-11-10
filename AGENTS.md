@@ -81,10 +81,16 @@ is wrong for the code base as a whole, with the reason next to it.
 ## Conventions
 
 - C++23, formatted by `.clang-format`.
-- Naming is enforced by the `.clang-tidy` files. The root config is
-  snake_case; `overlay/` overrides it with Qt style (CamelCase types,
-  camelCase functions, `m_` members). `plugin/`, `protocol/` and `common/`
-  carry a temporary override until they are renamed to snake_case.
+- Naming is enforced by the `.clang-tidy` files. `plugin/`, `protocol/` and
+  `common/` follow the root config: snake_case for everything, private members
+  with a trailing underscore, no Hyprland-style prefixes (`C`, `S`, `e`, `m_`,
+  `g_p`). `overlay/` overrides it with Qt style (CamelCase types, camelCase
+  functions, `m_` members). The namespaces `hyprcast` and `hyprcast::overlay`
+  are lower case in both. Names owned by Hyprland, hyprutils, Lua, wayland or
+  xkb keep their spelling.
+- Do not give a variable or member the name of a type: gcc rejects what clang
+  accepts (`-Wshadow`, `-Wchanges-meaning`). Types are named for what they
+  hold (`modifier_state`, `keymap_text`), variables for their role.
 - The QML theme API is public and versioned (`api_version` in `theme.toml`).
   Do not change it without bumping the version.
 - Every behaviour change comes with a test that fails without it.

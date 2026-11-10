@@ -9,12 +9,12 @@
 
 namespace hyprcast {
 
-struct SKeyboardSnapshot {
-    KeyboardId id = 0;
+struct keyboard_snapshot {
+    keyboard_id id = 0;
     std::string name;
-    SModifiers modifiers;
-    Keymap keymap;
-    SRepeatInfo repeatInfo;
+    modifier_state modifiers;
+    keymap_text keymap;
+    hyprcast::repeat_info repeat_info;
 };
 
 } // namespace hyprcast

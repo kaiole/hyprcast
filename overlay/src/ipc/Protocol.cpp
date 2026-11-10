@@ -87,28 +87,28 @@ public:
         return static_cast<std::uint32_t>(number);
     }
 
-    KeyboardId keyboardId() {
-        const KeyboardId id = uint32(FIELD_KEYBOARD_ID);
-        if (ok() && id == GLOBAL_KEYBOARD_ID) {
+    keyboard_id keyboardId() {
+        const keyboard_id id = uint32(field_keyboard_id);
+        if (ok() && id == global_keyboard_id) {
             fail(QStringLiteral("field 'keyboard_id' must be greater than zero "
                                 "for this event"));
         }
         return id;
     }
 
-    SModifiers modifiers() {
+    modifier_state modifiers() {
         return {
-            .depressed = uint32(FIELD_DEPRESSED),
-            .latched = uint32(FIELD_LATCHED),
-            .locked = uint32(FIELD_LOCKED),
-            .group = uint32(FIELD_GROUP),
+            .depressed = uint32(field_depressed),
+            .latched = uint32(field_latched),
+            .locked = uint32(field_locked),
+            .group = uint32(field_group),
         };
     }
 
-    SRepeatInfo repeatInfo() {
-        const SRepeatInfo info {
-            .rate = uint32(FIELD_RATE),
-            .delay = uint32(FIELD_DELAY),
+    repeat_info repeatInfo() {
+        const repeat_info info {
+            .rate = uint32(field_rate),
+            .delay = uint32(field_delay),
         };
         constexpr auto intMax =
             static_cast<std::uint32_t>(std::numeric_limits<int>::max());
@@ -154,69 +154,69 @@ parseMessage(const QByteArray& jsonLine) {
 
     const QJsonObject object = document.object();
     FieldReader read(object);
-    const QString event = read.string(FIELD_EVENT);
+    const QString event = read.string(field_event);
     if (!read.ok()) {
         return std::unexpected(read.error());
     }
 
-    if (event == latin1(EVENT_CASTING_STATE)) {
-        if (read.uint32(FIELD_KEYBOARD_ID) != GLOBAL_KEYBOARD_ID && read.ok()) {
+    if (event == latin1(event_casting_state)) {
+        if (read.uint32(field_keyboard_id) != global_keyboard_id && read.ok()) {
             return std::unexpected(
                 QStringLiteral("casting_state requires keyboard_id 0"));
         }
         return finish(
             read,
-            CastingStateMessage {.paused = read.boolean(FIELD_PAUSED)});
+            CastingStateMessage {.paused = read.boolean(field_paused)});
     }
-    if (event == latin1(EVENT_SUBSCRIBE_KEYBOARD)) {
+    if (event == latin1(event_subscribe_keyboard)) {
         return finish(read,
                       KeyboardSnapshotMessage {
                           .id = read.keyboardId(),
-                          .name = read.string(FIELD_NAME),
+                          .name = read.string(field_name),
                           .modifiers = read.modifiers(),
-                          .keymap = read.nonEmptyString(FIELD_KEYMAP),
+                          .keymap = read.nonEmptyString(field_keymap),
                           .repeatInfo = read.repeatInfo(),
                       });
     }
-    if (event == latin1(EVENT_UNSUBSCRIBE_KEYBOARD)) {
+    if (event == latin1(event_unsubscribe_keyboard)) {
         return finish(read,
                       UnsubscribeKeyboardMessage {.id = read.keyboardId()});
     }
 
-    const KeyboardId keyboardId = read.keyboardId();
+    const keyboard_id keyboardId = read.keyboardId();
     if (!read.ok()) {
         return std::unexpected(read.error());
     }
-    if (event == latin1(EVENT_KEY)) {
+    if (event == latin1(event_key)) {
         KeyMessage key {
             .keyboardId = keyboardId,
-            .timeMs = read.uint32(FIELD_TIME_MS),
-            .keycode = read.uint32(FIELD_KEYCODE),
+            .timeMs = read.uint32(field_time_ms),
+            .keycode = read.uint32(field_keycode),
         };
-        const QString state = read.string(FIELD_STATE);
-        if (read.ok() && state != latin1(STATE_PRESSED)
-            && state != latin1(STATE_RELEASED)) {
+        const QString state = read.string(field_state);
+        if (read.ok() && state != latin1(state_pressed)
+            && state != latin1(state_released)) {
             return std::unexpected(QStringLiteral(
                 "field 'state' must be 'pressed' or 'released'"));
         }
-        key.pressed = state == latin1(STATE_PRESSED);
+        key.pressed = state == latin1(state_pressed);
         return finish(read, key);
     }
-    if (event == latin1(EVENT_MODIFIERS)) {
+    if (event == latin1(event_modifiers)) {
         return finish(read,
                       ModifiersMessage {
                           .keyboardId = keyboardId,
                           .modifiers = read.modifiers(),
                       });
     }
-    if (event == latin1(EVENT_KEYMAP)) {
+    if (event == latin1(event_keymap)) {
         return finish(read,
                       KeymapMessage {
                           .keyboardId = keyboardId,
-                          .keymap = read.nonEmptyString(FIELD_KEYMAP),
+                          .keymap = read.nonEmptyString(field_keymap),
                       });
     }
-    if (event == latin1(EVENT_REPEAT_INFO)) {
+    if (event == latin1(event_repeat_info)) {
         return finish(read,
                       RepeatInfoMessage {
                           .keyboardId = keyboardId,

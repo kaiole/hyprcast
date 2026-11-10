@@ -179,8 +179,8 @@ struct KeyboardInterpreter::Impl {
     };
 
     struct Keyboard {
-        SModifiers modifiers {};
-        SRepeatInfo repeatInfo {};
+        modifier_state modifiers {};
+        repeat_info repeatInfo {};
         KeymapPtr keymap {};
         StatePtr state {};
         ModifierMasks

@@ -4,9 +4,9 @@
 
 namespace hyprcast {
 
-void SWlEventSourceRemover::operator()(
-    struct ::wl_event_source* eventSource) const noexcept {
-    ::wl_event_source_remove(eventSource);
+void wl_event_source_remover::operator()(
+    struct ::wl_event_source* event_source) const noexcept {
+    ::wl_event_source_remove(event_source);
 }
 
 } // namespace hyprcast

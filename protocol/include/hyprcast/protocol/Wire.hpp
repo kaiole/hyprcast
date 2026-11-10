@@ -10,42 +10,42 @@
 namespace hyprcast::wire {
 
 // Events (plugin -> overlay).
-inline constexpr std::string_view EVENT_CASTING_STATE = "casting_state";
-inline constexpr std::string_view EVENT_SUBSCRIBE_KEYBOARD =
+inline constexpr std::string_view event_casting_state = "casting_state";
+inline constexpr std::string_view event_subscribe_keyboard =
     "subscribe_keyboard";
-inline constexpr std::string_view EVENT_UNSUBSCRIBE_KEYBOARD =
+inline constexpr std::string_view event_unsubscribe_keyboard =
     "unsubscribe_keyboard";
-inline constexpr std::string_view EVENT_KEY = "key";
-inline constexpr std::string_view EVENT_MODIFIERS = "modifiers";
-inline constexpr std::string_view EVENT_KEYMAP = "keymap";
-inline constexpr std::string_view EVENT_REPEAT_INFO = "repeat_info";
+inline constexpr std::string_view event_key = "key";
+inline constexpr std::string_view event_modifiers = "modifiers";
+inline constexpr std::string_view event_keymap = "keymap";
+inline constexpr std::string_view event_repeat_info = "repeat_info";
 
 // Fields.
-inline constexpr std::string_view FIELD_EVENT = "event";
-inline constexpr std::string_view FIELD_KEYBOARD_ID = "keyboard_id";
-inline constexpr std::string_view FIELD_PAUSED = "paused";
-inline constexpr std::string_view FIELD_NAME = "name";
-inline constexpr std::string_view FIELD_KEYMAP = "keymap";
-inline constexpr std::string_view FIELD_TIME_MS = "time_ms";
-inline constexpr std::string_view FIELD_KEYCODE = "keycode";
-inline constexpr std::string_view FIELD_STATE = "state";
-inline constexpr std::string_view FIELD_DEPRESSED = "depressed";
-inline constexpr std::string_view FIELD_LATCHED = "latched";
-inline constexpr std::string_view FIELD_LOCKED = "locked";
-inline constexpr std::string_view FIELD_GROUP = "group";
-inline constexpr std::string_view FIELD_RATE = "rate";
-inline constexpr std::string_view FIELD_DELAY = "delay";
+inline constexpr std::string_view field_event = "event";
+inline constexpr std::string_view field_keyboard_id = "keyboard_id";
+inline constexpr std::string_view field_paused = "paused";
+inline constexpr std::string_view field_name = "name";
+inline constexpr std::string_view field_keymap = "keymap";
+inline constexpr std::string_view field_time_ms = "time_ms";
+inline constexpr std::string_view field_keycode = "keycode";
+inline constexpr std::string_view field_state = "state";
+inline constexpr std::string_view field_depressed = "depressed";
+inline constexpr std::string_view field_latched = "latched";
+inline constexpr std::string_view field_locked = "locked";
+inline constexpr std::string_view field_group = "group";
+inline constexpr std::string_view field_rate = "rate";
+inline constexpr std::string_view field_delay = "delay";
 
-// Values of FIELD_STATE.
-inline constexpr std::string_view STATE_PRESSED = "pressed";
-inline constexpr std::string_view STATE_RELEASED = "released";
+// Values of field_state.
+inline constexpr std::string_view state_pressed = "pressed";
+inline constexpr std::string_view state_released = "released";
 
 // Events that are not about one keyboard carry this id; real keyboard ids start
 // at 1.
-inline constexpr KeyboardId GLOBAL_KEYBOARD_ID = 0;
+inline constexpr keyboard_id global_keyboard_id = 0;
 
 // Commands (overlay -> plugin).
-inline constexpr std::string_view COMMAND_ENABLE = "enable";
-inline constexpr std::string_view COMMAND_DISABLE = "disable";
+inline constexpr std::string_view command_enable = "enable";
+inline constexpr std::string_view command_disable = "disable";
 
 } // namespace hyprcast::wire

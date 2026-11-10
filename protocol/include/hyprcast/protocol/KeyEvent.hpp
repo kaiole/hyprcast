@@ -6,10 +6,10 @@
 
 namespace hyprcast {
 
-struct SKeyEvent {
-    std::uint32_t timeMs = 0;
+struct key_event {
+    std::uint32_t time_ms = 0;
     std::uint32_t keycode = 0;
-    eKeyState state = eKeyState::RELEASED;
+    key_state state = key_state::released;
 };
 
 } // namespace hyprcast

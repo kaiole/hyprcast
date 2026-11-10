@@ -80,7 +80,7 @@ bool IpcClient::setCaptureEnabled(bool enabled) {
         return false;
     }
     const std::string_view name =
-        enabled ? wire::COMMAND_ENABLE : wire::COMMAND_DISABLE;
+        enabled ? wire::command_enable : wire::command_disable;
     const QByteArray command =
         QByteArray(name.data(), static_cast<qsizetype>(name.size())) + '\n';
     return m_socket.write(command) == command.size();

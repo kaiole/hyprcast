@@ -21,37 +21,37 @@ namespace {
 // is unloaded, which leaves the unique_ptr destructor nothing to do.
 // NOLINTBEGIN(cppcoreguidelines-avoid-non-const-global-variables)
 // NOLINTNEXTLINE(clang-diagnostic-global-constructors)
-std::unique_ptr<hyprcast::CHyprcast> g_pHyprcast;
+std::unique_ptr<hyprcast::keycaster> keycaster_instance;
 
-CFunctionHook* g_pSetupKeyboardHook = nullptr;
+CFunctionHook* setup_keyboard_hook = nullptr;
 // NOLINTEND(cppcoreguidelines-avoid-non-const-global-variables)
-using ogSetupKeyboard = void (*)(void*, SP<IKeyboard>);
+using setup_keyboard_fn = void (*)(void*, SP<IKeyboard>);
 
 // The signature has to match the hooked CInputManager::setupKeyboard().
 // NOLINTNEXTLINE(performance-unnecessary-value-param)
-void setupKeyboardHook(void* thisPtr, SP<IKeyboard> keyboard) {
+void on_setup_keyboard(void* this_ptr, SP<IKeyboard> keyboard) {
     // The hook API hands the original function back as a void*.
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-    reinterpret_cast<ogSetupKeyboard>(
-        g_pSetupKeyboardHook->m_original)(thisPtr, keyboard);
-    if (g_pHyprcast) {
-        g_pHyprcast->addKeyboard(keyboard);
+    reinterpret_cast<setup_keyboard_fn>(
+        setup_keyboard_hook->m_original)(this_ptr, keyboard);
+    if (keycaster_instance) {
+        keycaster_instance->add_keyboard(keyboard);
     }
 }
 
-int toggleCasting(lua_State*) noexcept {
+int toggle_casting(lua_State*) noexcept {
     try {
-        if (!g_pHyprcast) {
+        if (!keycaster_instance) {
             return 0;
         }
 
-        g_pHyprcast->setPause(!g_pHyprcast->isPaused());
+        keycaster_instance->set_pause(!keycaster_instance->is_paused());
     } catch (const std::exception& error) {
-        hyprcast::logError("Cannot toggle casting: {}", error.what());
-        hyprcast::notifyFailure("Cannot toggle casting; see Hyprland logs.");
+        hyprcast::log_error("Cannot toggle casting: {}", error.what());
+        hyprcast::notify_failure("Cannot toggle casting; see Hyprland logs.");
     } catch (...) {
-        hyprcast::logError("Cannot toggle casting: unknown exception");
-        hyprcast::notifyFailure("Cannot toggle casting; see Hyprland logs.");
+        hyprcast::log_error("Cannot toggle casting: unknown exception");
+        hyprcast::notify_failure("Cannot toggle casting; see Hyprland logs.");
     }
 
     return 0;
@@ -61,13 +61,15 @@ int toggleCasting(lua_State*) noexcept {
 // cleans these up on unload, but doing it here keeps the teardown order
 // explicit.
 void teardown() noexcept {
-    if (g_pSetupKeyboardHook) {
-        HyprlandAPI::removeFunctionHook(hyprcast::PHANDLE,
-                                        g_pSetupKeyboardHook);
-        g_pSetupKeyboardHook = nullptr;
+    if (setup_keyboard_hook) {
+        HyprlandAPI::removeFunctionHook(hyprcast::plugin_handle,
+                                        setup_keyboard_hook);
+        setup_keyboard_hook = nullptr;
     }
-    HyprlandAPI::removeLuaFunction(hyprcast::PHANDLE, "hyprcast", "toggle");
-    g_pHyprcast.reset();
+    HyprlandAPI::removeLuaFunction(hyprcast::plugin_handle,
+                                   "hyprcast",
+                                   "toggle");
+    keycaster_instance.reset();
 }
 
 } // namespace
@@ -86,58 +88,59 @@ APICALL EXPORT std::string PLUGIN_API_VERSION() {
 }
 
 APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) try {
-    hyprcast::PHANDLE = handle;
+    hyprcast::plugin_handle = handle;
 
-    const std::string COMPOSITOR_HASH = __hyprland_api_get_hash();
-    const std::string CLIENT_HASH = __hyprland_api_get_client_hash();
+    const std::string compositor_hash = __hyprland_api_get_hash();
+    const std::string client_hash = __hyprland_api_get_client_hash();
 
-    if (COMPOSITOR_HASH != CLIENT_HASH) {
+    if (compositor_hash != client_hash) {
         throw std::runtime_error("Hyprland version mismatch: rebuild hyprcast "
                                  "against the running Hyprland version");
     }
 
-    g_pHyprcast = std::make_unique<hyprcast::CHyprcast>();
+    keycaster_instance = std::make_unique<hyprcast::keycaster>();
 
     const auto methods =
-        HyprlandAPI::findFunctionsByName(hyprcast::PHANDLE, "setupKeyboard");
+        HyprlandAPI::findFunctionsByName(hyprcast::plugin_handle,
+                                         "setupKeyboard");
     if (methods.empty()) {
         throw std::runtime_error("Cannot find Hyprland setupKeyboard function");
     }
 
-    g_pSetupKeyboardHook = HyprlandAPI::createFunctionHook(
+    setup_keyboard_hook = HyprlandAPI::createFunctionHook(
         handle,
         methods.front().address,
         // The hook API takes the replacement function as a void*.
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-        reinterpret_cast<void*>(&setupKeyboardHook));
-    if (!g_pSetupKeyboardHook || !g_pSetupKeyboardHook->hook()) {
+        reinterpret_cast<void*>(&on_setup_keyboard));
+    if (!setup_keyboard_hook || !setup_keyboard_hook->hook()) {
         throw std::runtime_error("Cannot install Hyprland setupKeyboard hook");
     }
 
     if (!HyprlandAPI::addLuaFunction(handle,
                                      "hyprcast",
                                      "toggle",
-                                     &toggleCasting)) {
+                                     &toggle_casting)) {
         throw std::runtime_error(
             "Cannot register Lua function hyprcast.toggle");
     }
 
-    hyprcast::logMessage(Log::TRACE, "Plugin loaded");
+    hyprcast::log_message(Log::TRACE, "Plugin loaded");
 
     return {
-        .name {hyprcast::PLUGIN_NAME},
-        .description {hyprcast::DESCRIPTION},
-        .author {hyprcast::AUTHOR},
-        .version {hyprcast::VERSION},
+        .name {hyprcast::plugin_name},
+        .description {hyprcast::description},
+        .author {hyprcast::author},
+        .version {hyprcast::version},
     };
 } catch (const std::exception& error) {
-    hyprcast::logError("Cannot load plugin: {}", error.what());
-    hyprcast::notifyFailure(error.what());
+    hyprcast::log_error("Cannot load plugin: {}", error.what());
+    hyprcast::notify_failure(error.what());
     teardown();
     throw;
 } catch (...) {
-    hyprcast::logError("Cannot load plugin: unknown exception");
-    hyprcast::notifyFailure(
+    hyprcast::log_error("Cannot load plugin: unknown exception");
+    hyprcast::notify_failure(
         "Cannot load plugin; see Hyprland logs for details.");
     teardown();
     throw;
@@ -149,5 +152,5 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) try {
 
 APICALL EXPORT void PLUGIN_EXIT() {
     teardown();
-    hyprcast::logMessage(Log::TRACE, "Plugin unloaded");
+    hyprcast::log_message(Log::TRACE, "Plugin unloaded");
 }

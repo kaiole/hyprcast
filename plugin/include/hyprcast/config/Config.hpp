@@ -8,31 +8,29 @@ struct lua_State;
 
 namespace hyprcast {
 
-enum class eKeyboardFilterSetting : std::uint8_t {
-    INCLUDE,
-    EXCLUDE,
+enum class keyboard_filter_setting : std::uint8_t {
+    include,
+    exclude,
 };
 
-struct SConfig {
-    eKeyboardFilterSetting filterSetting = eKeyboardFilterSetting::EXCLUDE;
-    std::vector<std::string> filteredKeyboards;
-    bool operator==(const SConfig&) const = default;
+struct config {
+    keyboard_filter_setting filter_setting = keyboard_filter_setting::exclude;
+    std::vector<std::string> filtered_keyboards;
+    bool operator==(const config&) const = default;
 };
 
-class CConfig {
+class config_state {
 public:
-    [[nodiscard]] const SConfig& accepted() const noexcept {
-        return m_accepted;
-    }
-    void beginReload() noexcept;
-    void finishReload(bool successful) noexcept;
-    int configure(lua_State* L) noexcept;
+    [[nodiscard]] const config& accepted() const noexcept { return accepted_; }
+    void begin_reload() noexcept;
+    void finish_reload(bool successful) noexcept;
+    int configure(lua_State* lua) noexcept;
 
 private:
-    SConfig m_accepted, m_pending;
-    bool m_evaluating = false;
-    bool m_called = false;
-    bool m_failed = false;
+    config accepted_, pending_;
+    bool evaluating_ = false;
+    bool called_ = false;
+    bool failed_ = false;
 };
 
 } // namespace hyprcast

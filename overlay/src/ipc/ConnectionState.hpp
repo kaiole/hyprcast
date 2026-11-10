@@ -30,7 +30,7 @@ public:
 
 private:
     std::optional<bool> m_paused;
-    QSet<KeyboardId>
+    QSet<keyboard_id>
         m_keyboards; // Subscribed keyboards; never contains the reserved id 0.
 };
 

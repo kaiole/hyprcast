@@ -4,6 +4,6 @@
 
 namespace hyprcast {
 
-using KeyboardId = std::uint32_t;
+using keyboard_id = std::uint32_t;
 
 } // namespace hyprcast

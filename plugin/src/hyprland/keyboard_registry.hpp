@@ -3,19 +3,14 @@
 #include "hyprcast/config/config.hpp"
 #include "hyprcast/log/log_sink.hpp"
 #include "hyprcast/log/run_guarded.hpp"
-#include "hyprcast/protocol/key_event.hpp"
 #include "hyprcast/protocol/keyboard_id.hpp"
-#include "hyprcast/protocol/keyboard_snapshot.hpp"
-#include "hyprcast/protocol/keymap_text.hpp"
-#include "hyprcast/protocol/modifier_state.hpp"
 #include "hyprcast/protocol/registry_snapshot.hpp"
-#include "hyprcast/protocol/repeat_info.hpp"
 #include "hyprcast/server/wl_event_source.hpp"
+#include "hyprcast/session/session.hpp"
 #include "keyboard_info.hpp"
 
 #include <hyprland/src/helpers/memory/Memory.hpp>
 
-#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -26,26 +21,9 @@ namespace hyprcast {
 
 class keyboard_registry {
 public:
-    using exception_cb = std::move_only_function<void() noexcept>;
-    using subscription_cb = std::function<void(keyboard_snapshot)>;
-    using unsubscription_cb = std::function<void(keyboard_id)>;
-    using key_event_cb = std::function<void(keyboard_id, key_event)>;
-    using modifiers_event_cb = std::function<void(keyboard_id, modifier_state)>;
-    using keymap_event_cb = std::function<void(keyboard_id, keymap_text)>;
-    using repeat_info_event_cb = std::function<void(keyboard_id, repeat_info)>;
-
-    struct callbacks {
-        exception_cb on_exception;
-        subscription_cb on_subscribe;
-        unsubscription_cb on_unsubscribe;
-        key_event_cb on_key_event;
-        modifiers_event_cb on_modifiers_event;
-        keymap_event_cb on_keymap_event;
-        repeat_info_event_cb on_repeat_info_event;
-    };
-
-    // `log` must outlive the registry.
-    keyboard_registry(log_sink& log, callbacks cbs);
+    // Reports keyboards and their events to `events`. `log` and `events`
+    // must outlive the registry.
+    keyboard_registry(log_sink& log, session& events);
 
     // Listeners capture `this` and per-keyboard record pointers, so the
     // registry must never move.
@@ -66,10 +44,11 @@ public:
 private:
     template <typename Function>
     void run_guarded(std::string_view context, Function&& function) {
-        hyprcast::run_guarded(*log_,
-                              context,
-                              std::forward<Function>(function),
-                              callbacks_.on_exception);
+        hyprcast::run_guarded(
+            *log_,
+            context,
+            std::forward<Function>(function),
+            [this] noexcept { session_->disconnect_client(); });
     }
 
     void sync_keymap(const SP<IKeyboard>& keyboard);
@@ -77,7 +56,7 @@ private:
     void unsubscribe_listeners(keyboard_info& info) noexcept;
 
     log_sink* log_;
-    callbacks callbacks_;
+    session* session_;
     keyboard_id next_id_ = 1;
     std::vector<std::unique_ptr<keyboard_info>> keyboard_registry_;
 

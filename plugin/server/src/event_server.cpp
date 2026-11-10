@@ -1,4 +1,4 @@
-#include "event_server.hpp"
+#include "hyprcast/server/event_server.hpp"
 
 #include "hyprcast/log/log_sink.hpp"
 #include "hyprcast/log/run_guarded.hpp"

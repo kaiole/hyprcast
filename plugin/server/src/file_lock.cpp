@@ -1,4 +1,4 @@
-#include "file_lock.hpp"
+#include "hyprcast/server/file_lock.hpp"
 
 #include <fcntl.h>
 #include <sys/file.h>

@@ -2,9 +2,9 @@
 
 #include "hyprcast/log/log_sink.hpp"
 #include "hyprcast/os/unique_fd.hpp"
-#include "os/file_lock.hpp"
-#include "sock_file.hpp"
-#include "wayland/wl_event_source.hpp"
+#include "hyprcast/server/file_lock.hpp"
+#include "hyprcast/server/sock_file.hpp"
+#include "hyprcast/server/wl_event_source.hpp"
 
 #include <cstddef>
 #include <cstdint>

@@ -1,0 +1,15 @@
+---
+InheritParentConfig: true
+
+# Relaxations for test code. The function and include bans stay on: tests run
+# in the gate without tsan, so they are single-threaded too.
+Checks:
+  - "-readability-identifier-naming"
+  - "-misc-non-private-member-variables-in-classes"
+  - "-cppcoreguidelines-non-private-member-variables-in-classes"
+
+ExtraArgs:
+  - "-Wno-global-constructors"
+
+CheckOptions:
+  readability-function-cognitive-complexity.IgnoreMacros: true

@@ -243,6 +243,56 @@ void testConnectionState() {
           "reset clears connection-dependent state");
 }
 
+// The plugin withdraws every keyboard when input stops flowing and announces
+// them again when it resumes; it also announces a keyboard that is already
+// known. All of that has to be a valid sequence.
+void testConnectionStateFollowsResentSnapshots() {
+    const QByteArray subscribe = QByteArrayLiteral(
+        R"({"event":"subscribe_keyboard","keyboard_id":1,"name":"kbd",)"
+        R"("depressed":0,"latched":0,"locked":0,"group":0,"keymap":"xkb",)"
+        R"("rate":30,"delay":500})");
+    const QByteArray unsubscribe = QByteArrayLiteral(
+        R"({"event":"unsubscribe_keyboard","keyboard_id":1})");
+    const QByteArray press = QByteArrayLiteral(
+        R"({"event":"key","keyboard_id":1,"time_ms":1,"keycode":30,)"
+        R"("state":"pressed"})");
+    const auto state = [](bool paused) {
+        return paused
+            ? QByteArrayLiteral(
+                  R"({"event":"casting_state","keyboard_id":0,"paused":true})")
+            : QByteArrayLiteral(
+                  R"({"event":"casting_state","keyboard_id":0,"paused":false})");
+    };
+
+    ConnectionState connection;
+    const auto accepts = [&connection](const QByteArray& line) {
+        return connection.apply(parse(line)).has_value();
+    };
+
+    // Connected and paused: the state and no keyboards.
+    check(accepts(state(true)) && connection.keyboardCount() == 0,
+          "a paused connection knows no keyboard");
+    check(!accepts(press), "input for a keyboard never announced is rejected");
+
+    check(accepts(state(false)) && accepts(subscribe) && accepts(press),
+          "enabling announces the keyboard and input follows");
+    check(accepts(subscribe) && connection.keyboardCount() == 1
+              && accepts(press),
+          "a repeated announcement replaces the keyboard");
+
+    check(accepts(state(true)) && accepts(unsubscribe)
+              && connection.keyboardCount() == 0,
+          "pausing withdraws the keyboard");
+    check(!accepts(press), "input for a withdrawn keyboard is rejected");
+    check(accepts(state(false)) && accepts(subscribe) && accepts(press),
+          "enabling again announces the keyboard again");
+
+    check(accepts(unsubscribe) && !accepts(press),
+          "a lock withdraws the keyboard while capture stays enabled");
+    check(accepts(subscribe) && accepts(press),
+          "an unlock announces the keyboard again");
+}
+
 template <typename Predicate>
 bool waitUntil(Predicate predicate, int timeoutMs) {
     QElapsedTimer timer;
@@ -621,6 +671,7 @@ int main(int argc, char* argv[]) {
         testMessageParsing();
         testHello();
         testConnectionState();
+        testConnectionStateFollowsResentSnapshots();
         testRetryUntilServerAppears();
         testAsyncReconnect();
         testRejectedTransitionIsNotDelivered();

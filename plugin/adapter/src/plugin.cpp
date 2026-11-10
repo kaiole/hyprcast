@@ -10,6 +10,7 @@
 #include <hyprland/src/plugins/PluginAPI.hpp>
 
 #include <exception>
+#include <format>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -82,8 +83,18 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) try {
     const auto methods =
         HyprlandAPI::findFunctionsByName(hyprcast::plugin_handle,
                                          "setupKeyboard");
-    if (methods.empty()) {
-        throw std::runtime_error("Cannot find Hyprland setupKeyboard function");
+    // The lookup matches by substring, so a Hyprland that gains a second
+    // symbol containing the name would otherwise have an arbitrary one hooked
+    // and called with the wrong signature.
+    if (methods.size() != 1) {
+        std::string error = std::format(
+            "Expected exactly one Hyprland function matching setupKeyboard, "
+            "found {}",
+            methods.size());
+        for (const auto& method : methods) {
+            error += std::format("; {}", method.demangled);
+        }
+        throw std::runtime_error(error);
     }
 
     setup_keyboard_hook = HyprlandAPI::createFunctionHook(

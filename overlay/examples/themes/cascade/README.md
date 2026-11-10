@@ -17,8 +17,8 @@ hyprcast-overlay restart
 
 Install only trusted themes: QML executes in the overlay process and is not
 sandboxed. Package helpers are local; no other example or extra effect module
-is required. Restart after changing any theme files; configuration options can
-reload live.
+is required. Run `hyprcast-overlay restart` after changing any theme files;
+configuration options reload live.
 
 ## Demo configuration
 

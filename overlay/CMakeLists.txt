@@ -111,6 +111,14 @@ if(BUILD_TESTING)
   target_link_libraries(overlay_theme_tests PRIVATE hyprcast::warnings hyprcast_overlay_theme)
   add_test(NAME overlay-theme COMMAND overlay_theme_tests)
   set_tests_properties(overlay-theme PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+  # Feeds what the plugin encodes to the overlay's parser, so it needs both
+  # components. GoogleTest is only set up for a top-level build.
+  if(PROJECT_IS_TOP_LEVEL AND TARGET hyprcast::wire)
+    add_executable(wire_contract_tests tests/WireContract.cpp)
+    target_link_libraries(wire_contract_tests PRIVATE hyprcast::warnings hyprcast::wire hyprcast_overlay_ipc GTest::gtest_main)
+    gtest_discover_tests(wire_contract_tests DISCOVERY_MODE PRE_TEST)
+  endif()
 endif()
 
 install(TARGETS hyprcast-overlay RUNTIME DESTINATION bin)

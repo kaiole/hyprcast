@@ -2,66 +2,70 @@
 Language: Cpp
 BasedOnStyle: LLVM
 
-AccessModifierOffset: -2
-AlignAfterOpenBracket: Align
-AlignConsecutiveMacros: true
-AlignConsecutiveAssignments: true
-AlignEscapedNewlines: Right
-AlignOperands: false
-AlignTrailingComments: true
-AllowAllArgumentsOnNextLine: true
-AllowAllConstructorInitializersOnNextLine: true
-AllowAllParametersOfDeclarationOnNextLine: true
-AllowShortBlocksOnASingleLine: true
-AllowShortCaseLabelsOnASingleLine: true
-AllowShortFunctionsOnASingleLine: Empty
-AllowShortIfStatementsOnASingleLine: Never
-AllowShortLambdasOnASingleLine: All
-AllowShortLoopsOnASingleLine: false
-AlwaysBreakAfterDefinitionReturnType: None
-AlwaysBreakAfterReturnType: None
-AlwaysBreakBeforeMultilineStrings: false
-AlwaysBreakTemplateDeclarations: Yes
-BreakBeforeBraces: Attach
-BreakBeforeTernaryOperators: false
-BreakConstructorInitializers: AfterColon
-ColumnLimit: 180
-CompactNamespaces: false
-ConstructorInitializerAllOnOneLineOrOnePerLine: false
-ExperimentalAutoDetectBinPacking: false
-FixNamespaceComments: false
-IncludeBlocks: Preserve
-IndentCaseLabels: true
 IndentWidth: 4
-PointerAlignment: Left
-ReflowComments: false
-SortIncludes: false
-SortUsingDeclarations: false
-SpaceAfterCStyleCast: false
-SpaceAfterLogicalNot: false
-SpaceAfterTemplateKeyword: true
-SpaceBeforeCtorInitializerColon: true
-SpaceBeforeInheritanceColon: true
-SpaceBeforeParens: ControlStatements
-SpaceBeforeRangeBasedForLoopColon: true
-SpaceInEmptyParentheses: false
-SpacesBeforeTrailingComments: 1
-SpacesInAngles: false
-SpacesInCStyleCastParentheses: false
-SpacesInContainerLiterals: false
-SpacesInParentheses: false
-SpacesInSquareBrackets: false
-Standard: Auto
 TabWidth: 4
 UseTab: Never
+AccessModifierOffset: -4
+NamespaceIndentation: None
+WrapNamespaceBodyWithEmptyLines: Always
+IndentCaseLabels: false
 
-AllowShortEnumsOnASingleLine: false
+ColumnLimit: 80
+ReflowComments: true
 
-BraceWrapping:
-  AfterEnum: false
+PointerAlignment: Left
+ReferenceAlignment: Pointer
+DerivePointerAlignment: false
+NumericLiteralCase:
+  Suffix: Lower
 
-AlignConsecutiveDeclarations: AcrossEmptyLines
+BreakBeforeBraces: Attach
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: All
+LambdaBodyIndentation: Signature
+AllowShortLoopsOnASingleLine: false
 
-NamespaceIndentation: All
+AlignAfterOpenBracket: true
+AlignOperands: DontAlign
+AlignConsecutiveAssignments: None
+AlignConsecutiveDeclarations: None
+AlignConsecutiveMacros: Consecutive
+AlignTrailingComments: true
 
-InsertBraces: true
+BinPackArguments: false
+BinPackParameters: false
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeTernaryOperators: true
+
+BreakConstructorInitializers: BeforeColon
+PackConstructorInitializers: CurrentLine
+AlwaysBreakTemplateDeclarations: Yes
+SpaceAfterTemplateKeyword: true
+SpaceBeforeParens: Custom
+SpaceBeforeParensOptions:
+  AfterControlStatements: true
+  AfterRequiresInClause: true
+SpaceBeforeCpp11BracedList: true
+BreakAfterOpenBracketBracedList: true
+BreakBeforeCloseBracketBracedList: true
+
+IncludeBlocks: Regroup
+SortIncludes: CaseSensitive
+IncludeCategories:
+  - Regex: '^"'
+    Priority: 1
+  - Regex: "^<[a-z_]+>$"
+    Priority: 3
+  - Regex: "^<"
+    Priority: 2
+IncludeIsMainRegex: "(_test|_bench)?$"
+
+SortUsingDeclarations: Never
+FixNamespaceComments: true
+ShortNamespaceLines: 0
+MaxEmptyLinesToKeep: 1

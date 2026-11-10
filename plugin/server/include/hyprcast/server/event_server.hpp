@@ -84,7 +84,7 @@ private:
 
     void read_commands();
     void flush_messages();
-    void update_wl_dispatch_event(std::uint32_t mask);
+    void watch_client_writable(bool watch);
 
     wl_event_loop* loop_;
     log_sink* log_;
@@ -109,6 +109,9 @@ private:
 
     unique_wl_event_source wl_socket_readable_;
     unique_wl_event_source wl_client_events_;
+    // Whether wl_client_events_ also reports the client becoming writable; it
+    // always reports it becoming readable.
+    bool client_writable_watched_ = false;
 
     std::deque<std::string> message_queue_;
     // How much of the front message has been sent.

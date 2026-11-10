@@ -17,3 +17,7 @@ target_link_libraries(
   PUBLIC hyprcast::common hyprcast::log
   PRIVATE hyprcast::protocol PkgConfig::HYPRCAST_SERVER_WAYLAND
           hyprcast::warnings)
+
+if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
+  add_subdirectory(tests)
+endif()

@@ -6,3 +6,7 @@ target_sources(
                        include/hyprcast/wire/messages.hpp)
 target_link_libraries(hyprcast_wire PUBLIC hyprcast::protocol
                       PRIVATE libjson::libjson hyprcast::warnings)
+
+if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
+  add_subdirectory(tests)
+endif()

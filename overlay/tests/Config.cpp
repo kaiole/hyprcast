@@ -42,7 +42,7 @@ bool waitFor(const std::function<bool()>& condition, int timeoutMs = 2500) {
 bool parse(const QByteArray& source,
            Hyprcast::Overlay::OverlayConfig* config,
            QString* error) {
-    QTemporaryDir directory;
+    const QTemporaryDir directory;
     const QString path = directory.filePath(QStringLiteral("overlay.toml"));
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly)
@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
     QCoreApplication application(argc, argv);
     using namespace Hyprcast::Overlay;
 
-    OverlayConfig defaults;
+    const OverlayConfig defaults;
     check(defaults.width == 600 && defaults.height == 88
               && toString(defaults.anchor) == QStringLiteral("bottom-right"),
           "use built-in window defaults");
@@ -240,7 +240,7 @@ int main(int argc, char** argv) {
         qunsetenv("XDG_CONFIG_HOME");
     }
 
-    QTemporaryDir absentDirectory;
+    const QTemporaryDir absentDirectory;
     const QString absentPath =
         absentDirectory.filePath(QStringLiteral("new/settings/overlay.toml"));
     OverlayConfigManager optionalDefault(absentPath, false);
@@ -262,7 +262,7 @@ int main(int argc, char** argv) {
     check(!malformed && malformed.error().contains(absentPath),
           "an invalid initial config fails with its path");
 
-    QTemporaryDir directory;
+    const QTemporaryDir directory;
     const QString path = directory.filePath(QStringLiteral("overlay.toml"));
     check(writeAtomically(path,
                           QByteArrayLiteral("[appearance]\nfont_size=30\n")),

@@ -76,9 +76,10 @@ CEventServer::CEventServer(ConnectedCB onConnected,
                 m_sockPaths.sockFile.c_str(),
                 m_sockPaths.sockFile.native().size() + 1);
 
-    int bindStatus = ::bind(m_sockFd.get(),
-                            reinterpret_cast<const ::sockaddr*>(&sockAddress),
-                            sizeof(sockAddress));
+    const int bindStatus =
+        ::bind(m_sockFd.get(),
+               reinterpret_cast<const ::sockaddr*>(&sockAddress),
+               sizeof(sockAddress));
     if (bindStatus == -1) {
         throw std::system_error(errno,
                                 std::generic_category(),
@@ -89,7 +90,7 @@ CEventServer::CEventServer(ConnectedCB onConnected,
     m_sockFile.markBound();
 
     // TODO: if multiple clients is needed we need to increase BACKLOG_SIZE
-    int listenStatus = ::listen(m_sockFd.get(), BACKLOG_SIZE);
+    const int listenStatus = ::listen(m_sockFd.get(), BACKLOG_SIZE);
     if (listenStatus == -1) {
         throw std::system_error(errno,
                                 std::generic_category(),
@@ -359,10 +360,10 @@ void CEventServer::flushMessages() {
 
         message = message.substr(m_messageOffset);
 
-        auto bytesSent = ::send(m_clientFd.get(),
-                                message.data(),
-                                message.size(),
-                                MSG_NOSIGNAL);
+        const auto bytesSent = ::send(m_clientFd.get(),
+                                      message.data(),
+                                      message.size(),
+                                      MSG_NOSIGNAL);
         if (bytesSent == -1) {
             const int error = errno;
 

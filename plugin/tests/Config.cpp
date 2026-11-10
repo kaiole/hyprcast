@@ -28,7 +28,7 @@ int main() {
         },
         1);
     lua_setglobal(L, "configure");
-    auto run = [&](const std::string& code, bool success = true) {
+    const auto run = [&](const std::string& code, bool success = true) {
         const int top = lua_gettop(L);
         const int result = luaL_dostring(L, code.c_str());
         if ((result == LUA_OK) != success) {

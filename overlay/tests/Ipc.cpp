@@ -28,7 +28,7 @@ void check(bool condition, const char* message) {
 }
 
 ProtocolMessage parse(const QByteArray& json) {
-    auto message = parseMessage(json);
+    const auto message = parseMessage(json);
     check(message.has_value(), "expected valid protocol message");
     return message.value_or(ProtocolMessage {});
 }
@@ -201,7 +201,7 @@ bool waitUntil(Predicate predicate, int timeoutMs) {
 }
 
 void testRetryUntilServerAppears() {
-    QTemporaryDir tempDirectory;
+    const QTemporaryDir tempDirectory;
     check(tempDirectory.isValid(), "retry test temporary directory created");
     const QString socketPath =
         tempDirectory.filePath(QStringLiteral("late-events.sock"));
@@ -238,7 +238,7 @@ void testRetryUntilServerAppears() {
 }
 
 void testAsyncReconnect() {
-    QTemporaryDir tempDirectory;
+    const QTemporaryDir tempDirectory;
     check(tempDirectory.isValid(), "temporary directory created");
     const QString socketPath =
         tempDirectory.filePath(QStringLiteral("events.sock"));
@@ -344,7 +344,7 @@ void testAsyncReconnect() {
 }
 
 void testRejectedTransitionIsNotDelivered() {
-    QTemporaryDir tempDirectory;
+    const QTemporaryDir tempDirectory;
     check(tempDirectory.isValid(),
           "invalid-transition temporary directory created");
     const QString socketPath =
@@ -397,7 +397,7 @@ void testRejectedTransitionIsNotDelivered() {
 } // namespace
 
 int main(int argc, char* argv[]) {
-    QCoreApplication application(argc, argv);
+    const QCoreApplication application(argc, argv);
     testLineFraming();
     testMessageParsing();
     testConnectionState();

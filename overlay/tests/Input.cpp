@@ -38,7 +38,7 @@ KeymapFixture makeKeymap(const char* layout) {
         xkb_keymap_new_from_names(context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
     check(keymap != nullptr, "XKB fixture keymap compiled");
 
-    std::unique_ptr<char, decltype(&std::free)> serialized {
+    const std::unique_ptr<char, decltype(&std::free)> serialized {
         xkb_keymap_get_as_string(keymap, XKB_KEYMAP_FORMAT_TEXT_V1),
         &std::free
     };
@@ -105,7 +105,7 @@ KeyMessage key(std::uint32_t id,
 std::vector<InterpretedAction> process(KeyboardInterpreter& interpreter,
                                        const ProtocolMessage& message,
                                        TimePoint now) {
-    auto actions = interpreter.process(message, now);
+    const auto actions = interpreter.process(message, now);
     check(actions.has_value(), "keyboard message interpreted without error");
     return actions.value_or(std::vector<InterpretedAction> {});
 }
@@ -669,7 +669,7 @@ void testDeterministicRepeatsAndCancellation() {
 } // namespace
 
 int main(int argc, char** argv) {
-    QCoreApplication application(argc, argv);
+    const QCoreApplication application(argc, argv);
     testTextAndXkbOffset();
     testShiftAndStandaloneModifier();
     testChordsAndPerKeyboardState();

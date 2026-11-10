@@ -1,13 +1,22 @@
+#include "history/InputHistory.hpp"
+#include "history/InterpretedAction.hpp"
 #include "input/KeyboardInterpreter.hpp"
 #include "input/KeyboardPresenter.hpp"
+#include "ipc/Protocol.hpp"
 
+#include <xkbcommon/xkbcommon-names.h>
 #include <xkbcommon/xkbcommon.h>
 
+#include <QChar>
 #include <QCoreApplication>
+#include <QString>
+#include <QVariant>
+#include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
-#include <string>
+#include <vector>
 
 using namespace Hyprcast::Overlay;
 

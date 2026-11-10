@@ -4,6 +4,10 @@
 #include "Log.hpp"
 
 #include <helpers/memory/Memory.hpp>
+#include <hyprland/src/debug/log/Logger.hpp>
+#include <hyprland/src/devices/IKeyboard.hpp>
+#include <hyprland/src/plugins/HookSystem.hpp>
+#include <hyprland/src/plugins/PluginAPI.hpp>
 
 #include <exception>
 #include <memory>

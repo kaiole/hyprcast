@@ -1,17 +1,21 @@
 #include "KeyboardRegistry.hpp"
 
 #include "KeyboardInfo.hpp"
+#include "Log.hpp"
 #include "hyprcast/config/Config.hpp"
 #include "hyprcast/protocol/KeyEvent.hpp"
 #include "hyprcast/protocol/KeyState.hpp"
 #include "hyprcast/protocol/KeyboardId.hpp"
+#include "hyprcast/protocol/KeyboardSnapshot.hpp"
 #include "hyprcast/protocol/Keymap.hpp"
 #include "hyprcast/protocol/Modifiers.hpp"
 #include "hyprcast/protocol/RegistrySnapshot.hpp"
 #include "hyprcast/protocol/RepeatInfo.hpp"
 
 #include <hyprland/src/Compositor.hpp>
+#include <hyprland/src/debug/log/Logger.hpp>
 #include <hyprland/src/event/EventBus.hpp>
+#include <hyprland/src/helpers/memory/Memory.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
@@ -22,6 +26,7 @@
 #include <cstdlib>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 namespace Hyprcast {

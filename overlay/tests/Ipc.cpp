@@ -6,14 +6,16 @@
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QEventLoop>
+#include <QList>
 #include <QLocalServer>
 #include <QLocalSocket>
+#include <QObject>
 #include <QPointer>
 #include <QTemporaryDir>
 #include <QThread>
 #include <cstdlib>
 #include <iostream>
-#include <utility>
+#include <variant>
 #include <vector>
 
 using namespace Hyprcast::Overlay;

@@ -1,4 +1,5 @@
 #include "ipc/CaptureController.hpp"
+#include "ipc/IpcClient.hpp"
 #include "ipc/OverlayInstance.hpp"
 
 #include <QCoreApplication>
@@ -6,10 +7,13 @@
 #include <QFile>
 #include <QLocalServer>
 #include <QLocalSocket>
+#include <QObject>
 #include <QProcess>
+#include <QString>
 #include <QTemporaryDir>
 #include <QThread>
 #include <cstdlib>
+#include <expected>
 #include <functional>
 #include <iostream>
 #include <memory>

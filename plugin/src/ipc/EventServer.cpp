@@ -1,9 +1,11 @@
 #include "EventServer.hpp"
 
 #include "CallbackBoundary.hpp"
+#include "Log.hpp"
 #include "hyprcast/protocol/Wire.hpp"
 
 #include <Compositor.hpp>
+#include <hyprland/src/debug/log/Logger.hpp>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>

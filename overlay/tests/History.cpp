@@ -1,5 +1,14 @@
+#include "history/BackspaceMode.hpp"
 #include "history/InputHistory.hpp"
+#include "history/InterpretedAction.hpp"
 
+#include <QAbstractItemModel>
+#include <QByteArray>
+#include <QChar>
+#include <QList>
+#include <QObject>
+#include <QString>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <utility>

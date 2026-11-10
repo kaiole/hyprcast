@@ -4,6 +4,7 @@
 
 #include <hyprland/src/config/ConfigManager.hpp>
 #include <hyprland/src/event/EventBus.hpp>
+#include <hyprland/src/plugins/PluginAPI.hpp>
 
 #include <stdexcept>
 #include <utility>

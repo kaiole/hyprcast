@@ -1,13 +1,23 @@
 #include "config/OverlayConfig.hpp"
+#include "history/BackspaceMode.hpp"
 
+#include <QByteArray>
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
+#include <QIODevice>
+#include <QObject>
 #include <QSaveFile>
+#include <QString>
 #include <QTemporaryDir>
 #include <QThread>
+#include <expected>
+#include <functional>
 #include <iostream>
+#include <optional>
+#include <utility>
 
 namespace {
 

@@ -1,6 +1,7 @@
 #include "OverlayInstance.hpp"
 
 #include "Restart.hpp"
+#include "hyprcast/os/UniqueFd.hpp"
 
 #include <fcntl.h>
 #include <sys/file.h>
@@ -11,10 +12,14 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QLocalSocket>
+#include <QObject>
+#include <QString>
 #include <QThread>
 #include <QTimer>
 #include <cerrno>
 #include <chrono>
+#include <expected>
+#include <utility>
 
 namespace Hyprcast::Overlay {
 namespace {

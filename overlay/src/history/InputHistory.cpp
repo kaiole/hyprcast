@@ -1,7 +1,23 @@
 #include "InputHistory.hpp"
 
+#include "BackspaceMode.hpp"
+#include "InterpretedAction.hpp"
+
+#include <QAbstractItemModel>
+#include <QByteArray>
+#include <QChar>
+#include <QHash>
+#include <QObject>
+#include <QSet>
+#include <QString>
 #include <QTextBoundaryFinder>
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <deque>
+#include <iterator>
+#include <utility>
+#include <vector>
 
 namespace Hyprcast::Overlay {
 namespace {

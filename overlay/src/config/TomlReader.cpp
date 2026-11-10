@@ -1,7 +1,12 @@
 #include "TomlReader.hpp"
 
+#include <QChar>
 #include <algorithm>
+#include <expected>
+#include <initializer_list>
 #include <string>
+#include <string_view>
+#include <utility>
 
 namespace Hyprcast::Overlay::Toml {
 

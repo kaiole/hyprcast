@@ -4,10 +4,12 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <exception>
 #include <format>
 #include <stdexcept>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace Hyprcast {
 namespace {

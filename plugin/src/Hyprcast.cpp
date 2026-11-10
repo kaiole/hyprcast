@@ -1,6 +1,7 @@
 #include "Hyprcast.hpp"
 
 #include "CallbackBoundary.hpp"
+#include "Log.hpp"
 #include "hyprcast/protocol/KeyEvent.hpp"
 #include "hyprcast/protocol/KeyState.hpp"
 #include "hyprcast/protocol/KeyboardId.hpp"
@@ -13,6 +14,9 @@
 #include "hyprland/PluginConfig.hpp"
 #include "libjson/json_value.hpp"
 #include "libjson/serializer.hpp"
+
+#include <hyprland/src/devices/IKeyboard.hpp>
+#include <hyprland/src/helpers/memory/Memory.hpp>
 
 #include <cstdint>
 #include <stdexcept>

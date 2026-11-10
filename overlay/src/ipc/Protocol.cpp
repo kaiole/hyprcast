@@ -1,5 +1,8 @@
 #include "Protocol.hpp"
 
+#include "hyprcast/protocol/KeyboardId.hpp"
+#include "hyprcast/protocol/Modifiers.hpp"
+#include "hyprcast/protocol/RepeatInfo.hpp"
 #include "hyprcast/protocol/Wire.hpp"
 
 #include <QLatin1StringView>
@@ -8,14 +11,20 @@
 #include <QJsonObject>
 #include <QJsonParseError>
 #include <QJsonValue>
+#include <cstdint>
+#include <expected>
 #include <limits>
 #include <string_view>
+#include <utility>
 
 namespace Hyprcast::Overlay {
 namespace {
 
 using namespace Wire;
 
+// The alias lives in qstringfwd.h, which is not self-contained, so the check
+// wants whichever header happens to include that one first.
+// NOLINTNEXTLINE(misc-include-cleaner)
 QLatin1StringView latin1(std::string_view text) {
     return QLatin1StringView(text.data(), static_cast<qsizetype>(text.size()));
 }

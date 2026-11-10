@@ -2,6 +2,7 @@
 
 #include "CaptureController.hpp"
 #include "OverlayInstance.hpp"
+#include "hyprcast/os/UniqueFd.hpp"
 
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -16,10 +17,14 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocalSocket>
+#include <QObject>
 #include <QPointer>
+#include <QString>
 #include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <cstring>
+#include <expected>
 #include <filesystem>
 #include <limits>
 #include <system_error>

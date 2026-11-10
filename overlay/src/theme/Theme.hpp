@@ -103,7 +103,7 @@ public:
              QVariantMap options,
              QObject* parent = nullptr);
 
-    [[nodiscard]] int version() const noexcept { return ThemeApiVersion; }
+    [[nodiscard]] static int version() noexcept { return ThemeApiVersion; }
     [[nodiscard]] QString themeId() const { return m_themeId; }
     [[nodiscard]] HistoryListModel* history() const;
     [[nodiscard]] HistoryListModel* expiredHistory() const;

@@ -52,6 +52,9 @@ class HistoryProjectionModel final : public QAbstractListModel {
     Q_PROPERTY(
         QString displayRichText READ displayRichText NOTIFY displayTextChanged)
 public:
+    // Item roles are plain ints in the QAbstractItemModel interface and start
+    // above Qt::UserRole, so the enum stays unscoped and int-sized.
+    // NOLINTNEXTLINE(cppcoreguidelines-use-enum-class,performance-enum-size)
     enum Role {
         EntryIdRole = Qt::UserRole + 1,
         KindRole,
@@ -120,6 +123,9 @@ class HistoryListModel : public QAbstractListModel {
     Q_PROPERTY(QString displayText READ displayText NOTIFY displayTextChanged)
 
 public:
+    // Item roles are plain ints in the QAbstractItemModel interface and start
+    // above Qt::UserRole, so the enum stays unscoped and int-sized.
+    // NOLINTNEXTLINE(cppcoreguidelines-use-enum-class,performance-enum-size)
     enum Role {
         EntryIdRole = Qt::UserRole + 1,
         KindRole,
@@ -171,10 +177,14 @@ signals:
 
 protected:
     void refreshPresentation();
+    // InputHistory edits this state in place and then calls
+    // refreshPresentation(); the two classes are one unit split for testing.
+    // NOLINTBEGIN(*-non-private-member-variables-in-classes)
     std::deque<HistoryEntry> m_entries;
     HistoryPresentationOptions m_presentationOptions;
     HistoryProjectionModel* m_presentation = nullptr;
     QSet<quint64> m_collapsedRuns;
+    // NOLINTEND(*-non-private-member-variables-in-classes)
 };
 
 class InputHistory final : public HistoryListModel {

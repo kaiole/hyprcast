@@ -71,11 +71,14 @@ struct Range {
 // Accepted ranges, shared by config validation and command-line parsing.
 namespace Limits {
 
-inline constexpr Range<int> SurfaceSize {1, 8192};
-inline constexpr Range<int> Margin {0, 8192};
-inline constexpr Range<int> ExpireAfterMs {0, 86'400'000};
-inline constexpr Range<int> FadeDurationMs {0, 60'000};
-inline constexpr Range<qsizetype> RetainedUtf16CodeUnits {1, 1'048'576};
+inline constexpr Range<int> SurfaceSize {.minimum = 1, .maximum = 8192};
+inline constexpr Range<int> Margin {.minimum = 0, .maximum = 8192};
+inline constexpr Range<int> ExpireAfterMs {.minimum = 0, .maximum = 86'400'000};
+inline constexpr Range<int> FadeDurationMs {.minimum = 0, .maximum = 60'000};
+inline constexpr Range<qsizetype> RetainedUtf16CodeUnits {
+    .minimum = 1,
+    .maximum = 1'048'576,
+};
 
 } // namespace Limits
 
@@ -157,7 +160,7 @@ public:
         const std::optional<OverlayConfig>& previous,
         const OverlayConfig& candidate)>;
 
-    OverlayConfigManager(QString path,
+    OverlayConfigManager(const QString& path,
                          bool requireExisting,
                          // False positive: this comma separates parameters.
                          // NOLINTNEXTLINE(readability-trailing-comma)

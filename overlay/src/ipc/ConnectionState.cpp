@@ -9,7 +9,10 @@
 namespace Hyprcast::Overlay {
 namespace {
 
+// The overload-set idiom: it only inherits the call operators of the lambdas
+// it is built from.
 template <typename... Handlers>
+// NOLINTNEXTLINE(misc-multiple-inheritance)
 struct Overloaded : Handlers... {
     using Handlers::operator()...;
 };

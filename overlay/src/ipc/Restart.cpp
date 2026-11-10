@@ -197,10 +197,12 @@ QString execReplacement(const RestartContext& context,
         && inheritable(lockFd);
 
     std::vector<QByteArray> storage {QFile::encodeName(executable)};
+    storage.reserve(static_cast<std::size_t>(context.arguments.size()) + 1);
     for (const auto& arg : context.arguments) {
         storage.push_back(arg.toLocal8Bit());
     }
     std::vector<char*> argv;
+    argv.reserve(storage.size() + 1);
     for (auto& arg : storage) {
         argv.push_back(arg.data());
     }
@@ -220,8 +222,11 @@ QString execReplacement(const RestartContext& context,
             || fd == reply.get() || fd == lockFd) {
             continue;
         }
+        // fcntl(2) hands out and takes descriptor flags as int.
         const int flags = ::fcntl(fd, F_GETFD);
+        // NOLINTNEXTLINE(bugprone-signed-bitwise)
         if (flags >= 0 && !(flags & FD_CLOEXEC)) {
+            // NOLINTNEXTLINE(bugprone-signed-bitwise)
             if (::fcntl(fd, F_SETFD, flags | FD_CLOEXEC)) {
                 prepared = false;
             } else {

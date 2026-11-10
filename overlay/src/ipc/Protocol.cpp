@@ -34,13 +34,13 @@ QLatin1StringView latin1(std::string_view text) {
 // checked once.
 class FieldReader {
 public:
-    explicit FieldReader(const QJsonObject& object) : m_object(object) {}
+    explicit FieldReader(const QJsonObject& object) : m_object(&object) {}
 
     [[nodiscard]] bool ok() const noexcept { return m_error.isEmpty(); }
     [[nodiscard]] const QString& error() const noexcept { return m_error; }
 
     QString string(std::string_view name) {
-        const auto value = m_object.value(latin1(name));
+        const auto value = m_object->value(latin1(name));
         if (!value.isString()) {
             fail(QStringLiteral("field '%1' must be a string")
                      .arg(latin1(name)));
@@ -59,7 +59,7 @@ public:
     }
 
     bool boolean(std::string_view name) {
-        const auto value = m_object.value(latin1(name));
+        const auto value = m_object->value(latin1(name));
         if (!value.isBool()) {
             fail(QStringLiteral("field '%1' must be a boolean")
                      .arg(latin1(name)));
@@ -69,7 +69,7 @@ public:
     }
 
     std::uint32_t uint32(std::string_view name) {
-        const auto value = m_object.value(latin1(name));
+        const auto value = m_object->value(latin1(name));
         if (!value.isDouble()) {
             fail(QStringLiteral("field '%1' must be an unsigned 32-bit integer")
                      .arg(latin1(name)));
@@ -78,7 +78,7 @@ public:
         // toInteger() yields the fallback for fractions and for magnitudes
         // beyond qint64.
         const qint64 number = value.toInteger(-1);
-        if (number < 0 || number > std::numeric_limits<std::uint32_t>::max()) {
+        if (!std::in_range<std::uint32_t>(number)) {
             fail(QStringLiteral(
                      "field '%1' is outside the unsigned 32-bit integer range")
                      .arg(latin1(name)));
@@ -126,7 +126,7 @@ private:
         }
     }
 
-    const QJsonObject& m_object;
+    const QJsonObject* m_object;
     QString m_error;
 };
 

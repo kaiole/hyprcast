@@ -48,7 +48,7 @@ public:
     void advance(Clock::time_point now = Clock::now());
     void resetConnection();
     void clearHistory();
-    void setHistoryOptions(InputHistoryOptions options);
+    void setHistoryOptions(const InputHistoryOptions& options);
     void setRepeatsEnabled(bool enabled, Clock::time_point now = Clock::now());
     void setExpiration(int expireAfterMs,
                        int fadeDurationMs,

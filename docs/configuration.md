@@ -2,7 +2,7 @@
 
 Config file: `~/.config/hyprcast/overlay.toml`. Every setting is optional.
 
-Changes apply on save. If the file is invalid, the overlay prints the error and keeps the last working config.
+Changes apply on save. If the file is invalid or the theme it selects cannot be loaded, the overlay prints the error and keeps the last working config.
 
 Theme files are not watched. After installing or editing a theme, run:
 
@@ -12,8 +12,8 @@ hyprcast-overlay restart
 
 This rebuilds the overlay window from the saved config and the installed themes, in the running overlay. Capture stays as it is and the keys already shown stay on screen.
 
-- If the config is invalid or names a monitor that is not connected, the command prints the error and changes nothing.
-- If the theme fails to load, the command prints the error and the overlay shows the built-in theme until a restart loads yours.
+- If the config is invalid, names a monitor that is not connected, selects a theme that is not installed or gives the theme an invalid option, the command prints the error and changes nothing.
+- If the theme's QML fails to load, the command prints the error and the overlay shows the built-in theme until a restart loads yours.
 
 The options the overlay was started with (such as `--width`) stay in effect. The overlay also keeps running the program it was started from: see the [README](../README.md#install) for updating Hyprcast.
 
@@ -55,7 +55,7 @@ Sizes are in logical pixels. Colors are names (`white`) or hex (`#RRGGBB`, `#AAR
 
 | Key | Default | Values |
 |---|---|---|
-| `monitor` | primary | Output name from `hyprctl monitors` |
+| `monitor` | primary | Output name from `hyprctl monitors`. The overlay exits if its output is removed. |
 | `anchor` | `"bottom-right"` | `top`, `bottom`, `left`, `right`, `top-left`, `top-right`, `bottom-left`, `bottom-right` |
 | `margins` | `[24, 24, 24, 24]` | Left, top, right, bottom |
 | `width` | `600` | Max width, 1–8192 |
@@ -118,7 +118,7 @@ Sizes are in logical pixels. Colors are names (`white`) or hex (`#RRGGBB`, `#AAR
 
 `[symbols.keys]` replaces key labels: `Enter`, `Esc`, `Tab`, `Backspace`, `Delete`, `Insert`, `Home`, `End`, `Page Up`, `Page Down`, `Left`, `Right`, `Up`, `Down`, `Space`, `Print Screen`, `Pause`, `Menu`, `F1`–`F35`.
 
-`[symbols.modifiers]` replaces modifier labels: `Ctrl`, `Shift`, `Alt`, `Super`, `AltGr`.
+`[symbols.modifiers]` replaces modifier labels: `Shift`, `Ctrl`, `Alt`, `Super`, `AltGr`, `Meta`, `Hyper`.
 
 Quote keys with spaces: `"Page Up" = "⇞"`. Symbol glyphs must exist in the chosen font.
 
@@ -143,7 +143,7 @@ The `if` is needed: Hyprland first reads the config before it has loaded any plu
 
 ## Command line
 
-Flags override the config file. They apply only when starting the overlay.
+Flags override the config file. They apply only when starting the overlay; `restart` takes none of them.
 
 ```sh
 hyprcast-overlay --help

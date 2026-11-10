@@ -175,6 +175,9 @@ TEST(ProtocolHello, NewerPluginMeansAnOlderOverlay) {
     ASSERT_TRUE(!newer.has_value()
                 && newer.error().contains("Restart the overlay"))
         << "an older overlay is to be restarted";
+    ASSERT_TRUE(!newer.has_value()
+                && newer.error().contains("end the running hyprcast-overlay"))
+        << "by ending its process: the restart command keeps the program";
 }
 
 TEST(ProtocolHello, LineWithoutAVersionIsRefused) {

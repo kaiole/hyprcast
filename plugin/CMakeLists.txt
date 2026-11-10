@@ -8,11 +8,22 @@ set(HYPRCAST_PLUGIN_SOURCES
     src/wayland/WlEventSource.cpp)
 
 include(FetchContent)
+
+# libjson has no releases and no package to find; the pin is a commit archive.
+# Update URL and hash together.
 FetchContent_Declare(
   libjson
-  GIT_REPOSITORY https://github.com/kaiole/libjson.git
-  GIT_TAG 013397b90735d630d89eab79c2d097bf2ec9876d)
+  URL https://github.com/kaiole/libjson/archive/013397b90735d630d89eab79c2d097bf2ec9876d.tar.gz
+  URL_HASH
+    SHA256=f2c86456ba8d0ea0b5ad94ae2c562f63532116455a208d5616149ad27be3ea36
+  SYSTEM)
+block()
+set(CMAKE_COMPILE_WARNING_AS_ERROR OFF)
+set(CMAKE_CXX_CLANG_TIDY "")
+# libjson registers its own tests with ctest when BUILD_TESTING is on.
+set(BUILD_TESTING OFF)
 FetchContent_MakeAvailable(libjson)
+endblock()
 
 find_package(PkgConfig REQUIRED)
 # Match Hyprland's supported pkg-config names, then check both version bounds.

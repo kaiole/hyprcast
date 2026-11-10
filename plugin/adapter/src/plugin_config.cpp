@@ -1,5 +1,6 @@
 #include "plugin_config.hpp"
 
+#include "hyprcast/config/config.hpp"
 #include "hyprcast/log/log_sink.hpp"
 #include "plugin.hpp"
 
@@ -13,9 +14,14 @@
 namespace hyprcast {
 namespace {
 
-// Lua calls configure() as a plain function, which cannot carry `this`.
+// Lua calls configure() as a plain function, which cannot carry `this`. Null
+// whenever no plugin_config exists to answer the call.
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
-plugin_config* instance = nullptr;
+config_state* live_config = nullptr;
+
+int configure(lua_State* lua) noexcept {
+    return call_configure(lua, live_config);
+}
 
 } // namespace
 
@@ -33,21 +39,17 @@ plugin_config::plugin_config(log_sink& log, callbacks cbs)
     if (!HyprlandAPI::addLuaFunction(plugin_handle,
                                      "hyprcast",
                                      "configure",
-                                     &plugin_config::configure)) {
+                                     &configure)) {
         throw std::runtime_error(
             "Cannot register Lua function hyprcast.configure");
     }
 
-    instance = this;
+    live_config = &config_;
 }
 
 plugin_config::~plugin_config() {
+    live_config = nullptr;
     HyprlandAPI::removeLuaFunction(plugin_handle, "hyprcast", "configure");
-    instance = nullptr;
-}
-
-int plugin_config::configure(lua_State* lua) noexcept {
-    return instance->config_.configure(lua);
 }
 
 void plugin_config::handle_config_reload() {

@@ -422,7 +422,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     view.resize(600, 120);
     view.setResizeMode(QQuickView::SizeRootObjectToView);
     view.setSource(QUrl::fromLocalFile(hostPath));
-    check(view.status() == QQuickView::Ready && view.rootObject(),
+    check(view.status() == QQuickView::Ready && view.rootObject() != nullptr,
           "load a simple offscreen QML host");
 
     KeyboardPresenter presenter;
@@ -452,7 +452,8 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     auto* panelBorder = view.rootObject()->findChild<QQuickItem*>(
         QStringLiteral("hyprcastPanelBorder"),
         Qt::FindChildrenRecursively);
-    check(panelFrame && panelFill && panelBorder,
+    check(panelFrame != nullptr && panelFill != nullptr
+              && panelBorder != nullptr,
           "bundled theme exposes its panel frame, fill, and border to the "
           "offscreen scene");
     if (panelFrame && panelFill && panelBorder) {
@@ -469,7 +470,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         auto* tailText = view.rootObject()->findChild<QQuickItem*>(
             QStringLiteral("hyprcastTailText"),
             Qt::FindChildrenRecursively);
-        check(tailText && tailText->x() < 0
+        check(tailText != nullptr && tailText->x() < 0
                   && tailText->x() + tailText->width()
                       <= tailText->parentItem()->width() + 1,
               "overflowing rich text follows newest characters rather than "
@@ -491,7 +492,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         check(panelFrame->width() < fullWidth,
               "deleting content shrinks the dynamic panel and recovers "
               "viewport space");
-        check(tailText && qFuzzyIsNull(tailText->x()),
+        check(tailText != nullptr && qFuzzyIsNull(tailText->x()),
               "shortened text returns to the start of the viewport");
         config.panelVisibility = PanelVisibility::Never;
         runtime.applyAcceptedConfiguration(config);
@@ -561,7 +562,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         auto* capPanel = view.rootObject()->findChild<QQuickItem*>(
             QStringLiteral("hyprcastKeycapsPanelFrame"),
             Qt::FindChildrenRecursively);
-        check(capPanel && capPanel->height() >= config.minHeight,
+        check(capPanel != nullptr && capPanel->height() >= config.minHeight,
               "keycaps controls its own visible panel");
         QVariantMap capOptions;
         check(validateOptions(catalog,
@@ -614,7 +615,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         QCoreApplication::processEvents();
         check(presenter.historyModel().presentationModel().displayText()
                       == QStringLiteral("CTRL+COPY…2x ")
-                  && capPanel
+                  && capPanel != nullptr
                   && hasVisualText(view.rootObject(), QStringLiteral("CTRL"))
                   && hasVisualText(view.rootObject(), QStringLiteral("COPY"))
                   && hasVisualText(view.rootObject(), QStringLiteral("…2x")),
@@ -801,7 +802,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     settle();
     auto* cascade = view.rootObject()->findChild<QQuickItem*>(
         QStringLiteral("cascadeActiveStage"));
-    check(cascade && cascade->property("capacity").toInt() == 6,
+    check(cascade != nullptr && cascade->property("capacity").toInt() == 6,
           "Cascade fits six groups in the demo surface");
     InterpretedAction cascadeText;
     cascadeText.kind = InterpretedActionKind::Text;
@@ -885,7 +886,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     };
     runtime.applyAcceptedConfiguration(config);
     settle();
-    check(cascade && cascade->property("capacity").toInt() == 3,
+    check(cascade != nullptr && cascade->property("capacity").toInt() == 3,
           "Cascade live depth settings update capacity");
     InputHistoryOptions trimmedCascade;
     trimmedCascade.maxRetainedUtf16CodeUnits = 48;
@@ -951,21 +952,22 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     settle();
     auto* expiredCascade = view.rootObject()->findChild<QQuickItem*>(
         QStringLiteral("cascadeExpiredStage"));
-    check(cascade && !cascade->isVisible() && expiredCascade
-              && expiredCascade->isVisible()
+    check(cascade != nullptr && !cascade->isVisible()
+              && expiredCascade != nullptr && expiredCascade->isVisible()
               && hasVisualText(expiredCascade, QStringLiteral("×4")),
           "Cascade transfers expiration to the supplied snapshot");
     presenter.historyModel().apply(cascadeText);
     settle();
-    check(cascade && cascade->isVisible() && expiredCascade
-              && !expiredCascade->isVisible(),
+    check(cascade != nullptr && cascade->isVisible()
+              && expiredCascade != nullptr && !expiredCascade->isVisible(),
           "Cascade never layers active and expired stacks on fresh input");
     presenter.clearHistory();
     presenter.setExpiration(1, 0, cascadeExpiration);
     presenter.historyModel().apply(cascadeText);
     presenter.advance(cascadeExpiration + std::chrono::milliseconds(3));
     settle();
-    check(!presenter.fading() && expiredCascade && !expiredCascade->isVisible(),
+    check(!presenter.fading() && expiredCascade != nullptr
+              && !expiredCascade->isVisible(),
           "zero-duration Cascade expiration leaves no snapshot");
     presenter.setExpiration(0, 0);
     presenter.setHistoryOptions(InputHistoryOptions {});
@@ -973,13 +975,13 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     view.resize(420, 70);
     runtime.applyAcceptedConfiguration(config);
     settle();
-    check(cascade && cascade->property("capacity").toInt() == 1,
+    check(cascade != nullptr && cascade->property("capacity").toInt() == 1,
           "short Cascade surface prioritizes one readable group");
     config.height = 10;
     view.resize(420, 10);
     runtime.applyAcceptedConfiguration(config);
     settle();
-    check(cascade && qFuzzyIsNull(cascade->height())
+    check(cascade != nullptr && qFuzzyIsNull(cascade->height())
               && cascade->property("capacity").toInt() == 0,
           "too-small Cascade surface safely zero-sizes the stage");
     presenter.clearHistory();
@@ -1017,7 +1019,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         .pressed = true,
     });
     QCoreApplication::processEvents();
-    check(heldPanel && heldFill && heldFill->isVisible()
+    check(heldPanel != nullptr && heldFill != nullptr && heldFill->isVisible()
               && hasVisualText(view.rootObject(),
                                presenter.heldKeyItems()
                                    .front()
@@ -1027,10 +1029,10 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
               && presenter.historyModel().rowCount() == historyBeforeHeld,
           "held example reacts to modifier press without adding history");
     check(
-        heldHistoryArea
+        heldHistoryArea != nullptr
             && qFuzzyCompare(heldHistoryArea->y(), historyYBeforeHeld)
             && qFuzzyCompare(heldHistoryArea->height(), historyHeightBeforeHeld)
-            && heldPanel
+            && heldPanel != nullptr
             && qFuzzyCompare(heldPanel->height(), panelHeightBeforeHeld),
         "held press preserves history geometry and panel height");
     QVariantMap heldOptions;
@@ -1064,7 +1066,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
               && presenter.historyModel().rowCount() == historyBeforeHeld + 1,
           "modifier release removes held state and records standalone modifier "
           "history");
-    check(heldHistoryArea
+    check(heldHistoryArea != nullptr
               && qFuzzyCompare(heldHistoryArea->y(), historyYBeforeHeld)
               && qFuzzyCompare(heldHistoryArea->height(),
                                historyHeightBeforeHeld),
@@ -1075,8 +1077,8 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         QStringLiteral("hyprcastHeldViewport"));
     auto* idleShift =
         findVisualItem(view.rootObject(), QStringLiteral("modifierSlotShift"));
-    check(idleDock && !idleDock->isVisible() && idleShift
-              && !idleShift->property("pressed").toBool() && heldFill
+    check(idleDock != nullptr && !idleDock->isVisible() && idleShift != nullptr
+              && !idleShift->property("pressed").toBool() && heldFill != nullptr
               && !heldFill->isVisible(),
           "held example hides idle placeholders and decoration after history "
           "clears");
@@ -1102,7 +1104,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
             QStringLiteral("hyprcastHeldViewport"));
         auto* shift = findVisualItem(view.rootObject(),
                                      QStringLiteral("modifierSlotShift"));
-        check(history && held && history->height() > 0
+        check(history != nullptr && held != nullptr && history->height() > 0
                   && history->y() + history->height() <= held->y(),
               "short surface retains separate stacked bands");
         if (!history || !held || !shift) {
@@ -1172,7 +1174,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     presenter.historyModel().apply(cascadeText);
     presenter.historyModel().apply(cascadeChord);
     settle();
-    check(ribbon && hasVisualText(ribbon, cascadeText.text)
+    check(ribbon != nullptr && hasVisualText(ribbon, cascadeText.text)
               && hasVisualText(ribbon, QStringLiteral("Ctrl"))
               && hasVisualText(ribbon, QStringLiteral("C")),
           "ribbon preserves Unicode and distinct chord caps");
@@ -1300,11 +1302,11 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         presenter.historyModel().apply(cascadeChord);
     }
     settle();
-    check(ribbon && hasVisualText(ribbon, QStringLiteral("×5")),
+    check(ribbon != nullptr && hasVisualText(ribbon, QStringLiteral("×5")),
           "ribbon updates counted repeat badge in place");
     presenter.historyModel().apply(cascadeBackspace);
     settle();
-    check(ribbon && hasVisualText(ribbon, QStringLiteral("×4")),
+    check(ribbon != nullptr && hasVisualText(ribbon, QStringLiteral("×4")),
           "ribbon Backspace decrements counted group");
     auto* ctrlSlot =
         findVisualItem(view.rootObject(), QStringLiteral("modifierSlotCtrl"));
@@ -1328,8 +1330,8 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         .pressed = true,
     });
     settle();
-    check(shiftSlot && shiftSlot->property("pressed").toBool() && ctrlSlot
-              && !ctrlSlot->property("pressed").toBool()
+    check(shiftSlot != nullptr && shiftSlot->property("pressed").toBool()
+              && ctrlSlot != nullptr && !ctrlSlot->property("pressed").toBool()
               && shiftSlot->property("label").toString()
                   == ctrlSlot->property("label").toString(),
           "duplicate display symbols do not conflate canonical modifiers");
@@ -1340,20 +1342,20 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         .pressed = false,
     });
     settle();
-    check(shiftSlot && shiftSlot->property("pressed").toBool(),
+    check(shiftSlot != nullptr && shiftSlot->property("pressed").toBool(),
           "slot stays held while another keyboard observes the modifier");
     const auto ribbonExpiration = KeyboardPresenter::Clock::now();
     presenter.setExpiration(1, 250, ribbonExpiration);
     presenter.advance(ribbonExpiration + std::chrono::milliseconds(2));
     settle();
     check(
-        ribbon && !ribbon->isVisible() && expiredRibbon
-            && expiredRibbon->isVisible() && shiftSlot
+        ribbon != nullptr && !ribbon->isVisible() && expiredRibbon != nullptr
+            && expiredRibbon->isVisible() && shiftSlot != nullptr
             && shiftSlot->property("pressed").toBool(),
         "expiration transfers ribbon while preserving independently held dock");
     presenter.historyModel().apply(cascadeText);
     settle();
-    check(ribbon && ribbon->isVisible() && expiredRibbon
+    check(ribbon != nullptr && ribbon->isVisible() && expiredRibbon != nullptr
               && !expiredRibbon->isVisible(),
           "fresh input never layers both ribbons");
     presenter.processMessage(KeyMessage {
@@ -1363,7 +1365,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         .pressed = false,
     });
     settle();
-    check(shiftSlot && !shiftSlot->property("pressed").toBool(),
+    check(shiftSlot != nullptr && !shiftSlot->property("pressed").toBool(),
           "final observed release immediately clears slot state");
     const auto idleExpiration = KeyboardPresenter::Clock::now();
     presenter.setExpiration(1, 10000, idleExpiration);
@@ -1386,12 +1388,12 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         }
         const qreal expectedOpacity =
             visibility == PanelVisibility::Always ? 1.0 : 0.4;
-        check(heldFill && fadingDock
+        check(heldFill != nullptr && fadingDock != nullptr
                   && qAbs(heldFill->opacity() - expectedOpacity) < 0.001
                   && qAbs(fadingDock->opacity() - expectedOpacity) < 0.001,
               "panel and idle dock fade together unless panel visibility is "
               "always");
-        check(heldFill
+        check(heldFill != nullptr
                   && heldFill->isVisible()
                       == (visibility != PanelVisibility::Never),
               "never hides decoration while preserving dock fade behavior");
@@ -1408,7 +1410,8 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     if (expiredRibbon) {
         expiredRibbon->setOpacity(0.4);
     }
-    check(heldFill && fadingDock && qFuzzyCompare(heldFill->opacity(), 1.0)
+    check(heldFill != nullptr && fadingDock != nullptr
+              && qFuzzyCompare(heldFill->opacity(), 1.0)
               && qFuzzyCompare(fadingDock->opacity(), 1.0),
           "observed held modifier keeps panel and dock opaque during history "
           "fade");
@@ -1525,7 +1528,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     settle();
     shiftSlot =
         findVisualItem(view.rootObject(), QStringLiteral("modifierSlotShift"));
-    check(shiftSlot && !shiftSlot->property("pressed").toBool(),
+    check(shiftSlot != nullptr && !shiftSlot->property("pressed").toBool(),
           "held-list reset immediately clears pressed visuals");
     presenter.processMessage(KeyboardSnapshotMessage {
         .id = 1,
@@ -1540,7 +1543,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     presenter.advance(immediateRibbonExpiration + std::chrono::milliseconds(3));
     settle();
     check(presenter.historyModel().rowCount() == 0 && !presenter.fading()
-              && expiredRibbon && !expiredRibbon->isVisible(),
+              && expiredRibbon != nullptr && !expiredRibbon->isVisible(),
           "zero-duration ribbon expiration is immediate");
     presenter.setExpiration(0, 0);
     presenter.clearHistory();
@@ -1548,7 +1551,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
     view.resize(600, 10);
     runtime.applyAcceptedConfiguration(config);
     settle();
-    check(ribbon && qFuzzyIsNull(ribbon->height())
+    check(ribbon != nullptr && qFuzzyIsNull(ribbon->height())
               && ribbon->property("capacity").toInt() == 0,
           "impossible short surface safely zero-sizes both bands");
     config.height = 120;
@@ -1691,8 +1694,8 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
                       .themeOptions.value(QStringLiteral("height"))
                       .toLongLong()
                   == 32
-              && heldRow && heldRow->isVisible() && heldRow->height() > 0
-              && heldRow->height() <= 32,
+              && heldRow != nullptr && heldRow->isVisible()
+              && heldRow->height() > 0 && heldRow->height() <= 32,
           "accepted cap style reaches bounded two-band geometry");
     check(writeFile(configPath,
                     QByteArrayLiteral("[theme]\nid='text-held'\n[theme.options]"
@@ -1700,7 +1703,8 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
           "hide example held feedback via live theme option");
     manager.reloadNow();
     QCoreApplication::processEvents();
-    check(heldRow && !heldRow->isVisible() && presenter.heldKeyCount() == 1,
+    check(heldRow != nullptr && !heldRow->isVisible()
+              && presenter.heldKeyCount() == 1,
           "example option hides the dock without changing backend held state");
     presenter.processMessage(KeyMessage {
         .keyboardId = 1,
@@ -1837,7 +1841,7 @@ void testRuntimeLoadingAndSwitchRecovery(const QString& userRoot) {
         QStringLiteral("hyprcastKeycapsPanelFrame"),
         Qt::FindChildrenRecursively);
     check(
-        capFrame && capFrame->height() >= 68
+        capFrame != nullptr && capFrame->height() >= 68
             && presenter.outputText() == QStringLiteral("kept"),
         "live keycaps option affects panel geometry without clearing history");
 }

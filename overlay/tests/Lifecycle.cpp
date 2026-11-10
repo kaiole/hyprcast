@@ -123,7 +123,7 @@ void testLifecycle() {
     check(until([&] { return ipc.hasCastingState(); }),
           "reconnect snapshot received");
     QCoreApplication::processEvents();
-    check(!active && !peer->bytesAvailable(),
+    check(!active && peer->bytesAvailable() == 0,
           "reconnect does not re-enable capture");
 
     QProcess timeout;

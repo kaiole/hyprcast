@@ -26,18 +26,19 @@ std::string_view stringAt(lua_State* L, int index) {
 
 void plainTable(lua_State* L, int index) {
     require(lua_type(L, index) == LUA_TTABLE, "expected a table");
-    require(!lua_getmetatable(L, index), "metatables are not supported");
+    require(lua_getmetatable(L, index) == 0, "metatables are not supported");
 }
 
 void readList(lua_State* L, std::vector<std::string>& out) {
     require(lua_type(L, -1) == LUA_TTABLE, "keyboards must be a table");
-    require(!lua_getmetatable(L, -1), "keyboards must not have a metatable");
+    require(lua_getmetatable(L, -1) == 0,
+            "keyboards must not have a metatable");
     const int table = lua_absindex(L, -1);
     const size_t length = lua_rawlen(L, table);
     size_t count = 0;
     lua_pushnil(L);
     while (lua_next(L, table)) {
-        require(lua_isinteger(L, -2),
+        require(lua_isinteger(L, -2) != 0,
                 "keyboards must be a dense array with integer keys");
         const auto key = lua_tointeger(L, -2);
         require(key > 0 && std::cmp_less_equal(key, length),

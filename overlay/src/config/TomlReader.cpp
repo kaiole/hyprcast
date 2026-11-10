@@ -33,7 +33,7 @@ optionalTable(const toml::table& parent,
 }
 
 TableReader::TableReader(const toml::table& table, QString path, QString label)
-    : m_table(table),
+    : m_table(&table),
       m_path(std::move(path)),
       m_label(std::move(label)) {}
 
@@ -42,7 +42,7 @@ TableReader::onlyKeys(std::initializer_list<std::string_view> allowed) {
     if (!ok()) {
         return *this;
     }
-    for (const auto& [key, value] : m_table) {
+    for (const auto& [key, value] : *m_table) {
         if (!std::ranges::contains(allowed, key.str())) {
             m_error = QStringLiteral("unknown %1 key '%2'")
                           .arg(m_label, name(key.str()));
@@ -53,7 +53,7 @@ TableReader::onlyKeys(std::initializer_list<std::string_view> allowed) {
 }
 
 TableReader& TableReader::required(std::string_view key) {
-    if (ok() && !m_table.get(key)) {
+    if (ok() && !m_table->get(key)) {
         m_error = QStringLiteral("missing required %1 key '%2'")
                       .arg(m_label, name(key));
     }

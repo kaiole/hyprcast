@@ -88,7 +88,7 @@ public:
         if (!ok()) {
             return *this;
         }
-        if (const auto* value = m_table.get(key)) {
+        if (const auto* value = m_table->get(key)) {
             if (auto outcome = std::forward<Read>(read)(*value); !outcome) {
                 m_error = outcome.error();
             }
@@ -102,7 +102,7 @@ public:
     [[nodiscard]] QString name(std::string_view key) const;
 
 private:
-    const toml::table& m_table;
+    const toml::table* m_table;
     QString m_path;
     QString m_label;
     QString m_error;

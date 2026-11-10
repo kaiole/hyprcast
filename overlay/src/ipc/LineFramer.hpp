@@ -10,7 +10,7 @@ namespace Hyprcast::Overlay {
 // Splits a byte stream into newline-terminated frames (CRLF tolerated).
 class LineFramer {
 public:
-    static constexpr qsizetype MaxFrameBytes = 4 * 1024 * 1024;
+    static constexpr qsizetype MaxFrameBytes = qsizetype {4} * 1024 * 1024;
 
     // Returns the frames completed by `bytes`. On an oversized frame the buffer
     // is discarded and an error returned.

@@ -94,7 +94,7 @@ OverlayInstance::acquire(Command command, CUniqueFd inheritedLock) {
                            0600)};
     struct stat info {};
     if (!lock || ::fstat(lock.get(), &info) || !S_ISREG(info.st_mode)
-        || info.st_uid != ::getuid() || (info.st_mode & 0077)) {
+        || info.st_uid != ::getuid() || (info.st_mode & 0077u)) {
         return std::unexpected(
             QStringLiteral("Cannot safely open overlay ownership lock"));
     }
@@ -143,6 +143,10 @@ OverlayInstance::forward(Command command) const {
         if (client.waitForConnected(static_cast<int>(ProbeTimeout.count()))) {
             break;
         }
+        // A forwarding client exits after one request and has no event loop
+        // to wait on; it backs off while the resident creates its socket.
+        // unsigned long is the parameter type of QThread::msleep().
+        // NOLINTNEXTLINE(bugprone-unsafe-functions,google-runtime-int)
         QThread::msleep(static_cast<unsigned long>(ConnectRetry.count()));
     } while (!connectDeadline.hasExpired());
     if (client.state() != QLocalSocket::ConnectedState) {

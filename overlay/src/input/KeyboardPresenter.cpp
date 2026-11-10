@@ -120,7 +120,7 @@ void KeyboardPresenter::clearHistory() {
     scheduleTimer(Clock::now());
 }
 
-void KeyboardPresenter::setHistoryOptions(InputHistoryOptions options) {
+void KeyboardPresenter::setHistoryOptions(const InputHistoryOptions& options) {
     const auto previousPresentation = m_history.presentationOptions();
     m_history.setOptions(options);
     m_fadingHistory.setPresentationOptions(

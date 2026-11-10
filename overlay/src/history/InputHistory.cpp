@@ -334,7 +334,7 @@ HistoryProjectionModel::refresh(const QSet<quint64>& collapsedRuns) {
             || action.kind != InterpretedActionKind::Text || runId == 0
             || runLength <= 1 || textRunHasGraphemeBoundaries(entries, i, end);
         const bool reachedThreshold =
-            static_cast<int>(runLength) >= options.repeatThreshold;
+            std::cmp_greater_equal(runLength, options.repeatThreshold);
         if (options.countedRepeats && runId != 0 && runLength > 1
             && eligibleText
             && (reachedThreshold || collapsed.contains(runId))) {
@@ -458,9 +458,9 @@ bool HistoryProjectionModel::applyRows(std::vector<Row> nextRows) {
 }
 
 HistoryListModel::HistoryListModel(QObject* parent)
-    : QAbstractListModel(parent) {
-    m_presentation =
-        new HistoryProjectionModel(*this, this); // Owned by this (Qt parent).
+    : QAbstractListModel(parent),
+      // Owned by this (Qt parent).
+      m_presentation(new HistoryProjectionModel(*this, this)) {
     refreshPresentation();
 }
 
@@ -574,7 +574,7 @@ void HistoryListModel::refreshPresentation() {
 
 InputHistory::InputHistory(InputHistoryOptions options, QObject* parent)
     : HistoryListModel(parent),
-      m_options(options) {
+      m_options(std::move(options)) {
     m_options.maxRetainedUtf16CodeUnits =
         std::max<qsizetype>(0, m_options.maxRetainedUtf16CodeUnits);
     m_presentationOptions = m_options.presentation;

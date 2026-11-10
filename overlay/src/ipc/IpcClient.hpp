@@ -12,6 +12,7 @@ namespace Hyprcast::Overlay {
 
 class IpcClient final : public QObject {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(IpcClient)
 
 public:
     explicit IpcClient(QString socketPath, QObject* parent = nullptr);
@@ -52,7 +53,7 @@ private:
     static constexpr int MaxReconnectDelayMs = 10'000;
     static constexpr int ConnectionTimeoutMs = 3'000;
     static constexpr int StableConnectionMs = 10'000;
-    static constexpr qint64 ReadChunkBytes = 64 * 1024;
+    static constexpr qint64 ReadChunkBytes = qint64 {64} * 1024;
 
     QString m_socketPath;
     QLocalSocket m_socket;

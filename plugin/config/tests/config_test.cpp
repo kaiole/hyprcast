@@ -17,8 +17,9 @@ struct lua_closer {
     void operator()(lua_State* lua) const noexcept { lua_close(lua); }
 };
 
-// A Lua state whose global `configure` calls config_state::configure, the way
-// Hyprland exposes hyprcast.configure.
+// A Lua state whose global `configure` reaches `state` the way the function
+// Hyprland exposes as hyprcast.configure does. `configure_unloaded` is the
+// same function with no state behind it.
 class ConfigStateTest : public testing::Test {
 protected:
     ConfigStateTest() : lua(luaL_newstate()) {
@@ -26,16 +27,23 @@ protected:
             return;
         }
         luaL_openlibs(lua.get());
-        lua_pushlightuserdata(lua.get(), &state);
+        expose("configure", &state);
+        expose("configure_unloaded", nullptr);
+    }
+
+    // Makes call_configure() for `target` the Lua global `name`.
+    void expose(const char* name, config_state* target) {
+        lua_pushlightuserdata(lua.get(), target);
         lua_pushcclosure(
             lua.get(),
             [](lua_State* lua_state) {
-                return static_cast<config_state*>(
-                           lua_touserdata(lua_state, lua_upvalueindex(1)))
-                    ->configure(lua_state);
+                return call_configure(
+                    lua_state,
+                    static_cast<config_state*>(
+                        lua_touserdata(lua_state, lua_upvalueindex(1))));
             },
             1);
-        lua_setglobal(lua.get(), "configure");
+        lua_setglobal(lua.get(), name);
     }
 
     void SetUp() override { ASSERT_NE(lua, nullptr); }
@@ -237,6 +245,23 @@ TEST_F(ConfigStateTest, ReportsWhichFieldIsInvalid) {
         EXPECT_TRUE(error.contains("hyprcast.configure: " + expected)) << error;
         state.finish_reload(false);
     }
+}
+
+// The function can outlive the plugin object in a Lua state that still holds
+// it. Calling it then is an error the script can catch, and nothing more.
+TEST_F(ConfigStateTest, ConfigureWithoutAStateIsALuaError) {
+    state.begin_reload();
+
+    const std::string error = run("configure_unloaded({filter='include'})");
+    EXPECT_TRUE(error.ends_with("hyprcast.configure: hyprcast is not loaded"))
+        << error;
+    expect_success("assert(not pcall(configure_unloaded, {}))");
+
+    // The state in use has not heard of either call.
+    expect_success("configure({keyboards={'kept'}})");
+    state.finish_reload(true);
+    EXPECT_EQ(state.accepted().filtered_keyboards,
+              std::vector<std::string> {"kept"});
 }
 
 // Called directly rather than through Lua's call machinery, a successful

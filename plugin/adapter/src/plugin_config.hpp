@@ -24,7 +24,8 @@ public:
 
     // `log` must outlive the object.
     plugin_config(log_sink& log, callbacks cbs);
-    // Unregisters hyprcast.configure, whose C callback reaches this object.
+    // Unregisters hyprcast.configure, whose C callback reaches this object's
+    // configuration.
     ~plugin_config();
 
     plugin_config(const plugin_config&) = delete;
@@ -37,8 +38,6 @@ public:
     }
 
 private:
-    static int configure(lua_State* lua) noexcept;
-
     void handle_config_reload();
 
     template <typename Function>

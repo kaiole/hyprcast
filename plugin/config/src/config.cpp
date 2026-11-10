@@ -155,4 +155,11 @@ int config_state::configure(lua_State* lua) noexcept {
     return 0;
 }
 
+int call_configure(lua_State* lua, config_state* state) noexcept {
+    if (state == nullptr) {
+        return luaL_error(lua, "hyprcast.configure: hyprcast is not loaded");
+    }
+    return state->configure(lua);
+}
+
 } // namespace hyprcast

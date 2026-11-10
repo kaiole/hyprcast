@@ -33,4 +33,10 @@ private:
     bool failed_ = false;
 };
 
+// What the C function registered as hyprcast.configure does. Lua calls that
+// as a plain function with no object to call it on, so the caller keeps a
+// pointer to the state that is in use and passes it here; when none is,
+// `state` is null and the call is a Lua error like any other failure.
+int call_configure(lua_State* lua, config_state* state) noexcept;
+
 } // namespace hyprcast

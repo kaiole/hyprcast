@@ -16,14 +16,14 @@ struct keyboard_info {
     keyboard_id id = 0;
     std::string name;
 
-    // Hyprland can replace a keymap during config reload without notifying
-    // keymap_listener. Track what we sent so layout updates can detect changes.
+    // Hyprland's layout notification does not say whether the keymap changed.
+    // Track what was sent so that only changes are reported.
     std::string last_sent_keymap;
 
     bool pending_removal = false;
     bool subscribed = false;
 
-    CHyprSignalListener key_event_listener, modifiers_listener, keymap_listener,
+    CHyprSignalListener key_event_listener, modifiers_listener,
         repeat_info_listener, destroy_listener;
 };
 

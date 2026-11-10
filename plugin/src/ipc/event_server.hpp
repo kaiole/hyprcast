@@ -1,9 +1,9 @@
 #pragma once
 
-#include "SockFile.hpp"
-#include "hyprcast/os/UniqueFd.hpp"
-#include "os/FileLock.hpp"
-#include "wayland/WlEventSource.hpp"
+#include "hyprcast/os/unique_fd.hpp"
+#include "os/file_lock.hpp"
+#include "sock_file.hpp"
+#include "wayland/wl_event_source.hpp"
 
 #include <cstddef>
 #include <cstdint>

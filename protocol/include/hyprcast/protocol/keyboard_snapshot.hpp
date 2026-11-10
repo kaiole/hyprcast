@@ -1,9 +1,9 @@
 #pragma once
 
-#include "hyprcast/protocol/KeyboardId.hpp"
-#include "hyprcast/protocol/Keymap.hpp"
-#include "hyprcast/protocol/Modifiers.hpp"
-#include "hyprcast/protocol/RepeatInfo.hpp"
+#include "hyprcast/protocol/keyboard_id.hpp"
+#include "hyprcast/protocol/keymap_text.hpp"
+#include "hyprcast/protocol/modifier_state.hpp"
+#include "hyprcast/protocol/repeat_info.hpp"
 
 #include <string>
 

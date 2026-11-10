@@ -1,6 +1,6 @@
 #include "ipc/Restart.hpp"
 
-#include "hyprcast/os/UniqueFd.hpp"
+#include "hyprcast/os/unique_fd.hpp"
 #include "ipc/OverlayInstance.hpp"
 
 #include <fcntl.h>

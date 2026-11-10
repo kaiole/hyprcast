@@ -1,8 +1,8 @@
 #pragma once
 
-#include "hyprland/KeyboardRegistry.hpp"
-#include "hyprland/PluginConfig.hpp"
-#include "ipc/EventServer.hpp"
+#include "hyprland/keyboard_registry.hpp"
+#include "hyprland/plugin_config.hpp"
+#include "ipc/event_server.hpp"
 
 #include <helpers/memory/Memory.hpp>
 

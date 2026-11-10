@@ -1,7 +1,7 @@
 #pragma once
 
-#include "CallbackBoundary.hpp"
-#include "hyprcast/config/Config.hpp"
+#include "callback_boundary.hpp"
+#include "hyprcast/config/config.hpp"
 
 #include <hyprland/src/helpers/signal/Signal.hpp>
 

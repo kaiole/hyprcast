@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Log.hpp"
+#include "log.hpp"
 
 #include <exception>
 #include <format>

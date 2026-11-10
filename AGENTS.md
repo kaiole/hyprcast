@@ -38,14 +38,14 @@ developed on. These rules have no exceptions.
 
 | Path | Contents |
 |---|---|
-| `plugin/src/Hyprcast.*` | Plugin root object: wires registry, config and event server |
+| `plugin/src/keycaster.*` | Plugin root object: wires registry, config and event server |
 | `plugin/src/hyprland/` | Plugin entry points, keyboard registry, Lua config glue |
 | `plugin/src/ipc/` | Event server: socket, client connection, outgoing queue |
 | `plugin/src/os/`, `plugin/src/wayland/` | RAII wrappers: file lock, Wayland event source |
 | `plugin/src/config/`, `plugin/include/` | Plugin configuration parsing, free of Hyprland headers so it is testable |
 | `plugin/tests/` | Plugin tests (configuration only; nothing loads the plugin) |
 | `protocol/include/hyprcast/protocol/` | Event types and their JSON wire format |
-| `common/` | Code shared by both components; `Version.hpp.in` is configured by CMake |
+| `common/` | Code shared by both components; `version.hpp.in` is configured by CMake |
 | `overlay/src/ipc/` | Socket client, message parsing, single-instance and restart handling |
 | `overlay/src/input/` | xkb interpretation of key events into actions |
 | `overlay/src/history/` | The list of shown actions and its presentation model |
@@ -84,10 +84,10 @@ is wrong for the code base as a whole, with the reason next to it.
 - Naming is enforced by the `.clang-tidy` files. `plugin/`, `protocol/` and
   `common/` follow the root config: snake_case for everything, private members
   with a trailing underscore, no Hyprland-style prefixes (`C`, `S`, `e`, `m_`,
-  `g_p`). `overlay/` overrides it with Qt style (CamelCase types, camelCase
-  functions, `m_` members). The namespaces `hyprcast` and `hyprcast::overlay`
-  are lower case in both. Names owned by Hyprland, hyprutils, Lua, wayland or
-  xkb keep their spelling.
+  `g_p`), snake_case file names. `overlay/` overrides it with Qt style
+  (CamelCase types and file names, camelCase functions, `m_` members). The
+  namespaces `hyprcast` and `hyprcast::overlay` are lower case in both. Names
+  owned by Hyprland, hyprutils, Lua, wayland or xkb keep their spelling.
 - Do not give a variable or member the name of a type: gcc rejects what clang
   accepts (`-Wshadow`, `-Wchanges-meaning`). Types are named for what they
   hold (`modifier_state`, `keymap_text`), variables for their role.

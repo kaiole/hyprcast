@@ -1,7 +1,7 @@
 #include "OverlayInstance.hpp"
 
 #include "Restart.hpp"
-#include "hyprcast/os/UniqueFd.hpp"
+#include "hyprcast/os/unique_fd.hpp"
 
 #include <fcntl.h>
 #include <sys/file.h>

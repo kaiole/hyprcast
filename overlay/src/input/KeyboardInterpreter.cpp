@@ -2,8 +2,8 @@
 
 #include "../history/InterpretedAction.hpp"
 #include "../ipc/Protocol.hpp"
-#include "hyprcast/protocol/Modifiers.hpp"
-#include "hyprcast/protocol/RepeatInfo.hpp"
+#include "hyprcast/protocol/modifier_state.hpp"
+#include "hyprcast/protocol/repeat_info.hpp"
 
 #include <QLatin1StringView>
 #include <xkbcommon/xkbcommon-keysyms.h>

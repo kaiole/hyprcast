@@ -1,6 +1,6 @@
 #pragma once
 
-#include "KeyState.hpp"
+#include "key_state.hpp"
 
 #include <cstdint>
 

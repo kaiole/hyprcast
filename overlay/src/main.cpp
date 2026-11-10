@@ -1,6 +1,6 @@
 #include "config/OverlayConfig.hpp"
 #include "history/InputHistory.hpp"
-#include "hyprcast/Version.hpp"
+#include "hyprcast/version.hpp"
 #include "input/KeyboardPresenter.hpp"
 #include "ipc/CaptureController.hpp"
 #include "ipc/IpcClient.hpp"

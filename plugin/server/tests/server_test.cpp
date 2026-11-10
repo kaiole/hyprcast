@@ -86,6 +86,13 @@ std::size_t socket_buffer_allowance() {
     return 2 * static_cast<std::size_t>(send_buffer_size);
 }
 
+// A different letter for each of 26 consecutive messages, so that a message
+// sent twice, left out or out of order shows in what the client received.
+char letter(std::size_t index) {
+    constexpr std::string_view letters = "abcdefghijklmnopqrstuvwxyz";
+    return letters[index % letters.size()];
+}
+
 // Leaves the process without a free descriptor for as long as it lives: what
 // is open stays usable, opening anything else fails with EMFILE.
 class descriptor_exhaustion {
@@ -521,6 +528,35 @@ TEST_F(EventServerTest, HoldsManySmallMessagesForASlowClient) {
     EXPECT_FALSE(client.closed());
 }
 
+// The cap is on what a client has not been sent yet, not on what it has been
+// sent over its lifetime: a client that keeps reading is served without end.
+TEST_F(EventServerTest, KeepsServingAClientThatReadsMoreThanTheCap) {
+    start();
+    auto client = connect();
+    // More than the socket takes, so that each message is sent in pieces.
+    constexpr std::size_t message_size = std::size_t {512} * 1024;
+
+    std::string expected;
+    for (std::size_t index = 0;
+         expected.size() <= 2 * event_server::max_queued_bytes;
+         ++index) {
+        const std::string message(message_size, letter(index));
+        server->queue_message(message);
+        expected += message + "\n";
+        // The backlog is empty again before the next message joins it.
+        ASSERT_TRUE(wait([&] {
+            return client.received().size() >= expected.size();
+        })) << "stalled after "
+            << client.received().size() << " of " << expected.size()
+            << " bytes";
+    }
+
+    EXPECT_EQ(calls, call_list({"connected"}));
+    // Not EXPECT_EQ: a failure would print both strings.
+    EXPECT_TRUE(client.received() == expected);
+    EXPECT_FALSE(client.closed());
+}
+
 // The backlog for a client that does not read is bounded: the server holds
 // max_queued_bytes at most and gives up on the client with the first message
 // that does not fit.
@@ -558,6 +594,49 @@ TEST_F(EventServerTest, DisconnectsAClientWhoseBacklogExceedsTheCap) {
     server->queue_message("fresh");
     EXPECT_TRUE(wait([&] { return !next.lines().empty(); }));
     EXPECT_EQ(next.received(), "fresh\n");
+}
+
+// Nothing of a dropped client's backlog is held against the next client: it
+// may fall behind by the whole cap in its turn, and is sent all of it once it
+// reads.
+TEST_F(EventServerTest, StartsTheNextClientWithAnEmptyBacklog) {
+    start();
+    auto stalled = connect();
+    // More than the socket takes, so that a client is behind from its first
+    // message on.
+    constexpr std::size_t line_size = std::size_t {512} * 1024;
+    constexpr std::size_t lines = event_server::max_queued_bytes / line_size;
+    ASSERT_EQ(lines * line_size, event_server::max_queued_bytes);
+
+    // The server gives up on a first client that is as far behind as it gets.
+    for (std::size_t sent = 0; count("disconnected") == 0; ++sent) {
+        ASSERT_LT(sent, 4 * lines) << "the backlog grows without limit";
+        server->queue_message(std::string(line_size - 1, 's'));
+    }
+    ASSERT_EQ(calls, call_list({"connected", "disconnected"}));
+
+    // The next client is sent exactly the cap before it reads anything. That
+    // is within the cap however little of it the socket takes, unless the
+    // server still counts what it held for the previous client.
+    auto next = connect();
+    std::string expected;
+    for (std::size_t index = 0; index < lines; ++index) {
+        const std::string message(line_size - 1, letter(index));
+        server->queue_message(message);
+        expected += message + "\n";
+    }
+    ASSERT_EQ(expected.size(), event_server::max_queued_bytes);
+    EXPECT_EQ(calls, call_list({"connected", "disconnected", "connected"}));
+
+    // The backlog goes out as the client reads. For that the server has to
+    // start watching this client for becoming writable, however it left the
+    // previous one.
+    EXPECT_TRUE(wait([&] { return next.received().size() >= expected.size(); }))
+        << "stalled after " << next.received().size() << " of "
+        << expected.size() << " bytes";
+    // Not EXPECT_EQ: a failure would print both strings.
+    EXPECT_TRUE(next.received() == expected);
+    EXPECT_FALSE(next.closed());
 }
 
 // A connection that cannot be accepted, here for want of a descriptor, stays

@@ -21,8 +21,8 @@ namespace Hyprcast::Overlay {
         };
 
         Kind                         kind = Kind::Key;
-        QString                      identity; // Modifier or key label; empty for Text.
-        QString                      text;     // Produced text; Text only.
+        QString                      identity{}; // Modifier or key label; empty for Text.
+        QString                      text{};     // Produced text; Text only.
 
         [[nodiscard]] const QString& label() const noexcept {
             return kind == Kind::Text ? text : identity;

@@ -154,12 +154,12 @@ namespace Hyprcast::Overlay {
         };
 
         struct Keyboard {
-            SModifiers                          modifiers;
-            SRepeatInfo                         repeatInfo;
-            KeymapPtr                           keymap;
-            StatePtr                            state;
+            SModifiers                          modifiers{};
+            SRepeatInfo                         repeatInfo{};
+            KeymapPtr                           keymap{};
+            StatePtr                            state{};
             ModifierMasks                       modifierMasks{}; // Per ModifierDefinitions entry, for `keymap`.
-            std::map<std::uint32_t, PressedKey> pressed;
+            std::map<std::uint32_t, PressedKey> pressed{};
         };
 
         ContextPtr                        context{xkb_context_new(XKB_CONTEXT_NO_FLAGS)};

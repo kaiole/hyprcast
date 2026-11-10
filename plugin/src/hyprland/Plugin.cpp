@@ -52,6 +52,13 @@ namespace {
     }
 }
 
+// Hyprland's plugin ABI declares these two entry points extern "C" yet has
+// them return C++ types; the signatures are not ours to change.
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wreturn-type-c-linkage"
+#endif
+
 // Do NOT change this function; Hyprland's ABI fixes its signature.
 // NOLINTNEXTLINE(modernize-use-string-view)
 APICALL EXPORT std::string PLUGIN_API_VERSION() {
@@ -98,6 +105,10 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) try {
     teardown();
     throw;
 }
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 
 APICALL EXPORT void PLUGIN_EXIT() {
     teardown();

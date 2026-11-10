@@ -27,11 +27,11 @@ namespace Hyprcast::Overlay {
     // Startup settings carried across exec. Plain data: the descriptors that travel
     // with it are owned separately, so copying a context never duplicates ownership.
     struct RestartContext {
-        QString             socketPath;
-        QString             configPath;
+        QString             socketPath{};
+        QString             configPath{};
         bool                explicitConfig = false;
-        QStringList         arguments;
-        std::optional<bool> target;
+        QStringList         arguments{};
+        std::optional<bool> target{};
         Deadline            deadline{};
     };
 

@@ -17,7 +17,9 @@ namespace hyprcast {
 class hyprland_log_sink final : public log_sink {
 private:
     void do_write(log_level level, std::string_view message) override {
-        Log::logger->log(to_hyprland(level), "[hyprcast] {}", message);
+        // The second argument is where the message comes from, which
+        // Hyprland prints in brackets before it; it is not a format string.
+        Log::logger->log(to_hyprland(level), "hyprcast", message);
     }
 
     void do_notify_failure(std::string_view message) override {

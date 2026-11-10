@@ -10,10 +10,13 @@
 #include "hyprcast/wire/messages.hpp"
 #include "hyprland/keyboard_registry.hpp"
 #include "hyprland/plugin_config.hpp"
+#include "ipc/event_server.hpp"
 
+#include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/devices/IKeyboard.hpp>
 #include <hyprland/src/helpers/memory/Memory.hpp>
 
+#include <cstdlib>
 #include <stdexcept>
 #include <utility>
 
@@ -23,6 +26,9 @@ namespace hyprcast {
 // request enables it.
 keycaster::keycaster()
     : server_(
+          g_pCompositor->m_wlEventLoop,
+          event_socket_dir(std::getenv("XDG_RUNTIME_DIR"),
+                           g_pCompositor->m_instanceSignature),
           log_,
           [this] { request_registry_snapshot(); },
           [this](bool enabled) { set_pause(!enabled); },

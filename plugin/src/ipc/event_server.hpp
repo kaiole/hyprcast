@@ -12,9 +12,22 @@
 #include <filesystem>
 #include <functional>
 #include <string>
+#include <string_view>
+
+struct wl_event_loop;
 
 namespace hyprcast {
 
+// The directory that holds the event socket and its lock for one compositor
+// instance: <runtime_dir>/hyprcast/<instance_signature>. `runtime_dir` is the
+// value of XDG_RUNTIME_DIR; throws if it is null or empty.
+[[nodiscard]] std::filesystem::path
+event_socket_dir(const char* runtime_dir, std::string_view instance_signature);
+
+// Serves plugin events to one client at a time over a Unix socket
+// (events.sock) in a directory it creates and guards with a lock file
+// (server.lock). A new connection replaces the current client. Everything
+// runs on the thread that dispatches `loop`.
 class event_server {
 public:
     using connected_cb =
@@ -22,8 +35,10 @@ public:
     using capture_cb = std::function<void(bool enabled)>;
     using disconnected_cb = std::function<void()>;
 
-    // `log` must outlive the server.
-    event_server(log_sink& log,
+    // `loop` and `log` must outlive the server.
+    event_server(wl_event_loop* loop,
+                 const std::filesystem::path& sock_dir,
+                 log_sink& log,
                  connected_cb on_connected,
                  capture_cb on_capture,
                  disconnected_cb on_disconnected);
@@ -48,7 +63,7 @@ private:
         std::filesystem::path lock_file;
     };
 
-    static sock_paths init_sock_paths();
+    static sock_paths init_sock_paths(const std::filesystem::path& sock_dir);
     static unique_fd create_socket();
 
     static int on_socket_readable(int sock_fd, std::uint32_t mask, void* data);
@@ -58,6 +73,7 @@ private:
     void flush_messages();
     void update_wl_dispatch_event(std::uint32_t mask);
 
+    wl_event_loop* loop_;
     log_sink* log_;
     connected_cb on_connected_;
     capture_cb on_capture_;

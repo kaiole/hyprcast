@@ -4,7 +4,6 @@
 #include "hyprcast/log/run_guarded.hpp"
 #include "hyprcast/protocol/wire.hpp"
 
-#include <Compositor.hpp>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -15,7 +14,6 @@
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
-#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <iterator>
@@ -30,7 +28,7 @@ namespace {
 
 constexpr int backlog_size = 1;
 constexpr std::size_t sock_path_capacity = sizeof(::sockaddr_un {}.sun_path);
-constexpr std::string_view sock_dir_name = "hyprcast";
+constexpr std::string_view runtime_subdir_name = "hyprcast";
 constexpr std::string_view sock_file_name = "events.sock";
 constexpr std::string_view lock_file_name = "server.lock";
 // A longer unterminated buffer can never become a valid command.
@@ -39,15 +37,28 @@ constexpr std::size_t max_command_length =
 
 } // namespace
 
-event_server::event_server(log_sink& log,
+std::filesystem::path event_socket_dir(const char* runtime_dir,
+                                       std::string_view instance_signature) {
+    if (runtime_dir == nullptr || runtime_dir[0] == '\0') {
+        throw std::runtime_error("XDG_RUNTIME_DIR is unset");
+    }
+
+    return std::filesystem::path(runtime_dir) / runtime_subdir_name
+        / instance_signature;
+}
+
+event_server::event_server(wl_event_loop* loop,
+                           const std::filesystem::path& sock_dir,
+                           log_sink& log,
                            connected_cb on_connected,
                            capture_cb on_capture,
                            disconnected_cb on_disconnected)
-    : log_(&log),
+    : loop_(loop),
+      log_(&log),
       on_connected_(std::move(on_connected)),
       on_capture_(std::move(on_capture)),
       on_disconnected_(std::move(on_disconnected)),
-      sock_paths_(init_sock_paths()),
+      sock_paths_(init_sock_paths(sock_dir)),
       sock_lock_(sock_paths_.lock_file),
       sock_fd_(create_socket()),
       sock_file_(sock_paths_.sock_file) {
@@ -104,12 +115,11 @@ event_server::event_server(log_sink& log,
                                     + sock_paths_.sock_file.string() + "'");
     }
 
-    wl_socket_readable_.reset(
-        ::wl_event_loop_add_fd(g_pCompositor->m_wlEventLoop,
-                               sock_fd_.get(),
-                               WL_EVENT_READABLE,
-                               &on_socket_readable,
-                               this));
+    wl_socket_readable_.reset(::wl_event_loop_add_fd(loop_,
+                                                     sock_fd_.get(),
+                                                     WL_EVENT_READABLE,
+                                                     &on_socket_readable,
+                                                     this));
     if (!wl_socket_readable_) {
         throw std::runtime_error(
             "Cannot register IPC socket with Wayland event loop");
@@ -165,14 +175,8 @@ void event_server::shutdown() noexcept {
     sock_fd_.reset();
 }
 
-event_server::sock_paths event_server::init_sock_paths() {
-    const char* runtime_dir = std::getenv("XDG_RUNTIME_DIR");
-    if (runtime_dir == nullptr || runtime_dir[0] == '\0') {
-        throw std::runtime_error("XDG_RUNTIME_DIR is unset");
-    }
-
-    const auto sock_dir = std::filesystem::path(runtime_dir) / sock_dir_name
-        / g_pCompositor->m_instanceSignature;
+event_server::sock_paths
+event_server::init_sock_paths(const std::filesystem::path& sock_dir) {
     const auto sock_file = sock_dir / sock_file_name;
 
     if (sock_file.native().size() >= sock_path_capacity) {
@@ -270,12 +274,11 @@ int event_server::on_socket_readable(int sock_fd,
     self->client_fd_ = std::move(client_fd);
     log_message(*self->log_, log_level::trace, "Client connected");
 
-    self->wl_client_events_.reset(
-        ::wl_event_loop_add_fd(g_pCompositor->m_wlEventLoop,
-                               self->client_fd_.get(),
-                               WL_EVENT_READABLE,
-                               &on_client_event,
-                               self));
+    self->wl_client_events_.reset(::wl_event_loop_add_fd(self->loop_,
+                                                         self->client_fd_.get(),
+                                                         WL_EVENT_READABLE,
+                                                         &on_client_event,
+                                                         self));
     if (!self->wl_client_events_) {
         log_error(*self->log_,
                   "Cannot register client with Wayland event loop; "

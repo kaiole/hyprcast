@@ -80,8 +80,9 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   # cannot prove non-null, including from inside libstdc++. A source property
   # because it has to follow the -Wnull-dereference from hyprcast::warnings.
   set_source_files_properties(
-    src/hyprland/plugin_config.cpp src/hyprland/keyboard_registry.cpp
-    src/ipc/event_server.cpp PROPERTIES COMPILE_OPTIONS -Wno-null-dereference)
+    src/keycaster.cpp src/hyprland/plugin_config.cpp
+    src/hyprland/keyboard_registry.cpp PROPERTIES COMPILE_OPTIONS
+                                                  -Wno-null-dereference)
 endif()
 
 install(TARGETS hyprcast LIBRARY DESTINATION lib)

@@ -1,16 +1,23 @@
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Network Qml Quick)
 find_package(LayerShellQt REQUIRED)
 find_package(PkgConfig REQUIRED)
-find_package(tomlplusplus 3.4 CONFIG QUIET)
-if(NOT TARGET tomlplusplus::tomlplusplus)
-  include(FetchContent)
-  FetchContent_Declare(
-    tomlplusplus
-    GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
-    GIT_TAG v3.4.0
-    GIT_SHALLOW TRUE)
-  FetchContent_MakeAvailable(tomlplusplus)
-endif()
+
+# The system toml++ when present, else the pinned release. Update URL and hash
+# together.
+include(FetchContent)
+
+FetchContent_Declare(
+  tomlplusplus
+  URL https://github.com/marzer/tomlplusplus/archive/refs/tags/v3.4.0.tar.gz
+  URL_HASH
+    SHA256=8517f65938a4faae9ccf8ebb36631a38c1cadfb5efa85d9a72e15b9e97d25155
+  SYSTEM FIND_PACKAGE_ARGS 3.4 CONFIG)
+block()
+set(CMAKE_COMPILE_WARNING_AS_ERROR OFF)
+set(CMAKE_CXX_CLANG_TIDY "")
+FetchContent_MakeAvailable(tomlplusplus)
+endblock()
+
 pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET "xkbcommon>=0.7")
 
 add_library(

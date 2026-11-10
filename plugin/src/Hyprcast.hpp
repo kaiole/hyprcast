@@ -7,33 +7,36 @@
 #include <helpers/memory/Memory.hpp>
 
 namespace Hyprcast {
-    class CHyprcast {
-      public:
-        CHyprcast();
 
-        // Members hold callbacks that capture `this`, so the object must never move.
-        CHyprcast(const CHyprcast&)            = delete;
-        CHyprcast& operator=(const CHyprcast&) = delete;
-        CHyprcast(CHyprcast&&)                 = delete;
-        CHyprcast& operator=(CHyprcast&&)      = delete;
+class CHyprcast {
+public:
+    CHyprcast();
 
-        void       addKeyboard(const SP<IKeyboard>& keyboard);
+    // Members hold callbacks that capture `this`, so the object must never
+    // move.
+    CHyprcast(const CHyprcast&) = delete;
+    CHyprcast& operator=(const CHyprcast&) = delete;
+    CHyprcast(CHyprcast&&) = delete;
+    CHyprcast& operator=(CHyprcast&&) = delete;
 
-        void       setPause(bool paused);
-        bool       isPaused() const noexcept;
+    void addKeyboard(const SP<IKeyboard>& keyboard);
 
-      private:
-        void                          requestRegistrySnapshot();
-        CKeyboardRegistry::SCallbacks makeRegistryCallbacks();
-        CPluginConfig::SCallbacks     makePluginConfigCallbacks();
+    void setPause(bool paused);
+    bool isPaused() const noexcept;
 
-        void                          shutdown() noexcept;
+private:
+    void requestRegistrySnapshot();
+    CKeyboardRegistry::SCallbacks makeRegistryCallbacks();
+    CPluginConfig::SCallbacks makePluginConfigCallbacks();
 
-        CEventServer                  m_server;
-        CKeyboardRegistry             m_keyboardRegistry;
-        CPluginConfig                 m_config;
+    void shutdown() noexcept;
 
-        bool                          m_shutdown = false;
-        bool                          m_paused   = true;
-    };
-}
+    CEventServer m_server;
+    CKeyboardRegistry m_keyboardRegistry;
+    CPluginConfig m_config;
+
+    bool m_shutdown = false;
+    bool m_paused = true;
+};
+
+} // namespace Hyprcast

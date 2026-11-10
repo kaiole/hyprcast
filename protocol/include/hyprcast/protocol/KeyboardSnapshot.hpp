@@ -8,11 +8,13 @@
 #include <string>
 
 namespace Hyprcast {
-    struct SKeyboardSnapshot {
-        KeyboardId  id = 0;
-        std::string name;
-        SModifiers  modifiers;
-        Keymap      keymap;
-        SRepeatInfo repeatInfo;
-    };
-}
+
+struct SKeyboardSnapshot {
+    KeyboardId id = 0;
+    std::string name;
+    SModifiers modifiers;
+    Keymap keymap;
+    SRepeatInfo repeatInfo;
+};
+
+} // namespace Hyprcast

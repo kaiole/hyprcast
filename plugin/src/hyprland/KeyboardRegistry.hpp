@@ -1,8 +1,8 @@
 #pragma once
 
+#include "CallbackBoundary.hpp"
 #include "KeyboardInfo.hpp"
 #include "hyprcast/config/Config.hpp"
-#include "CallbackBoundary.hpp"
 #include "hyprcast/protocol/KeyEvent.hpp"
 #include "hyprcast/protocol/KeyboardId.hpp"
 #include "hyprcast/protocol/KeyboardSnapshot.hpp"
@@ -22,57 +22,62 @@
 #include <vector>
 
 namespace Hyprcast {
-    class CKeyboardRegistry {
-      public:
-        using ExceptionCB       = std::move_only_function<void() noexcept>;
-        using SubscriptionCB    = std::function<void(SKeyboardSnapshot)>;
-        using UnsubscriptionCB  = std::function<void(KeyboardId)>;
-        using KeyEventCB        = std::function<void(KeyboardId, SKeyEvent)>;
-        using ModifiersEventCB  = std::function<void(KeyboardId, SModifiers)>;
-        using KeymapEventCB     = std::function<void(KeyboardId, Keymap)>;
-        using RepeatInfoEventCB = std::function<void(KeyboardId, SRepeatInfo)>;
 
-        struct SCallbacks {
-            ExceptionCB       onException;
-            SubscriptionCB    onSubscribe;
-            UnsubscriptionCB  onUnsubscribe;
-            KeyEventCB        onKeyEvent;
-            ModifiersEventCB  onModifiersEvent;
-            KeymapEventCB     onKeymapEvent;
-            RepeatInfoEventCB onRepeatInfoEvent;
-        };
+class CKeyboardRegistry {
+public:
+    using ExceptionCB = std::move_only_function<void() noexcept>;
+    using SubscriptionCB = std::function<void(SKeyboardSnapshot)>;
+    using UnsubscriptionCB = std::function<void(KeyboardId)>;
+    using KeyEventCB = std::function<void(KeyboardId, SKeyEvent)>;
+    using ModifiersEventCB = std::function<void(KeyboardId, SModifiers)>;
+    using KeymapEventCB = std::function<void(KeyboardId, Keymap)>;
+    using RepeatInfoEventCB = std::function<void(KeyboardId, SRepeatInfo)>;
 
-        explicit CKeyboardRegistry(SCallbacks callbacks);
-
-        // Listeners capture `this` and per-keyboard record pointers, so the registry must never move.
-        CKeyboardRegistry(const CKeyboardRegistry&)            = delete;
-        CKeyboardRegistry& operator=(const CKeyboardRegistry&) = delete;
-        CKeyboardRegistry(CKeyboardRegistry&&)                 = delete;
-        CKeyboardRegistry& operator=(CKeyboardRegistry&&)      = delete;
-
-        void               addKeyboard(const SP<IKeyboard>& keyboard);
-        void               updateSubscriptions(const SConfig& acceptedConfig);
-
-        // Snapshots every subscribed keyboard and records each keymap as sent.
-        [[nodiscard]] RegistrySnapshot getRegistrySnapshot();
-
-        void                           shutdown() noexcept;
-
-      private:
-        template <typename Function>
-        void runGuarded(std::string_view context, Function&& function) {
-            Hyprcast::runGuarded(context, std::forward<Function>(function), m_callbacks.onException);
-        }
-
-        void                                        syncKeymap(const SP<IKeyboard>& keyboard);
-        void                                        scheduleRemoval(SKeyboardInfo& keyboardInfo) noexcept;
-        void                                        unsubscribeListeners(SKeyboardInfo& keyboardInfo) noexcept;
-
-        SCallbacks                                  m_callbacks;
-        KeyboardId                                  m_nextId = 1;
-        std::vector<std::unique_ptr<SKeyboardInfo>> m_keyboardRegistry;
-
-        CHyprSignalListener                         m_layoutListener;
-        CWlEventSource                              m_wlIdleKeyboardRemoval;
+    struct SCallbacks {
+        ExceptionCB onException;
+        SubscriptionCB onSubscribe;
+        UnsubscriptionCB onUnsubscribe;
+        KeyEventCB onKeyEvent;
+        ModifiersEventCB onModifiersEvent;
+        KeymapEventCB onKeymapEvent;
+        RepeatInfoEventCB onRepeatInfoEvent;
     };
-}
+
+    explicit CKeyboardRegistry(SCallbacks callbacks);
+
+    // Listeners capture `this` and per-keyboard record pointers, so the
+    // registry must never move.
+    CKeyboardRegistry(const CKeyboardRegistry&) = delete;
+    CKeyboardRegistry& operator=(const CKeyboardRegistry&) = delete;
+    CKeyboardRegistry(CKeyboardRegistry&&) = delete;
+    CKeyboardRegistry& operator=(CKeyboardRegistry&&) = delete;
+
+    void addKeyboard(const SP<IKeyboard>& keyboard);
+    void updateSubscriptions(const SConfig& acceptedConfig);
+
+    // Snapshots every subscribed keyboard and records each keymap as sent.
+    [[nodiscard]] RegistrySnapshot getRegistrySnapshot();
+
+    void shutdown() noexcept;
+
+private:
+    template <typename Function>
+    void runGuarded(std::string_view context, Function&& function) {
+        Hyprcast::runGuarded(context,
+                             std::forward<Function>(function),
+                             m_callbacks.onException);
+    }
+
+    void syncKeymap(const SP<IKeyboard>& keyboard);
+    void scheduleRemoval(SKeyboardInfo& keyboardInfo) noexcept;
+    void unsubscribeListeners(SKeyboardInfo& keyboardInfo) noexcept;
+
+    SCallbacks m_callbacks;
+    KeyboardId m_nextId = 1;
+    std::vector<std::unique_ptr<SKeyboardInfo>> m_keyboardRegistry;
+
+    CHyprSignalListener m_layoutListener;
+    CWlEventSource m_wlIdleKeyboardRemoval;
+};
+
+} // namespace Hyprcast

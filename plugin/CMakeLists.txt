@@ -48,12 +48,12 @@ target_sources(
   hyprcast_config PUBLIC FILE_SET HEADERS BASE_DIRS include FILES
                          include/hyprcast/config/Config.hpp)
 target_link_libraries(hyprcast_config PUBLIC PkgConfig::HYPRCAST_LUA
-                      PRIVATE hyprcast_warnings)
+                      PRIVATE hyprcast::warnings)
 
 if(BUILD_TESTING)
   add_executable(configuration_tests tests/Config.cpp)
   target_link_libraries(configuration_tests PRIVATE hyprcast_config
-                                                    hyprcast_warnings)
+                                                    hyprcast::warnings)
   add_test(NAME configuration COMMAND configuration_tests)
 endif()
 pkg_check_modules(
@@ -82,7 +82,7 @@ if(EXISTS "${HYPRLAND_SOURCE_DIR}/src/version.h")
   file(REMOVE "${HYPRLAND_SOURCE_INCLUDE_ROOT}/hyprland")
   file(CREATE_LINK "${HYPRLAND_SOURCE_DIR}"
        "${HYPRLAND_SOURCE_INCLUDE_ROOT}/hyprland" SYMBOLIC)
-  target_include_directories(hyprcast BEFORE
+  target_include_directories(hyprcast SYSTEM BEFORE
                              PRIVATE "${HYPRLAND_SOURCE_INCLUDE_ROOT}")
 endif()
 
@@ -92,6 +92,16 @@ target_include_directories(
 target_link_libraries(
   hyprcast PRIVATE rt PkgConfig::HYPRLAND_DEPS hyprcast_config
                    hyprcast::common hyprcast::protocol libjson::libjson
-                   hyprcast_warnings)
+                   hyprcast::warnings)
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  # Hyprland's smart pointers return nullptr from operator-> when empty. Once
+  # that is inlined, GCC reports each use of a Hyprland global or keyboard it
+  # cannot prove non-null, including from inside libstdc++. A source property
+  # because it has to follow the -Wnull-dereference from hyprcast::warnings.
+  set_source_files_properties(
+    src/hyprland/PluginConfig.cpp src/hyprland/KeyboardRegistry.cpp
+    src/ipc/EventServer.cpp PROPERTIES COMPILE_OPTIONS -Wno-null-dereference)
+endif()
 
 install(TARGETS hyprcast LIBRARY DESTINATION lib)

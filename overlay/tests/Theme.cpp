@@ -1924,6 +1924,20 @@ TEST_F(LedgerThemeTest, PanelFollowsItsTimeline) {
         << "ledger panel shrinks as Backspace shortens the timeline";
 }
 
+TEST_F(LedgerThemeTest, SwitchesBackToTheBundledTheme) {
+    config.themeId = QStringLiteral("builtin:default");
+    config.themeOptions.clear();
+    ASSERT_TRUE(prepareSwitch(runtime, config, &error))
+        << "stage return to the bundled theme: " << error.toStdString();
+    runtime.applyAcceptedConfiguration(config);
+    EXPECT_EQ(runtime.activeThemeId(), QStringLiteral("builtin:default"))
+        << "the bundled theme is active again";
+    EXPECT_TRUE(findItem(QStringLiteral("hyprcastPanelFrame")) != nullptr
+                && findItem(QStringLiteral("hyprcastLedgerPanelFrame"))
+                    == nullptr)
+        << "the bundled theme replaces the visuals of the external one";
+}
+
 // The config manager driving the runtime the way the overlay wires them: a
 // reload is checked against the catalog, and a theme switch is prepared
 // before the config that asks for it is accepted. The history holds "kept".

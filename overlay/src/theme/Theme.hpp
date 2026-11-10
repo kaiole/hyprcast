@@ -12,13 +12,14 @@
 #include <QUrl>
 #include <QVariant>
 #include <QVariantMap>
+#include <cstdint>
 #include <expected>
 #include <memory>
 #include <optional>
 
 namespace Hyprcast::Overlay {
 
-enum class ThemeOptionType {
+enum class ThemeOptionType : std::uint8_t {
     Boolean,
     Integer,
     Number,

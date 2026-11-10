@@ -9,6 +9,7 @@
 #include <QStringView>
 #include <QTimer>
 #include <QVariantMap>
+#include <cstdint>
 #include <expected>
 #include <functional>
 #include <optional>
@@ -17,12 +18,12 @@ namespace Hyprcast::Overlay {
 
 // Layer-shell placement: one edge, or a corner when both axes are set.
 struct Anchor {
-    enum class Vertical {
+    enum class Vertical : std::uint8_t {
         None,
         Top,
         Bottom,
     };
-    enum class Horizontal {
+    enum class Horizontal : std::uint8_t {
         None,
         Left,
         Right,
@@ -34,13 +35,13 @@ struct Anchor {
     friend bool operator==(const Anchor&, const Anchor&) = default;
 };
 
-enum class PanelVisibility {
+enum class PanelVisibility : std::uint8_t {
     Always,
     WithContent,
     Never,
 };
 
-enum class RepeatPresentation {
+enum class RepeatPresentation : std::uint8_t {
     Expanded,
     Counted,
 };

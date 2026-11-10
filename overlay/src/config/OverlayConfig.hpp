@@ -112,7 +112,12 @@ namespace Hyprcast::Overlay {
         int                expireAfterMs             = 3000;
         int                fadeDurationMs            = 250;
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wfloat-equal"
+        // Reload detection asks whether two parsed configs are identical, so the
+        // exact comparison of backgroundOpacity is the intended one.
         friend bool        operator==(const OverlayConfig&, const OverlayConfig&) = default;
+#pragma GCC diagnostic pop
     };
 
     struct ConfigOverrides {

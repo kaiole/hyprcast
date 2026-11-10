@@ -283,7 +283,7 @@ namespace {
                   "overflowing rich text follows newest characters rather than clipping the tail");
             const qreal  fullWidth = panelFrame->width();
             const QColor fillColor = panelFill->property("color").value<QColor>();
-            check(qFuzzyCompare(fullWidth, static_cast<qreal>(config.width)) && panelFill->isVisible() && panelBorder->isVisible() && fillColor.alphaF() == 0.0,
+            check(qFuzzyCompare(fullWidth, static_cast<qreal>(config.width)) && panelFill->isVisible() && panelBorder->isVisible() && qFuzzyIsNull(fillColor.alphaF()),
                   "measured history grows to the maximum while a visible border remains independent of transparent fill opacity");
             InterpretedAction backspace;
             backspace.kind = InterpretedActionKind::Key;
@@ -293,7 +293,7 @@ namespace {
             }
             QCoreApplication::processEvents();
             check(panelFrame->width() < fullWidth, "deleting content shrinks the dynamic panel and recovers viewport space");
-            check(tailText && tailText->x() == 0, "shortened text returns to the start of the viewport");
+            check(tailText && qFuzzyIsNull(tailText->x()), "shortened text returns to the start of the viewport");
             config.panelVisibility = PanelVisibility::Never;
             runtime.applyAcceptedConfiguration(config);
             QCoreApplication::processEvents();
@@ -307,7 +307,7 @@ namespace {
             presenter.processMessage(KeyboardSnapshotMessage{.id = 1, .name = QStringLiteral("test"), .keymap = testKeymap()});
             presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 1, .keycode = 42, .pressed = true});
             QCoreApplication::processEvents();
-            check(presenter.heldKeyCount() == 1 && !panelFill->isVisible() && panelFrame->width() == emptyWidth && !hasVisualText(view.rootObject(), QStringLiteral("Shift")),
+            check(presenter.heldKeyCount() == 1 && !panelFill->isVisible() && qFuzzyCompare(panelFrame->width(), emptyWidth) && !hasVisualText(view.rootObject(), QStringLiteral("Shift")),
                   "default ignores held-only state for visibility, geometry, and content");
             presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 2, .keycode = 42, .pressed = false});
             presenter.historyModel().clear();
@@ -385,8 +385,8 @@ namespace {
                         const auto bounds = cap->mapRectToItem(capPanel, QRectF(0, 0, cap->width(), cap->height()));
                         check(bounds.top() >= 0 && bounds.bottom() <= capPanel->height() && capPanel->height() <= 60, "raised caps fit vertically inside a tight 60-pixel panel");
                     }
-                    check(face && qFuzzyCompare(cap->height(), expectedHeight) && qFuzzyCompare(face->height(), expectedHeight - expectedDepth) && face->y() == 0 &&
-                              face->width() == cap->width(),
+                    check(face && qFuzzyCompare(cap->height(), expectedHeight) && qFuzzyCompare(face->height(), expectedHeight - expectedDepth) && qFuzzyIsNull(face->y()) &&
+                              qFuzzyCompare(face->width(), cap->width()),
                           "raised cap face and lower edge stay inside declared geometry");
                     if (face) {
                         auto* border = face->property("border").value<QObject*>();
@@ -625,7 +625,7 @@ namespace {
         view.resize(420, 10);
         runtime.applyAcceptedConfiguration(config);
         settle();
-        check(cascade && cascade->height() == 0 && cascade->property("capacity").toInt() == 0, "too-small Cascade surface safely zero-sizes the stage");
+        check(cascade && qFuzzyIsNull(cascade->height()) && cascade->property("capacity").toInt() == 0, "too-small Cascade surface safely zero-sizes the stage");
         presenter.clearHistory();
         config.width       = 600;
         config.height      = 120;
@@ -651,8 +651,8 @@ namespace {
                   hasVisualText(view.rootObject(), presenter.heldKeyItems().front().toMap().value(QStringLiteral("label")).toString()) &&
                   presenter.historyModel().rowCount() == historyBeforeHeld,
               "held example reacts to modifier press without adding history");
-        check(heldHistoryArea && heldHistoryArea->y() == historyYBeforeHeld && heldHistoryArea->height() == historyHeightBeforeHeld && heldPanel &&
-                  heldPanel->height() == panelHeightBeforeHeld,
+        check(heldHistoryArea && qFuzzyCompare(heldHistoryArea->y(), historyYBeforeHeld) && qFuzzyCompare(heldHistoryArea->height(), historyHeightBeforeHeld) && heldPanel &&
+                  qFuzzyCompare(heldPanel->height(), panelHeightBeforeHeld),
               "held press preserves history geometry and panel height");
         QVariantMap heldOptions;
         check(validateOptions(catalog, QStringLiteral("text-held"), {{QStringLiteral("height"), 31}}, &heldOptions, &error) &&
@@ -665,7 +665,7 @@ namespace {
         QCoreApplication::processEvents();
         check(presenter.heldKeyCount() == 0 && presenter.historyModel().rowCount() == historyBeforeHeld + 1,
               "modifier release removes held state and records standalone modifier history");
-        check(heldHistoryArea && heldHistoryArea->y() == historyYBeforeHeld && heldHistoryArea->height() == historyHeightBeforeHeld,
+        check(heldHistoryArea && qFuzzyCompare(heldHistoryArea->y(), historyYBeforeHeld) && qFuzzyCompare(heldHistoryArea->height(), historyHeightBeforeHeld),
               "held release preserves the reserved history geometry");
         presenter.clearHistory();
         QCoreApplication::processEvents();
@@ -692,11 +692,11 @@ namespace {
             const qreal  slotX = shift->x();
             presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 5, .keycode = 42, .pressed = true});
             settle();
-            check(shift->property("pressed").toBool() && shift->x() == slotX && before == QRectF(history->x(), history->y(), history->width(), history->height()),
+            check(shift->property("pressed").toBool() && qFuzzyCompare(shift->x(), slotX) && before == QRectF(history->x(), history->y(), history->width(), history->height()),
                   "canonical modifier activates fixed slot without moving history");
             presenter.processMessage(KeyMessage{.keyboardId = 1, .timeMs = 6, .keycode = 42, .pressed = false});
             settle();
-            check(!shift->property("pressed").toBool() && shift->x() == slotX, "release clears live state while historical modifier remains");
+            check(!shift->property("pressed").toBool() && qFuzzyCompare(shift->x(), slotX), "release clears live state while historical modifier remains");
             presenter.clearHistory();
         }
         check(!validateOptions(catalog, QStringLiteral("text-held"), {{QStringLiteral("layout"), QStringLiteral("floating")}}, &heldOptions, &error) &&
@@ -950,7 +950,7 @@ namespace {
         view.resize(600, 10);
         runtime.applyAcceptedConfiguration(config);
         settle();
-        check(ribbon && ribbon->height() == 0 && ribbon->property("capacity").toInt() == 0, "impossible short surface safely zero-sizes both bands");
+        check(ribbon && qFuzzyIsNull(ribbon->height()) && ribbon->property("capacity").toInt() == 0, "impossible short surface safely zero-sizes both bands");
         config.height = 120;
         view.resize(600, 120);
         QVariantMap ledgerOptions;

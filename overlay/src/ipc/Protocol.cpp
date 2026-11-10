@@ -8,7 +8,6 @@
 #include <QJsonValue>
 #include <QLatin1StringView>
 
-#include <cmath>
 #include <limits>
 #include <string_view>
 
@@ -65,8 +64,9 @@ namespace Hyprcast::Overlay {
                     fail(QStringLiteral("field '%1' must be an unsigned 32-bit integer").arg(latin1(name)));
                     return 0;
                 }
-                const double number = value.toDouble();
-                if (!std::isfinite(number) || number < 0.0 || number > std::numeric_limits<std::uint32_t>::max() || std::floor(number) != number) {
+                // toInteger() yields the fallback for fractions and for magnitudes beyond qint64.
+                const qint64 number = value.toInteger(-1);
+                if (number < 0 || number > std::numeric_limits<std::uint32_t>::max()) {
                     fail(QStringLiteral("field '%1' is outside the unsigned 32-bit integer range").arg(latin1(name)));
                     return 0;
                 }

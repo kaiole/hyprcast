@@ -25,17 +25,17 @@ namespace Hyprcast::Overlay {
     struct HistoryPresentationOptions {
         bool        countedRepeats  = false;
         int         repeatThreshold = 4;
-        QString     symbolFontFamily;
+        QString     symbolFontFamily{};
         QString     spaceSymbol = QStringLiteral(" ");
-        QVariantMap keySymbols;
-        QVariantMap modifierSymbols;
+        QVariantMap keySymbols{};
+        QVariantMap modifierSymbols{};
         friend bool operator==(const HistoryPresentationOptions&, const HistoryPresentationOptions&) = default;
     };
 
     struct InputHistoryOptions {
         BackspaceMode              backspaceMode             = BackspaceMode::Delete;
         qsizetype                  maxRetainedUtf16CodeUnits = 4096; // Stable budget for the expanded canonical formatted history.
-        HistoryPresentationOptions presentation;
+        HistoryPresentationOptions presentation{};
 
         friend bool                operator==(const InputHistoryOptions&, const InputHistoryOptions&) = default;
     };

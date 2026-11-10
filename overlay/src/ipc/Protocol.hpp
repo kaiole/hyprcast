@@ -18,10 +18,10 @@ namespace Hyprcast::Overlay {
 
     struct KeyboardSnapshotMessage {
         KeyboardId  id = 0;
-        QString     name;
-        SModifiers  modifiers;
-        QString     keymap;
-        SRepeatInfo repeatInfo;
+        QString     name{};
+        SModifiers  modifiers{};
+        QString     keymap{};
+        SRepeatInfo repeatInfo{};
     };
 
     struct UnsubscribeKeyboardMessage {
@@ -37,17 +37,17 @@ namespace Hyprcast::Overlay {
 
     struct ModifiersMessage {
         KeyboardId keyboardId = 0;
-        SModifiers modifiers;
+        SModifiers modifiers{};
     };
 
     struct KeymapMessage {
         KeyboardId keyboardId = 0;
-        QString    keymap;
+        QString    keymap{};
     };
 
     struct RepeatInfoMessage {
         KeyboardId  keyboardId = 0;
-        SRepeatInfo repeatInfo;
+        SRepeatInfo repeatInfo{};
     };
 
     using ProtocolMessage = std::variant<CastingStateMessage, KeyboardSnapshotMessage, UnsubscribeKeyboardMessage, KeyMessage, ModifiersMessage, KeymapMessage, RepeatInfoMessage>;

@@ -12,15 +12,20 @@
 #include <QSaveFile>
 #include <QString>
 #include <QTemporaryDir>
-#include <QThread>
+#include <QTimer>
 #include <expected>
 #include <functional>
 #include <iostream>
 #include <optional>
 #include <utility>
 
+using namespace Hyprcast::Overlay;
+
 namespace {
 
+// Counts failed checks for the exit status; every test reports through
+// check().
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 int failures = 0;
 
 void check(bool condition, const char* message) {
@@ -40,11 +45,12 @@ bool waitFor(const std::function<bool()>& condition, int timeoutMs = 2500) {
     QElapsedTimer timer;
     timer.start();
     while (timer.elapsed() < timeoutMs) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        QEventLoop loop;
+        QTimer::singleShot(10, &loop, &QEventLoop::quit);
+        loop.exec();
         if (condition()) {
             return true;
         }
-        QThread::msleep(10);
     }
     return condition();
 }
@@ -69,12 +75,7 @@ bool parse(const QByteArray& source,
     return true;
 }
 
-} // namespace
-
-int main(int argc, char** argv) {
-    QCoreApplication application(argc, argv);
-    using namespace Hyprcast::Overlay;
-
+void testDefaults() {
     const OverlayConfig defaults;
     check(defaults.width == 600 && defaults.height == 88
               && toString(defaults.anchor) == QStringLiteral("bottom-right"),
@@ -100,7 +101,9 @@ int main(int argc, char** argv) {
     check(defaults.repeatPresentation == RepeatPresentation::Counted
               && defaults.repeatCountThreshold == 4,
           "default repeats collapse at four occurrences");
+}
 
+void testParsing() {
     OverlayConfig config;
     QString error;
     check(parse("[appearance]\nfont_size = 36\nbackground_color = '#112233'\n",
@@ -236,7 +239,9 @@ int main(int argc, char** argv) {
           "reject unknown behavior enums");
     check(!parse("[other]\nvalue=1\n", &config, &error),
           "reject unknown top-level tables");
+}
 
+void testDefaultPath() {
     const QByteArray previousConfigHome = qgetenv("XDG_CONFIG_HOME");
     const bool hadConfigHome = qEnvironmentVariableIsSet("XDG_CONFIG_HOME");
     qputenv("XDG_CONFIG_HOME", QByteArrayLiteral("/tmp/hyprcast-test-config"));
@@ -249,7 +254,9 @@ int main(int argc, char** argv) {
     } else {
         qunsetenv("XDG_CONFIG_HOME");
     }
+}
 
+void testInitialLoad() {
     const QTemporaryDir absentDirectory;
     const QString absentPath =
         absentDirectory.filePath(QStringLiteral("new/settings/overlay.toml"));
@@ -271,7 +278,9 @@ int main(int argc, char** argv) {
     const auto malformed = malformedInitial.initialize();
     check(!malformed && malformed.error().contains(absentPath),
           "an invalid initial config fails with its path");
+}
 
+void testLiveReload(QCoreApplication& application) {
     const QTemporaryDir directory;
     const QString path = directory.filePath(QStringLiteral("overlay.toml"));
     check(writeAtomically(path,
@@ -333,6 +342,17 @@ int main(int argc, char** argv) {
           "watcher reports the runtime-invalid reload");
     check(manager.config().fontSize == 37 && manager.config().width == 600,
           "runtime-rejected candidate applies none of its settings");
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+    QCoreApplication application(argc, argv);
+    testDefaults();
+    testParsing();
+    testDefaultPath();
+    testInitialLoad();
+    testLiveReload(application);
 
     if (failures == 0) {
         std::cout << "Overlay config tests passed\n";

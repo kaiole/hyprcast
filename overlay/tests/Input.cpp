@@ -25,7 +25,7 @@ namespace {
 void check(bool condition, const char* message) {
     if (!condition) {
         std::cerr << "check failed: " << message << '\n';
-        std::exit(1);
+        std::_Exit(1);
     }
 }
 

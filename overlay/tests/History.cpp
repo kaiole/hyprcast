@@ -20,7 +20,7 @@ namespace {
 void check(bool condition, const char* message) {
     if (!condition) {
         std::cerr << "check failed: " << message << '\n';
-        std::exit(1);
+        std::_Exit(1);
     }
 }
 
@@ -161,11 +161,9 @@ void testGraphemesAcrossActions() {
     check(history.displayText().isEmpty() && history.entries().empty(),
           "Backspace erases one grapheme even across action boundaries");
 
-    const char32_t womanCodepoint[] = {0x1F469};
-    const char32_t laptopCodepoint[] = {0x1F4BB};
-    history.apply(text(QString::fromUcs4(womanCodepoint, 1)));
+    history.apply(text(QString::fromUcs4(U"\U0001F469")));
     history.apply(text(QString(QChar(0x200D))));
-    history.apply(text(QString::fromUcs4(laptopCodepoint, 1)));
+    history.apply(text(QString::fromUcs4(U"\U0001F4BB")));
     history.apply(key(QStringLiteral("Backspace")));
     check(history.displayText().isEmpty(),
           "Backspace erases a multi-codepoint emoji grapheme");

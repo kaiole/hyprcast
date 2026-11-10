@@ -6,6 +6,7 @@
 #include "hyprcast/server/sock_file.hpp"
 #include "hyprcast/server/wl_event_source.hpp"
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -35,13 +36,23 @@ public:
     using capture_cb = std::function<void(bool enabled)>;
     using disconnected_cb = std::function<void()>;
 
-    // `loop` and `log` must outlive the server.
+    // How long the server leaves the listening socket alone after a
+    // connection could not be accepted. Short enough that an overlay started
+    // by hand connects without a noticeable wait once the cause is gone, long
+    // enough that a lasting cause wakes the compositor only a few times a
+    // second.
+    static constexpr std::chrono::milliseconds default_accept_retry_delay {250};
+
+    // `loop` and `log` must outlive the server. An `accept_retry_delay`
+    // below one millisecond counts as one.
     event_server(wl_event_loop* loop,
                  const std::filesystem::path& sock_dir,
                  log_sink& log,
                  connected_cb on_connected,
                  capture_cb on_capture,
-                 disconnected_cb on_disconnected);
+                 disconnected_cb on_disconnected,
+                 std::chrono::milliseconds accept_retry_delay =
+                     default_accept_retry_delay);
 
     // `this` is registered with the Wayland event loop, so the object must
     // never move.
@@ -81,6 +92,11 @@ private:
 
     static int on_socket_readable(int sock_fd, std::uint32_t mask, void* data);
     static int on_client_event(int client_fd, std::uint32_t mask, void* data);
+    static int on_accept_retry(void* data);
+
+    void pause_accepting(int error);
+    void give_up_accepting() noexcept;
+    void stop_accepting() noexcept;
 
     void read_commands();
     void flush_messages();
@@ -92,6 +108,10 @@ private:
     capture_cb on_capture_;
     disconnected_cb on_disconnected_;
     std::string command_buffer_;
+    int accept_retry_delay_ms_;
+    // Set from the first connection that cannot be accepted to the next one
+    // that can, so that such a stretch is logged once.
+    bool accept_failing_ = false;
 
     // Members are destroyed in reverse order, so reading upwards from the
     // event sources: the sources are removed while the descriptors they watch
@@ -108,6 +128,9 @@ private:
     unique_fd client_fd_;
 
     unique_wl_event_source wl_socket_readable_;
+    // Created with the server, because a timer cannot be created any more by
+    // the time it is needed: when the process is out of descriptors.
+    unique_wl_event_source wl_accept_retry_;
     unique_wl_event_source wl_client_events_;
     // Whether wl_client_events_ also reports the client becoming writable; it
     // always reports it becoming readable.

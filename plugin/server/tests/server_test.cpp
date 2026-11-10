@@ -8,12 +8,14 @@
 
 #include <dlfcn.h>
 #include <gtest/gtest.h>
+#include <sys/resource.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
 
 #include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -24,6 +26,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <vector>
 
@@ -83,6 +86,35 @@ std::size_t socket_buffer_allowance() {
     return 2 * static_cast<std::size_t>(send_buffer_size);
 }
 
+// Leaves the process without a free descriptor for as long as it lives: what
+// is open stays usable, opening anything else fails with EMFILE.
+class descriptor_exhaustion {
+public:
+    descriptor_exhaustion() {
+        if (::getrlimit(RLIMIT_NOFILE, &saved_) == -1) {
+            throw std::system_error(errno,
+                                    std::generic_category(),
+                                    "Cannot read the descriptor limit");
+        }
+        ::rlimit none = saved_;
+        none.rlim_cur = 0;
+        if (::setrlimit(RLIMIT_NOFILE, &none) == -1) {
+            throw std::system_error(errno,
+                                    std::generic_category(),
+                                    "Cannot lower the descriptor limit");
+        }
+    }
+    ~descriptor_exhaustion() { ::setrlimit(RLIMIT_NOFILE, &saved_); }
+
+    descriptor_exhaustion(const descriptor_exhaustion&) = delete;
+    descriptor_exhaustion& operator=(const descriptor_exhaustion&) = delete;
+    descriptor_exhaustion(descriptor_exhaustion&&) = delete;
+    descriptor_exhaustion& operator=(descriptor_exhaustion&&) = delete;
+
+private:
+    ::rlimit saved_ {};
+};
+
 // Runs a real event_server on a real event loop and socket, in a directory of
 // its own. `calls` records the server's callbacks in order.
 class EventServerTest : public testing::Test {
@@ -108,7 +140,8 @@ protected:
                     on_capture(enabled);
                 }
             },
-            [this] { calls.emplace_back("disconnected"); });
+            [this] { calls.emplace_back("disconnected"); },
+            accept_retry_delay);
     }
 
     // Two levels below the temporary directory, like the real
@@ -145,6 +178,18 @@ protected:
         return std::ranges::count(calls, call);
     }
 
+    [[nodiscard]] std::ptrdiff_t count_logged(log_level level,
+                                              std::string_view text) const {
+        return std::ranges::count_if(
+            log.entries(),
+            [&](const test_support::recording_log::entry& entry) {
+                return entry.level == level && entry.message.contains(text);
+            });
+    }
+
+    // Set before start() to change it.
+    std::chrono::milliseconds accept_retry_delay =
+        event_server::default_accept_retry_delay;
     test_support::temp_dir dir;
     test_support::recording_log log;
     call_list calls;
@@ -513,6 +558,81 @@ TEST_F(EventServerTest, DisconnectsAClientWhoseBacklogExceedsTheCap) {
     server->queue_message("fresh");
     EXPECT_TRUE(wait([&] { return !next.lines().empty(); }));
     EXPECT_EQ(next.received(), "fresh\n");
+}
+
+// A connection that cannot be accepted, here for want of a descriptor, stays
+// pending and is accepted once the cause is gone.
+TEST_F(EventServerTest, AcceptsAPendingConnectionOnceItCan) {
+    accept_retry_delay = std::chrono::milliseconds {1};
+    start();
+    // Connected, but not accepted before the loop runs.
+    socket_client client {sock_path()};
+
+    {
+        const descriptor_exhaustion exhausted;
+        EXPECT_TRUE(wait([&] {
+            return log.contains(log_level::error,
+                                "Cannot accept IPC connection");
+        }));
+        // Many retries later the server has neither given up nor repeated
+        // itself.
+        EXPECT_FALSE(loop.run_until([&] { return !calls.empty(); },
+                                    std::chrono::milliseconds {50}));
+        EXPECT_EQ(
+            count_logged(log_level::error, "Cannot accept IPC connection"),
+            1);
+    }
+
+    EXPECT_TRUE(wait_for_calls({"connected"}));
+    EXPECT_TRUE(
+        log.contains(log_level::warning, "Accepting IPC connections again"));
+    EXPECT_TRUE(log.failures().empty());
+    server->queue_message("made it");
+    EXPECT_TRUE(wait([&] { return !client.lines().empty(); }));
+    EXPECT_EQ(client.received(), "made it\n");
+}
+
+// Between two attempts the server does not look at the listening socket at
+// all. If it did, the event loop would call it back without pause for as long
+// as the connection cannot be accepted.
+TEST_F(EventServerTest, LeavesTheListeningSocketAloneUntilTheRetry) {
+    // Longer than the test runs: the retry never comes.
+    accept_retry_delay = std::chrono::hours {1};
+    start();
+    socket_client client {sock_path()};
+    {
+        const descriptor_exhaustion exhausted;
+        EXPECT_TRUE(wait([&] {
+            return log.contains(log_level::error,
+                                "Cannot accept IPC connection");
+        }));
+    }
+
+    // The connection is pending and could be accepted now, so a server that
+    // still watched the socket would accept it here.
+    EXPECT_FALSE(loop.run_until([&] { return !calls.empty(); },
+                                std::chrono::milliseconds {50}));
+    EXPECT_EQ(count_logged(log_level::error, "Cannot accept IPC connection"),
+              1);
+    EXPECT_TRUE(log.failures().empty());
+}
+
+TEST_F(EventServerTest, ShutdownCancelsThePendingRetry) {
+    accept_retry_delay = std::chrono::milliseconds {1};
+    start();
+    socket_client client {sock_path()};
+    {
+        const descriptor_exhaustion exhausted;
+        EXPECT_TRUE(wait([&] {
+            return log.contains(log_level::error,
+                                "Cannot accept IPC connection");
+        }));
+        server->shutdown();
+    }
+
+    EXPECT_FALSE(loop.run_until([&] { return !calls.empty(); },
+                                std::chrono::milliseconds {50}));
+    EXPECT_TRUE(wait([&] { return client.closed(); }));
 }
 
 TEST_F(EventServerTest, ShutdownDropsTheClientAndStopsListening) {

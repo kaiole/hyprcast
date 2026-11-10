@@ -23,9 +23,6 @@ public:
 
     void add_keyboard(const SP<IKeyboard>& keyboard);
 
-    void set_pause(bool paused);
-    [[nodiscard]] bool is_paused() const noexcept;
-
 private:
     plugin_config::callbacks make_plugin_config_callbacks();
 

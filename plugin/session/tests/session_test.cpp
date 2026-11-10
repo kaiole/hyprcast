@@ -212,35 +212,13 @@ TEST_F(SessionTest, AnswersEveryCommandEvenWithoutAChange) {
     EXPECT_FALSE(under_test.paused());
 }
 
-// What the compositor side does for hyprcast.toggle.
-TEST_F(SessionTest, SetPausedTellsTheClient) {
-    auto client = connect();
+// Capture is the client's to turn on: nothing on the compositor side can.
+template <typename Session>
+concept can_be_unpaused_directly =
+    requires(Session& target) { target.set_paused(false); };
 
-    under_test.set_paused(false);
-    EXPECT_FALSE(under_test.paused());
-    under_test.on_key_event(1, press_a);
-    under_test.set_paused(true);
-    EXPECT_TRUE(under_test.paused());
-    under_test.on_key_event(1, release_a);
-    under_test.set_paused(true);
-
-    expect_lines(client,
-                 {
-                     wire::casting_state_message(true),
-                     wire::casting_state_message(false),
-                     wire::key_message(1, press_a),
-                     wire::casting_state_message(true),
-                     wire::casting_state_message(true),
-                 });
-}
-
-TEST_F(SessionTest, SetPausedWorksWithoutAClient) {
-    under_test.set_paused(false);
-    EXPECT_FALSE(under_test.paused());
-
-    // The state set before a client connects is the one it is told.
-    auto client = connect();
-    expect_lines(client, {wire::casting_state_message(false)});
+TEST_F(SessionTest, OnlyAClientCommandUnpauses) {
+    EXPECT_FALSE(can_be_unpaused_directly<session>);
 }
 
 TEST_F(SessionTest, PausesWhenTheClientLeaves) {
@@ -334,16 +312,17 @@ TEST_F(SessionTest, ForwardsKeyboardStateChangesAfterEnable) {
 }
 
 TEST_F(SessionTest, DropsEverythingWhileNoClientIsConnected) {
-    under_test.set_paused(false);
     under_test.on_subscribe(keyboard(1, "first"));
     under_test.on_key_event(1, press_a);
     under_test.on_unsubscribe(1);
 
     auto client = connect();
+    send_command(client, "enable", false);
     under_test.on_key_event(1, release_a);
 
     expect_lines(client,
                  {
+                     wire::casting_state_message(true),
                      wire::casting_state_message(false),
                      wire::key_message(1, release_a),
                  });

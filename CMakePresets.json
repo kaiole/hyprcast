@@ -1,53 +1,108 @@
 {
   "version": 6,
-  "cmakeMinimumRequired": {
-    "major": 3,
-    "minor": 27,
-    "patch": 0
-  },
   "configurePresets": [
     {
-      "name": "debug",
-      "displayName": "Debug",
-      "description": "Debug build with tests enabled",
-      "binaryDir": "${sourceDir}/build/debug",
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "BUILD_TESTING": "ON",
-        "HYPRLAND_SOURCE_DIR": "${sourceDir}/plugin/Hyprland"
+        "CMAKE_EXPORT_COMPILE_COMMANDS": true,
+        "CMAKE_COMPILE_WARNING_AS_ERROR": true,
+        "CMAKE_VERIFY_INTERFACE_HEADER_SETS": true
+      }
+    },
+    {
+      "name": "clang-debug",
+      "hidden": true,
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "dev",
+      "displayName": "Clang Debug + ASan/UBSan + libstdc++ assertions",
+      "inherits": "clang-debug",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -D_GLIBCXX_ASSERTIONS"
+      }
+    },
+    {
+      "name": "lint",
+      "displayName": "Clang Debug + clang-tidy, findings are errors",
+      "inherits": "clang-debug",
+      "cacheVariables": {
+        "CMAKE_CXX_CLANG_TIDY": "clang-tidy;--warnings-as-errors=*"
       }
     },
     {
       "name": "release",
-      "displayName": "Release",
-      "description": "Optimized release build",
-      "binaryDir": "${sourceDir}/build/release",
+      "displayName": "GCC RelWithDebInfo",
+      "inherits": "base",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "BUILD_TESTING": "OFF",
-        "HYPRLAND_SOURCE_DIR": "${sourceDir}/plugin/Hyprland"
+        "CMAKE_CXX_COMPILER": "g++",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
       }
     }
   ],
   "buildPresets": [
     {
-      "name": "debug",
-      "configurePreset": "debug",
-      "jobs": 1
+      "name": "build-base",
+      "hidden": true,
+      "targets": ["all", "all_verify_interface_header_sets"]
     },
+    { "name": "dev", "configurePreset": "dev", "inherits": "build-base" },
+    { "name": "lint", "configurePreset": "lint", "inherits": "build-base" },
     {
       "name": "release",
       "configurePreset": "release",
-      "jobs": 1
+      "inherits": "build-base"
     }
   ],
   "testPresets": [
     {
-      "name": "debug",
-      "configurePreset": "debug",
-      "output": {
-        "outputOnFailure": true
+      "name": "test-base",
+      "hidden": true,
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" },
+      "environment": {
+        "ASAN_OPTIONS": "abort_on_error=1:detect_leaks=1:strict_string_checks=1",
+        "UBSAN_OPTIONS": "print_stacktrace=1:halt_on_error=1"
       }
+    },
+    { "name": "dev", "configurePreset": "dev", "inherits": "test-base" },
+    { "name": "lint", "configurePreset": "lint", "inherits": "test-base" },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "inherits": "test-base"
+    }
+  ],
+  "workflowPresets": [
+    {
+      "name": "dev",
+      "steps": [
+        { "type": "configure", "name": "dev" },
+        { "type": "build", "name": "dev" },
+        { "type": "test", "name": "dev" }
+      ]
+    },
+    {
+      "name": "lint",
+      "steps": [
+        { "type": "configure", "name": "lint" },
+        { "type": "build", "name": "lint" }
+      ]
+    },
+    {
+      "name": "release",
+      "steps": [
+        { "type": "configure", "name": "release" },
+        { "type": "build", "name": "release" },
+        { "type": "test", "name": "release" }
+      ]
     }
   ]
 }

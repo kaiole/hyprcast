@@ -109,7 +109,7 @@ never layered together. Clear/pause/disconnect cannot revive cached history.
 Build `overlay_theme_tests`, then run:
 
 ```sh
-ctest --preset debug -R overlay-theme --output-on-failure
+ctest --preset dev -R overlay-theme --output-on-failure
 ```
 
 Tests cover discovery/loading, final geometry, bounded delegate count, small
@@ -119,7 +119,7 @@ software-rendered example from the test fixture:
 
 ```sh
 HYPRCAST_CASCADE_SCREENSHOT=/tmp/cascade.png QT_QUICK_BACKEND=software \
-  ctest --preset debug -R overlay-theme --output-on-failure
+  ctest --preset dev -R overlay-theme --output-on-failure
 ```
 
 The fixture uses reduced motion and its existing symbol overrides; its white

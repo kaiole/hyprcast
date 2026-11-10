@@ -1,6 +1,6 @@
 #include "keycaster.hpp"
 
-#include "callback_boundary.hpp"
+#include "hyprcast/log/run_guarded.hpp"
 #include "hyprcast/protocol/key_event.hpp"
 #include "hyprcast/protocol/keyboard_id.hpp"
 #include "hyprcast/protocol/keyboard_snapshot.hpp"
@@ -10,7 +10,6 @@
 #include "hyprcast/wire/messages.hpp"
 #include "hyprland/keyboard_registry.hpp"
 #include "hyprland/plugin_config.hpp"
-#include "log.hpp"
 
 #include <hyprland/src/devices/IKeyboard.hpp>
 #include <hyprland/src/helpers/memory/Memory.hpp>
@@ -23,11 +22,13 @@ namespace hyprcast {
 // Capture starts paused and pauses on disconnect, so only an explicit client
 // request enables it.
 keycaster::keycaster()
-    : server_([this] { request_registry_snapshot(); },
-              [this](bool enabled) { set_pause(!enabled); },
-              [this] { paused_ = true; }),
-      keyboard_registry_(make_registry_callbacks()),
-      config_(make_plugin_config_callbacks()) {
+    : server_(
+          log_,
+          [this] { request_registry_snapshot(); },
+          [this](bool enabled) { set_pause(!enabled); },
+          [this] { paused_ = true; }),
+      keyboard_registry_(log_, make_registry_callbacks()),
+      config_(log_, make_plugin_config_callbacks()) {
     keyboard_registry_.update_subscriptions(config_.get_accepted_config());
 }
 
@@ -37,6 +38,7 @@ void keycaster::add_keyboard(const SP<IKeyboard>& keyboard) {
     }
 
     run_guarded(
+        log_,
         "Cannot register keyboard; shutting down plugin",
         [this, &keyboard] {
             keyboard_registry_.add_keyboard(keyboard);
@@ -124,7 +126,7 @@ void keycaster::shutdown() noexcept {
     if (shutdown_) {
         return;
     }
-    notify_failure(
+    log_.notify_failure(
         "Plugin stopped after an internal failure. Unload and reload "
         "hyprcast; see Hyprland logs for details.");
     keyboard_registry_.shutdown();

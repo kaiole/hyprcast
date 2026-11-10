@@ -1,5 +1,6 @@
 #include "plugin_config.hpp"
 
+#include "hyprcast/log/log_sink.hpp"
 #include "plugin.hpp"
 
 #include <hyprland/src/config/ConfigManager.hpp>
@@ -18,7 +19,9 @@ plugin_config* instance = nullptr;
 
 } // namespace
 
-plugin_config::plugin_config(callbacks cbs) : callbacks_(std::move(cbs)) {
+plugin_config::plugin_config(log_sink& log, callbacks cbs)
+    : log_(&log),
+      callbacks_(std::move(cbs)) {
     pre_reload_ = Event::bus()->m_events.config.preReload.listen(
         [this] { config_.begin_reload(); });
     reloaded_ = Event::bus()->m_events.config.reloaded.listen([this] {

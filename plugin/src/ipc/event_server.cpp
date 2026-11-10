@@ -1,11 +1,10 @@
 #include "event_server.hpp"
 
-#include "callback_boundary.hpp"
+#include "hyprcast/log/log_sink.hpp"
+#include "hyprcast/log/run_guarded.hpp"
 #include "hyprcast/protocol/wire.hpp"
-#include "log.hpp"
 
 #include <Compositor.hpp>
-#include <hyprland/src/debug/log/Logger.hpp>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -40,10 +39,12 @@ constexpr std::size_t max_command_length =
 
 } // namespace
 
-event_server::event_server(connected_cb on_connected,
+event_server::event_server(log_sink& log,
+                           connected_cb on_connected,
                            capture_cb on_capture,
                            disconnected_cb on_disconnected)
-    : on_connected_(std::move(on_connected)),
+    : log_(&log),
+      on_connected_(std::move(on_connected)),
       on_capture_(std::move(on_capture)),
       on_disconnected_(std::move(on_disconnected)),
       sock_paths_(init_sock_paths()),
@@ -113,7 +114,8 @@ event_server::event_server(connected_cb on_connected,
         throw std::runtime_error(
             "Cannot register IPC socket with Wayland event loop");
     }
-    log_message(Log::TRACE,
+    log_message(*log_,
+                log_level::trace,
                 "Listening on IPC socket '{}'",
                 sock_paths_.sock_file.string());
 }
@@ -125,7 +127,8 @@ void event_server::queue_message(std::string message) {
 
     constexpr std::size_t max_messages = 256;
     if (message_queue_.size() >= max_messages) {
-        log_message(Log::WARN,
+        log_message(*log_,
+                    log_level::warning,
                     "Client disconnected: outgoing queue reached {} messages",
                     max_messages);
         disconnect_client();
@@ -140,7 +143,7 @@ void event_server::queue_message(std::string message) {
 void event_server::disconnect_client() noexcept {
     const bool had_client = client_fd_.valid();
     if (had_client) {
-        log_message(Log::TRACE, "Client disconnected");
+        log_message(*log_, log_level::trace, "Client disconnected");
     }
 
     command_buffer_.clear();
@@ -149,7 +152,8 @@ void event_server::disconnect_client() noexcept {
     wl_client_events_.reset();
     client_fd_.reset();
     if (had_client) {
-        run_guarded("Cannot pause disconnected capture",
+        run_guarded(*log_,
+                    "Cannot pause disconnected capture",
                     on_disconnected_,
                     [] noexcept {});
     }
@@ -244,24 +248,27 @@ int event_server::on_socket_readable(int sock_fd,
             return 0;
         }
 
-        log_error("Cannot accept IPC connection: {}; disabling new connections "
+        log_error(*self->log_,
+                  "Cannot accept IPC connection: {}; disabling new connections "
                   "until plugin reload",
                   std::strerror(error));
-        notify_failure("IPC listener stopped. Unload and reload hyprcast; see "
-                       "Hyprland logs for details.");
+        self->log_->notify_failure(
+            "IPC listener stopped. Unload and reload hyprcast; see "
+            "Hyprland logs for details.");
         self->wl_socket_readable_.reset();
 
         return 0;
     }
 
     if (self->client_fd_.valid()) {
-        log_message(Log::TRACE,
+        log_message(*self->log_,
+                    log_level::trace,
                     "Replacing existing client with new connection");
     }
     self->disconnect_client();
 
     self->client_fd_ = std::move(client_fd);
-    log_message(Log::TRACE, "Client connected");
+    log_message(*self->log_, log_level::trace, "Client connected");
 
     self->wl_client_events_.reset(
         ::wl_event_loop_add_fd(g_pCompositor->m_wlEventLoop,
@@ -270,13 +277,15 @@ int event_server::on_socket_readable(int sock_fd,
                                &on_client_event,
                                self));
     if (!self->wl_client_events_) {
-        log_error("Cannot register client with Wayland event loop; "
+        log_error(*self->log_,
+                  "Cannot register client with Wayland event loop; "
                   "disconnecting client");
         self->disconnect_client();
         return 0;
     }
 
     run_guarded(
+        *self->log_,
         "Cannot prepare initial keyboard snapshot; disconnecting client",
         self->on_connected_,
         [self] noexcept { self->disconnect_client(); });
@@ -292,6 +301,7 @@ int event_server::on_client_event(int /*client_fd*/,
     if (mask & static_cast<std::uint32_t>(WL_EVENT_HANGUP | WL_EVENT_ERROR)) {
         if (mask & WL_EVENT_ERROR) {
             log_error(
+                *self->log_,
                 "Wayland reported a client socket error; disconnecting client");
         }
 
@@ -301,6 +311,7 @@ int event_server::on_client_event(int /*client_fd*/,
 
     if (mask & WL_EVENT_READABLE) {
         run_guarded(
+            *self->log_,
             "Cannot process capture command",
             [self] { self->read_commands(); },
             [self] noexcept { self->disconnect_client(); });
@@ -357,7 +368,8 @@ void event_server::flush_messages() {
 
         const auto full_message_size = message.size();
         if (message_offset_ >= full_message_size) {
-            log_error("Invalid outgoing message offset {} for {} bytes; "
+            log_error(*log_,
+                      "Invalid outgoing message offset {} for {} bytes; "
                       "disconnecting client",
                       message_offset_,
                       full_message_size);
@@ -384,7 +396,8 @@ void event_server::flush_messages() {
             }
 
             if (error != EPIPE && error != ECONNRESET) {
-                log_error("Cannot send IPC message: {}; disconnecting client",
+                log_error(*log_,
+                          "Cannot send IPC message: {}; disconnecting client",
                           std::strerror(error));
             }
             disconnect_client();
@@ -409,6 +422,7 @@ void event_server::update_wl_dispatch_event(std::uint32_t mask) {
                                     mask | WL_EVENT_READABLE)
         == -1) {
         log_error(
+            *log_,
             "Cannot update client Wayland event source; disconnecting client");
         disconnect_client();
     }

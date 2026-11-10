@@ -1,5 +1,6 @@
 #pragma once
 
+#include "hyprcast/log/log_sink.hpp"
 #include "hyprland/plugin.hpp"
 
 #include <hyprland/src/debug/log/Logger.hpp>
@@ -7,37 +8,34 @@
 
 #include <format>
 #include <string_view>
-#include <utility>
 
 namespace hyprcast {
 
-template <typename... Args>
-void log_message(Hyprutils::CLI::eLogLevel level,
-                 std::format_string<Args...> fmt,
-                 Args&&... args) noexcept {
-    try {
-        Log::logger->log(level,
-                         "[hyprcast] {}",
-                         std::format(fmt, std::forward<Args>(args)...));
-    } catch (...) { // NOLINT(bugprone-empty-catch)
-        // Best effort: nowhere is left to report a failure to log.
+// Reports to Hyprland's log and, for failures the user has to act on, as an
+// on-screen notification. Stateless: it only uses Hyprland's globals and
+// plugin_handle.
+class hyprland_log_sink final : public log_sink {
+private:
+    void do_write(log_level level, std::string_view message) override {
+        Log::logger->log(to_hyprland(level), "[hyprcast] {}", message);
     }
-}
 
-template <typename... Args>
-void log_error(std::format_string<Args...> fmt, Args&&... args) noexcept {
-    log_message(Log::ERR, fmt, std::forward<Args>(args)...);
-}
-
-inline void notify_failure(std::string_view message) noexcept {
-    try {
+    void do_notify_failure(std::string_view message) override {
         HyprlandAPI::addNotification(plugin_handle,
                                      std::format("[hyprcast] {}", message),
                                      CHyprColor {1.0f, 0.2f, 0.2f, 1.0f},
                                      8000);
-    } catch (...) { // NOLINT(bugprone-empty-catch)
-        // Best effort: nowhere is left to report a failure to log.
     }
-}
+
+    [[nodiscard]] static Hyprutils::CLI::eLogLevel
+    to_hyprland(log_level level) noexcept {
+        switch (level) {
+        case log_level::trace: return Log::TRACE;
+        case log_level::warning: return Log::WARN;
+        case log_level::error: return Log::ERR;
+        }
+        return Log::ERR;
+    }
+};
 
 } // namespace hyprcast

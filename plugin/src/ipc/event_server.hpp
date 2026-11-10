@@ -1,5 +1,6 @@
 #pragma once
 
+#include "hyprcast/log/log_sink.hpp"
 #include "hyprcast/os/unique_fd.hpp"
 #include "os/file_lock.hpp"
 #include "sock_file.hpp"
@@ -21,7 +22,9 @@ public:
     using capture_cb = std::function<void(bool enabled)>;
     using disconnected_cb = std::function<void()>;
 
-    event_server(connected_cb on_connected,
+    // `log` must outlive the server.
+    event_server(log_sink& log,
+                 connected_cb on_connected,
                  capture_cb on_capture,
                  disconnected_cb on_disconnected);
 
@@ -55,6 +58,7 @@ private:
     void flush_messages();
     void update_wl_dispatch_event(std::uint32_t mask);
 
+    log_sink* log_;
     connected_cb on_connected_;
     capture_cb on_capture_;
     disconnected_cb on_disconnected_;

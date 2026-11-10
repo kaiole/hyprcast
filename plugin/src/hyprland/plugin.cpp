@@ -1,10 +1,10 @@
 #include "plugin.hpp"
 
+#include "hyprcast/log/log_sink.hpp"
 #include "keycaster.hpp"
 #include "log.hpp"
 
 #include <helpers/memory/Memory.hpp>
-#include <hyprland/src/debug/log/Logger.hpp>
 #include <hyprland/src/devices/IKeyboard.hpp>
 #include <hyprland/src/plugins/HookSystem.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
@@ -47,11 +47,13 @@ int toggle_casting(lua_State*) noexcept {
 
         keycaster_instance->set_pause(!keycaster_instance->is_paused());
     } catch (const std::exception& error) {
-        hyprcast::log_error("Cannot toggle casting: {}", error.what());
-        hyprcast::notify_failure("Cannot toggle casting; see Hyprland logs.");
+        hyprcast::hyprland_log_sink log;
+        hyprcast::log_error(log, "Cannot toggle casting: {}", error.what());
+        log.notify_failure("Cannot toggle casting; see Hyprland logs.");
     } catch (...) {
-        hyprcast::log_error("Cannot toggle casting: unknown exception");
-        hyprcast::notify_failure("Cannot toggle casting; see Hyprland logs.");
+        hyprcast::hyprland_log_sink log;
+        hyprcast::log_error(log, "Cannot toggle casting: unknown exception");
+        log.notify_failure("Cannot toggle casting; see Hyprland logs.");
     }
 
     return 0;
@@ -125,7 +127,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) try {
             "Cannot register Lua function hyprcast.toggle");
     }
 
-    hyprcast::log_message(Log::TRACE, "Plugin loaded");
+    hyprcast::hyprland_log_sink log;
+    hyprcast::log_message(log, hyprcast::log_level::trace, "Plugin loaded");
 
     return {
         .name {hyprcast::plugin_name},
@@ -134,14 +137,15 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) try {
         .version {hyprcast::version},
     };
 } catch (const std::exception& error) {
-    hyprcast::log_error("Cannot load plugin: {}", error.what());
-    hyprcast::notify_failure(error.what());
+    hyprcast::hyprland_log_sink log;
+    hyprcast::log_error(log, "Cannot load plugin: {}", error.what());
+    log.notify_failure(error.what());
     teardown();
     throw;
 } catch (...) {
-    hyprcast::log_error("Cannot load plugin: unknown exception");
-    hyprcast::notify_failure(
-        "Cannot load plugin; see Hyprland logs for details.");
+    hyprcast::hyprland_log_sink log;
+    hyprcast::log_error(log, "Cannot load plugin: unknown exception");
+    log.notify_failure("Cannot load plugin; see Hyprland logs for details.");
     teardown();
     throw;
 }
@@ -152,5 +156,6 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) try {
 
 APICALL EXPORT void PLUGIN_EXIT() {
     teardown();
-    hyprcast::log_message(Log::TRACE, "Plugin unloaded");
+    hyprcast::hyprland_log_sink log;
+    hyprcast::log_message(log, hyprcast::log_level::trace, "Plugin unloaded");
 }

@@ -1,9 +1,9 @@
 #include "Protocol.hpp"
 
-#include "hyprcast/protocol/KeyboardId.hpp"
-#include "hyprcast/protocol/Modifiers.hpp"
-#include "hyprcast/protocol/RepeatInfo.hpp"
-#include "hyprcast/protocol/Wire.hpp"
+#include "hyprcast/protocol/keyboard_id.hpp"
+#include "hyprcast/protocol/modifier_state.hpp"
+#include "hyprcast/protocol/repeat_info.hpp"
+#include "hyprcast/protocol/wire.hpp"
 
 #include <QLatin1StringView>
 

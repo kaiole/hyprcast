@@ -1,4 +1,4 @@
-#include "hyprcast/config/Config.hpp"
+#include "hyprcast/config/config.hpp"
 
 #include <lua.hpp>
 

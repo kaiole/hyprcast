@@ -8,12 +8,12 @@ target_sources(
             BASE_DIRS
             include
             FILES
-            include/hyprcast/protocol/KeyEvent.hpp
-            include/hyprcast/protocol/KeyState.hpp
-            include/hyprcast/protocol/KeyboardId.hpp
-            include/hyprcast/protocol/KeyboardSnapshot.hpp
-            include/hyprcast/protocol/Keymap.hpp
-            include/hyprcast/protocol/Modifiers.hpp
-            include/hyprcast/protocol/RegistrySnapshot.hpp
-            include/hyprcast/protocol/RepeatInfo.hpp
-            include/hyprcast/protocol/Wire.hpp)
+            include/hyprcast/protocol/key_event.hpp
+            include/hyprcast/protocol/key_state.hpp
+            include/hyprcast/protocol/keyboard_id.hpp
+            include/hyprcast/protocol/keyboard_snapshot.hpp
+            include/hyprcast/protocol/keymap_text.hpp
+            include/hyprcast/protocol/modifier_state.hpp
+            include/hyprcast/protocol/registry_snapshot.hpp
+            include/hyprcast/protocol/repeat_info.hpp
+            include/hyprcast/protocol/wire.hpp)

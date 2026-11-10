@@ -1,6 +1,6 @@
-#include "PluginConfig.hpp"
+#include "plugin_config.hpp"
 
-#include "Plugin.hpp"
+#include "plugin.hpp"
 
 #include <hyprland/src/config/ConfigManager.hpp>
 #include <hyprland/src/event/EventBus.hpp>

@@ -2,7 +2,7 @@
 
 #include "CaptureController.hpp"
 #include "OverlayInstance.hpp"
-#include "hyprcast/os/UniqueFd.hpp"
+#include "hyprcast/os/unique_fd.hpp"
 
 #include <fcntl.h>
 #include <sys/mman.h>

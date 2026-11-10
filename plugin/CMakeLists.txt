@@ -1,11 +1,11 @@
 set(HYPRCAST_PLUGIN_SOURCES
-    src/Hyprcast.cpp
-    src/hyprland/Plugin.cpp
-    src/hyprland/PluginConfig.cpp
-    src/hyprland/KeyboardRegistry.cpp
-    src/ipc/EventServer.cpp
-    src/os/FileLock.cpp
-    src/wayland/WlEventSource.cpp)
+    src/keycaster.cpp
+    src/hyprland/plugin.cpp
+    src/hyprland/plugin_config.cpp
+    src/hyprland/keyboard_registry.cpp
+    src/ipc/event_server.cpp
+    src/os/file_lock.cpp
+    src/wayland/wl_event_source.cpp)
 
 include(FetchContent)
 
@@ -42,16 +42,16 @@ if(HYPRCAST_LUA_VERSION VERSION_LESS "5.5" OR NOT HYPRCAST_LUA_VERSION
     FATAL_ERROR
       "Lua >= 5.5 and < 5.6 is required; found ${HYPRCAST_LUA_VERSION}")
 endif()
-add_library(hyprcast_config STATIC src/config/Config.cpp)
+add_library(hyprcast_config STATIC src/config/config.cpp)
 set_target_properties(hyprcast_config PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_sources(
   hyprcast_config PUBLIC FILE_SET HEADERS BASE_DIRS include FILES
-                         include/hyprcast/config/Config.hpp)
+                         include/hyprcast/config/config.hpp)
 target_link_libraries(hyprcast_config PUBLIC PkgConfig::HYPRCAST_LUA
                       PRIVATE hyprcast::warnings)
 
 if(BUILD_TESTING)
-  add_executable(configuration_tests tests/Config.cpp)
+  add_executable(configuration_tests tests/config.cpp)
   target_link_libraries(configuration_tests PRIVATE hyprcast_config
                                                     hyprcast::warnings)
   add_test(NAME configuration COMMAND configuration_tests)
@@ -100,8 +100,8 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   # cannot prove non-null, including from inside libstdc++. A source property
   # because it has to follow the -Wnull-dereference from hyprcast::warnings.
   set_source_files_properties(
-    src/hyprland/PluginConfig.cpp src/hyprland/KeyboardRegistry.cpp
-    src/ipc/EventServer.cpp PROPERTIES COMPILE_OPTIONS -Wno-null-dereference)
+    src/hyprland/plugin_config.cpp src/hyprland/keyboard_registry.cpp
+    src/ipc/event_server.cpp PROPERTIES COMPILE_OPTIONS -Wno-null-dereference)
 endif()
 
 install(TARGETS hyprcast LIBRARY DESTINATION lib)

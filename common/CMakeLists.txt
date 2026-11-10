@@ -1,7 +1,7 @@
 add_library(hyprcast_common INTERFACE)
 add_library(hyprcast::common ALIAS hyprcast_common)
 
-configure_file(Version.hpp.in "${CMAKE_CURRENT_BINARY_DIR}/generated/hyprcast/Version.hpp" @ONLY)
+configure_file(version.hpp.in "${CMAKE_CURRENT_BINARY_DIR}/generated/hyprcast/version.hpp" @ONLY)
 
 target_sources(
   hyprcast_common
@@ -11,5 +11,5 @@ target_sources(
             include
             "${CMAKE_CURRENT_BINARY_DIR}/generated"
             FILES
-            include/hyprcast/os/UniqueFd.hpp
-            "${CMAKE_CURRENT_BINARY_DIR}/generated/hyprcast/Version.hpp")
+            include/hyprcast/os/unique_fd.hpp
+            "${CMAKE_CURRENT_BINARY_DIR}/generated/hyprcast/version.hpp")

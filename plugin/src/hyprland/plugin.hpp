@@ -1,6 +1,6 @@
 #pragma once
 
-#include "hyprcast/Version.hpp"
+#include "hyprcast/version.hpp"
 
 #include <hyprland/src/plugins/PluginAPI.hpp>
 

@@ -2,7 +2,7 @@
 
 #include "LineFramer.hpp"
 #include "Protocol.hpp"
-#include "hyprcast/protocol/Wire.hpp"
+#include "hyprcast/protocol/wire.hpp"
 
 #include <QDebug>
 #include <QIODevice>

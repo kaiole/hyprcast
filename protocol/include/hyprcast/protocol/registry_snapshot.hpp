@@ -1,6 +1,6 @@
 #pragma once
 
-#include "hyprcast/protocol/KeyboardSnapshot.hpp"
+#include "hyprcast/protocol/keyboard_snapshot.hpp"
 
 #include <vector>
 

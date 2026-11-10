@@ -1,7 +1,7 @@
-#include "Plugin.hpp"
+#include "plugin.hpp"
 
-#include "Hyprcast.hpp"
-#include "Log.hpp"
+#include "keycaster.hpp"
+#include "log.hpp"
 
 #include <helpers/memory/Memory.hpp>
 #include <hyprland/src/debug/log/Logger.hpp>

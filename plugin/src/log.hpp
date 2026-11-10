@@ -1,6 +1,6 @@
 #pragma once
 
-#include "hyprland/Plugin.hpp"
+#include "hyprland/plugin.hpp"
 
 #include <hyprland/src/debug/log/Logger.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>

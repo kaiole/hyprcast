@@ -1,16 +1,16 @@
 #pragma once
 
-#include "CallbackBoundary.hpp"
-#include "KeyboardInfo.hpp"
-#include "hyprcast/config/Config.hpp"
-#include "hyprcast/protocol/KeyEvent.hpp"
-#include "hyprcast/protocol/KeyboardId.hpp"
-#include "hyprcast/protocol/KeyboardSnapshot.hpp"
-#include "hyprcast/protocol/Keymap.hpp"
-#include "hyprcast/protocol/Modifiers.hpp"
-#include "hyprcast/protocol/RegistrySnapshot.hpp"
-#include "hyprcast/protocol/RepeatInfo.hpp"
-#include "wayland/WlEventSource.hpp"
+#include "callback_boundary.hpp"
+#include "hyprcast/config/config.hpp"
+#include "hyprcast/protocol/key_event.hpp"
+#include "hyprcast/protocol/keyboard_id.hpp"
+#include "hyprcast/protocol/keyboard_snapshot.hpp"
+#include "hyprcast/protocol/keymap_text.hpp"
+#include "hyprcast/protocol/modifier_state.hpp"
+#include "hyprcast/protocol/registry_snapshot.hpp"
+#include "hyprcast/protocol/repeat_info.hpp"
+#include "keyboard_info.hpp"
+#include "wayland/wl_event_source.hpp"
 
 #include <hyprland/src/helpers/memory/Memory.hpp>
 

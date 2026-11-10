@@ -1,8 +1,8 @@
-#include "EventServer.hpp"
+#include "event_server.hpp"
 
-#include "CallbackBoundary.hpp"
-#include "Log.hpp"
-#include "hyprcast/protocol/Wire.hpp"
+#include "callback_boundary.hpp"
+#include "hyprcast/protocol/wire.hpp"
+#include "log.hpp"
 
 #include <Compositor.hpp>
 #include <hyprland/src/debug/log/Logger.hpp>

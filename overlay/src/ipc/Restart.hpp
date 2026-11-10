@@ -1,6 +1,6 @@
 #pragma once
 
-#include "hyprcast/os/UniqueFd.hpp"
+#include "hyprcast/os/unique_fd.hpp"
 
 #include <QObject>
 #include <QString>

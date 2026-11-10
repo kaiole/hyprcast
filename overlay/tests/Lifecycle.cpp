@@ -1,7 +1,9 @@
+#include "hyprcast/protocol/wire.hpp"
 #include "ipc/CaptureController.hpp"
 #include "ipc/IpcClient.hpp"
 #include "ipc/OverlayInstance.hpp"
 
+#include <QByteArray>
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QEventLoop>
@@ -38,6 +40,13 @@ bool until(const std::function<bool()>& predicate, int timeout = 2000) {
         loop.exec();
     }
     return predicate();
+}
+// The mock plugin's side of a new connection: the hello comes first.
+std::unique_ptr<QLocalSocket> accept(QLocalServer& plugin) {
+    std::unique_ptr<QLocalSocket> peer(plugin.nextPendingConnection());
+    peer->write(R"({"event":"hello","protocol_version":)"
+                + QByteArray::number(hyprcast::wire::protocol_version) + "}\n");
+    return peer;
 }
 void state(QLocalSocket* peer, bool paused) {
     peer->write(paused ? "{\"event\":\"casting_state\",\"keyboard_id\":0,"
@@ -86,7 +95,7 @@ void testLifecycle() {
     ipc.start();
     check(until([&] { return plugin.hasPendingConnections(); }),
           "client connects");
-    std::unique_ptr<QLocalSocket> peer(plugin.nextPendingConnection());
+    std::unique_ptr<QLocalSocket> peer = accept(plugin);
     state(peer.get(), true);
     check(until([&] { return peer->canReadLine(); }),
           "initial enable requested");
@@ -124,7 +133,7 @@ void testLifecycle() {
     check(until([&] { return !active; }), "disconnect hides overlay");
     check(until([&] { return plugin.hasPendingConnections(); }),
           "reconnect attempted");
-    peer.reset(plugin.nextPendingConnection());
+    peer = accept(plugin);
     state(peer.get(), true);
     check(until([&] { return ipc.hasCastingState(); }),
           "reconnect snapshot received");
@@ -142,6 +151,62 @@ void testLifecycle() {
     check(timeout.exitCode() == 1 && !failure.isEmpty(),
           "missing acknowledgement reported");
     check(!active, "timeout stays hidden");
+}
+
+// The overlay was updated but the compositor still runs the plugin from before:
+// requests fail at once with what to do, and that plugin is asked for nothing.
+void testIncompatiblePlugin() {
+    const QTemporaryDir directory;
+    check(directory.isValid(), "temporary directory");
+    const QString socket = directory.filePath("events.sock");
+    OverlayInstance owner(socket);
+    check(isOwner(owner.acquire(OverlayInstance::Command::Start)),
+          "instance owns lock");
+    QLocalServer plugin;
+    check(plugin.listen(socket), "old plugin listening");
+    IpcClient ipc(socket);
+    CaptureController capture(ipc);
+    QObject::connect(&owner,
+                     &OverlayInstance::toggleRequested,
+                     &capture,
+                     &CaptureController::toggle);
+    bool active = false;
+    QString failure;
+    QObject::connect(&capture,
+                     &CaptureController::activeChanged,
+                     &capture,
+                     [&](bool value) { active = active || value; });
+    QObject::connect(&capture,
+                     &CaptureController::commandFailed,
+                     &capture,
+                     [&](const QString& value) { failure = value; });
+    capture.enableWhenReady();
+    ipc.start();
+    check(until([&] { return plugin.hasPendingConnections(); }),
+          "client connects");
+    // A plugin from before the hello existed starts with its capture state.
+    const std::unique_ptr<QLocalSocket> peer(plugin.nextPendingConnection());
+    state(peer.get(), true);
+
+    // Well inside the time a missing confirmation would take to report.
+    check(until([&] { return !failure.isEmpty(); }, 1500),
+          "pending enable fails as soon as the plugin is refused");
+    check(failure.contains("Reload the plugin or restart Hyprland"),
+          "the failure says how to load the updated plugin");
+    check(!capture.busy(), "the refused request is over");
+
+    QProcess toggle;
+    startForwarder(toggle, socket);
+    check(until([&] { return toggle.state() == QProcess::NotRunning; }),
+          "toggle against an old plugin returns");
+    check(toggle.exitCode() == 1, "toggle against an old plugin fails");
+    check(toggle.readAllStandardError().contains(
+              "Reload the plugin or restart Hyprland"),
+          "the toggle caller is told how to load the updated plugin");
+
+    QCoreApplication::processEvents();
+    check(peer->readAll().isEmpty() && !active,
+          "an old plugin is never asked to capture");
 }
 
 void testUnavailableAndCleanup() {
@@ -198,10 +263,14 @@ int main(int argc, char** argv) {
         if (crash && isOwner(result)) {
             std::_Exit(0);
         }
+        if (!result) {
+            std::cerr << result.error().toStdString() << '\n';
+        }
         return result && *result == OverlayInstance::Ownership::Forwarded ? 0
                                                                           : 1;
     }
     testLifecycle();
+    testIncompatiblePlugin();
     testUnavailableAndCleanup();
     return 0;
 }

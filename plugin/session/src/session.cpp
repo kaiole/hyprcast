@@ -30,6 +30,7 @@ session::session(wl_event_loop* loop,
           sock_dir,
           log,
           [this] {
+              server_.queue_message(wire::hello_message());
               server_.queue_message(wire::casting_state_message(paused_));
           },
           [this](bool enabled) { set_paused(!enabled); },

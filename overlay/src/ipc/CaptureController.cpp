@@ -39,7 +39,12 @@ CaptureController::CaptureController(IpcClient& ipc, QObject* parent)
     // takes a new toggle.
     connect(&m_ipc, &IpcClient::connectionReset, this, [this] {
         emit activeChanged(false);
-        if (m_target || m_restoring) {
+        const bool pending = m_waiting || m_target || m_restoring;
+        if (pending && !m_ipc.incompatibility().isEmpty()) {
+            // Waiting for this plugin to confirm would only end in the
+            // timeout, which cannot say what is wrong.
+            finish(m_ipc.incompatibility());
+        } else if (m_target || m_restoring) {
             finish(QStringLiteral(
                 "Plugin disconnected before confirming capture"));
         }
@@ -114,7 +119,9 @@ void CaptureController::toggle(QLocalSocket* requester) {
     if (!m_ipc.connected() || !m_ipc.hasCastingState()) {
         OverlayInstance::reply(
             requester,
-            QStringLiteral("Hyprcast plugin is unavailable"));
+            m_ipc.incompatibility().isEmpty()
+                ? QStringLiteral("Hyprcast plugin is unavailable")
+                : m_ipc.incompatibility());
         return;
     }
     m_requester = requester;

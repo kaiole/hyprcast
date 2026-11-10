@@ -30,6 +30,12 @@ public:
     [[nodiscard]] int keyboardCount() const noexcept {
         return m_state.keyboardCount();
     }
+    // Why the plugin that last answered was turned away: it speaks another
+    // protocol version. The text says what to restart. Empty once a compatible
+    // plugin answers, or when none answers at all.
+    [[nodiscard]] const QString& incompatibility() const noexcept {
+        return m_incompatibility;
+    }
 
 signals:
     // The connection dropped or was rejected; everything learned from it is
@@ -48,6 +54,8 @@ private:
     void resetConnectionState();
     void scheduleReconnect();
     void failConnection(const QString& reason);
+    void rejectPlugin(const QString& reason);
+    void dropConnection();
 
     static constexpr int InitialReconnectDelayMs = 250;
     static constexpr int MaxReconnectDelayMs = 10'000;
@@ -62,9 +70,12 @@ private:
     QTimer m_stableConnectionTimer;
     LineFramer m_framer;
     ConnectionState m_state;
+    QString m_incompatibility;
     int m_nextReconnectDelayMs = InitialReconnectDelayMs;
     bool m_started = false;
     bool m_connected = false;
+    // The plugin has opened this connection with a compatible hello.
+    bool m_greeted = false;
 };
 
 } // namespace hyprcast::overlay

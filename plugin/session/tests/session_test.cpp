@@ -76,8 +76,11 @@ protected:
         return loop.run_until(done);
     }
 
-    // Waits for `expected.size()` lines and compares everything received.
-    void expect_lines(socket_client& client, const line_list& expected) {
+    // Compares everything the client received with the hello that opens every
+    // connection followed by `following`, once that many lines have arrived.
+    void expect_lines(socket_client& client, const line_list& following) {
+        line_list expected {wire::hello_message()};
+        expected.append_range(following);
         EXPECT_TRUE(wait([&] {
             return client.lines().size() >= expected.size();
         })) << "the client received "
@@ -129,6 +132,20 @@ TEST_F(SessionTest, StartsPausedWithoutAskingForKeyboards) {
     EXPECT_TRUE(under_test.paused());
     EXPECT_EQ(snapshots_taken, 0);
     EXPECT_TRUE(std::filesystem::is_socket(sock_path()));
+}
+
+// The overlay hangs up on a plugin whose first line is anything else.
+TEST_F(SessionTest, OpensEveryConnectionWithTheProtocolVersion) {
+    auto first = connect();
+    auto lines = first.lines();
+    ASSERT_FALSE(lines.empty());
+    EXPECT_EQ(lines.front(), wire::hello_message());
+
+    // A client that replaces the first one is greeted as well.
+    auto second = connect();
+    lines = second.lines();
+    ASSERT_FALSE(lines.empty());
+    EXPECT_EQ(lines.front(), wire::hello_message());
 }
 
 // A keyboard snapshot carries modifier state, so a paused client gets none.
@@ -572,6 +589,7 @@ TEST_F(SessionTest, DisconnectsAClientWhenAKeyboardCannotBeEncoded) {
     EXPECT_TRUE(under_test.paused());
     EXPECT_EQ(client.lines(),
               (line_list {
+                  wire::hello_message(),
                   wire::casting_state_message(true),
                   wire::casting_state_message(false),
               }));

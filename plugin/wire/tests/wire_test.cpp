@@ -72,6 +72,11 @@ std::string sorted_members(std::string_view message) {
     return result;
 }
 
+TEST(WireMessages, Hello) {
+    EXPECT_EQ(sorted_members(wire::hello_message()),
+              R"({"event":"hello","protocol_version":1})");
+}
+
 TEST(WireMessages, CastingState) {
     EXPECT_EQ(sorted_members(wire::casting_state_message(true)),
               R"({"event":"casting_state","keyboard_id":0,"paused":true})");

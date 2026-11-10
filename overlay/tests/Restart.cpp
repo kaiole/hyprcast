@@ -1,6 +1,7 @@
 #include "ipc/Restart.hpp"
 
 #include "hyprcast/os/unique_fd.hpp"
+#include "hyprcast/protocol/wire.hpp"
 #include "ipc/OverlayInstance.hpp"
 
 #include <fcntl.h>
@@ -87,6 +88,9 @@ struct Fixture {
     QProcess resident;
     QLocalServer plugin;
     std::unique_ptr<QLocalSocket> peer;
+    // What the mock plugin opens every connection with.
+    QByteArray greeting = R"({"event":"hello","protocol_version":)"
+        + QByteArray::number(hyprcast::wire::protocol_version) + "}\n";
     QByteArray log;
     Fixture() {
         check(directory.isValid(), "temporary directory");
@@ -112,15 +116,7 @@ struct Fixture {
         if (available) {
             check(plugin.listen(socket), "mock plugin listen");
         }
-        resident.setProcessEnvironment(environment);
-        resident.setWorkingDirectory(directory.path());
-        QStringList
-            args {"--socket", socket, "--config", config, "--width", "777"};
-        if (active) {
-            args << "toggle";
-        }
-        resident.start(executable(), args);
-        check(resident.waitForStarted(), "start overlay");
+        launch(active);
         if (available) {
             accept();
             state(*peer, true);
@@ -139,10 +135,22 @@ struct Fixture {
               }),
               "startup with original explicit width override");
     }
+    void launch(bool active) {
+        resident.setProcessEnvironment(environment);
+        resident.setWorkingDirectory(directory.path());
+        QStringList
+            args {"--socket", socket, "--config", config, "--width", "777"};
+        if (active) {
+            args << "toggle";
+        }
+        resident.start(executable(), args);
+        check(resident.waitForStarted(), "start overlay");
+    }
     void accept() {
         check(until([&] { return plugin.hasPendingConnections(); }),
               "plugin connection");
         peer.reset(plugin.nextPendingConnection());
+        peer->write(greeting);
     }
     void command(QProcess& process,
                  const QStringList& extra = {},
@@ -513,6 +521,28 @@ void testUnavailable() {
     check(f.peer->bytesAvailable() == 0,
           "unavailable plugin restart has no pending enable");
 }
+// The overlay was updated but the compositor still runs the plugin from before:
+// a first `toggle` says what to do, asks that plugin for nothing and leaves no
+// resident behind.
+void testIncompatiblePlugin() {
+    Fixture f;
+    // A plugin from before the hello existed starts with its capture state.
+    f.greeting.clear();
+    check(f.plugin.listen(f.socket), "old plugin listen");
+    f.launch(true);
+    f.accept();
+    state(*f.peer, true);
+    check(until([&] { return f.resident.state() == QProcess::NotRunning; }),
+          "activation against an old plugin ends");
+    const QByteArray output = f.resident.readAllStandardError();
+    check(f.resident.exitCode() == 1, "activation against an old plugin fails");
+    check(output.contains("Reload the plugin or restart Hyprland"),
+          "the failure says how to load the updated plugin");
+    check(f.peer->readAll().isEmpty(),
+          "an old plugin is never asked to capture");
+    check(!QFile::exists(f.socket + ".overlay"),
+          "no resident stays behind an old plugin");
+}
 void testFailedExecAndBadReplies() {
     QTemporaryDir dir;
     const QString path = dir.filePath("event.sock");
@@ -605,6 +635,7 @@ int main(int argc, char** argv) {
         testConfiguration();
         testHistoryAndSpaceReload();
         testUnavailable();
+        testIncompatiblePlugin();
         testFailedExecAndBadReplies();
         return 0;
     } catch (const std::exception& error) {

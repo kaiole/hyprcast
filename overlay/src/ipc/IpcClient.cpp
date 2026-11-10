@@ -117,6 +117,10 @@ void IpcClient::handleSocketError(QLocalSocket::LocalSocketError error) {
     // loaded, so socket errors only drive the reconnect loop and are not
     // reported.
     Q_UNUSED(error);
+    if (!m_connected) {
+        // No plugin answered, so none is left to be incompatible with.
+        m_incompatibility.clear();
+    }
     if (m_socket.state() == QLocalSocket::UnconnectedState) {
         handleDisconnected();
     } else {
@@ -152,6 +156,18 @@ void IpcClient::handleReadyRead() {
 }
 
 void IpcClient::handleFrame(const QByteArray& frame) {
+    if (!m_greeted) {
+        // Nothing the plugin says is read before it has shown that it speaks
+        // this overlay's protocol version.
+        if (const auto hello = checkHello(frame); !hello) {
+            rejectPlugin(hello.error());
+            return;
+        }
+        m_greeted = true;
+        m_incompatibility.clear();
+        return;
+    }
+
     const auto message = parseMessage(frame);
     if (!message) {
         failConnection(
@@ -170,6 +186,7 @@ void IpcClient::handleFrame(const QByteArray& frame) {
 }
 
 void IpcClient::resetConnectionState() {
+    m_greeted = false;
     m_state.reset();
     m_framer.reset();
     emit connectionReset();
@@ -188,7 +205,22 @@ void IpcClient::scheduleReconnect() {
 
 void IpcClient::failConnection(const QString& reason) {
     qWarning().noquote() << QStringLiteral("hyprcast-overlay: %1").arg(reason);
+    dropConnection();
+}
 
+void IpcClient::rejectPlugin(const QString& reason) {
+    // The reconnect loop carries on, so that a reloaded plugin is picked up
+    // without restarting the overlay. Until then every attempt ends here, and
+    // the reason is logged once rather than each time.
+    if (reason != m_incompatibility) {
+        qWarning().noquote()
+            << QStringLiteral("hyprcast-overlay: %1").arg(reason);
+    }
+    m_incompatibility = reason;
+    dropConnection();
+}
+
+void IpcClient::dropConnection() {
     if (m_socket.state() != QLocalSocket::UnconnectedState) {
         m_socket.abort();
     }

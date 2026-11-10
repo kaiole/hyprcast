@@ -12,6 +12,7 @@
 
 #include <filesystem>
 #include <functional>
+#include <vector>
 
 struct wl_event_loop;
 
@@ -19,16 +20,22 @@ namespace hyprcast {
 
 // Decides what the connected client is told about the keyboards, and when.
 // Capture starts paused and pauses again whenever the client goes away, so
-// key events flow only after the client's own `enable`. Nothing else can
-// unpause it.
+// input flows only after the client's own `enable`. Nothing else can unpause
+// it.
+//
+// While paused the client is told the capture state and nothing else: a
+// keyboard's modifiers, keymap and repeat settings are input too. The client
+// knows of a keyboard only while input flows. Enabling capture announces
+// every keyboard as it is then, and pausing withdraws them all, so the client
+// never holds state from before a gap.
 //
 // The keyboard source reports to the on_*() functions and is asked for the
 // current keyboards through one callback. Everything runs on the thread that
 // dispatches `loop`.
 class session {
 public:
-    // Every keyboard a client should know about. Called each time a client
-    // connects; a failure disconnects that client.
+    // Every keyboard a client should know about, as it is now. Called each
+    // time input starts to flow; a failure disconnects the client.
     using snapshot_cb = std::function<registry_snapshot()>;
 
     // Serves the event socket in `sock_dir`. `loop` and `log` must outlive
@@ -46,7 +53,7 @@ public:
     ~session() = default;
 
     // What the keyboard source reports. Each throws if the message cannot be
-    // encoded; without a client the message is dropped.
+    // encoded; while no input flows the report is dropped.
     void on_subscribe(keyboard_snapshot snapshot);
     void on_unsubscribe(keyboard_id id);
     void on_key_event(keyboard_id id, const key_event& event);
@@ -65,10 +72,18 @@ private:
     // Pauses or resumes capture and tells the client the resulting state,
     // even if it did not change.
     void set_paused(bool paused);
-    void send_snapshot();
+    // Starts or stops the flow of input to match the capture state, and
+    // returns whether input flows.
+    bool sync_flow();
+    void start_flow();
+    void stop_flow();
+    void forget_client() noexcept;
 
     snapshot_cb take_snapshot_;
     bool paused_ = true;
+    bool flowing_ = false;
+    // The keyboards the client has been told about and not yet lost.
+    std::vector<keyboard_id> announced_;
     // Last, so that its callbacks never see a half-built session.
     event_server server_;
 };

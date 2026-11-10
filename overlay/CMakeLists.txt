@@ -79,42 +79,47 @@ target_link_libraries(
 
 install(DIRECTORY examples/themes/ DESTINATION share/hyprcast/themes)
 
-if(BUILD_TESTING)
-  add_executable(overlay_restart_tests tests/Restart.cpp)
-  target_link_libraries(overlay_restart_tests PRIVATE hyprcast::warnings hyprcast_overlay_ipc PkgConfig::XKBCOMMON)
+# GoogleTest is only set up for a top-level build.
+if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
+  # Each test executable has its own main (tests/Support.hpp): it needs a Qt
+  # application object and runs away from the live session.
+  function(hyprcast_overlay_test name source)
+    add_executable(${name} tests/${source} tests/Support.hpp)
+    target_link_libraries(${name} PRIVATE hyprcast::warnings GTest::gtest ${ARGN})
+  endfunction()
+
+  hyprcast_overlay_test(overlay_restart_tests Restart.cpp hyprcast_overlay_ipc PkgConfig::XKBCOMMON)
+  # The tests start the overlay itself.
   add_dependencies(overlay_restart_tests hyprcast-overlay)
-  add_test(NAME overlay-restart COMMAND overlay_restart_tests $<TARGET_FILE:hyprcast-overlay>)
-  set_tests_properties(overlay-restart PROPERTIES TIMEOUT 90)
+  target_compile_definitions(overlay_restart_tests PRIVATE HYPRCAST_OVERLAY_BINARY="$<TARGET_FILE:hyprcast-overlay>")
+  gtest_discover_tests(overlay_restart_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 90)
 
-  add_executable(overlay_lifecycle_tests tests/Lifecycle.cpp)
-  target_link_libraries(overlay_lifecycle_tests PRIVATE hyprcast::warnings hyprcast_overlay_ipc)
-  add_test(NAME overlay-lifecycle COMMAND overlay_lifecycle_tests)
+  hyprcast_overlay_test(overlay_lifecycle_tests Lifecycle.cpp hyprcast_overlay_ipc)
+  gtest_discover_tests(overlay_lifecycle_tests DISCOVERY_MODE PRE_TEST)
 
-  add_executable(overlay_ipc_tests tests/Ipc.cpp)
-  target_link_libraries(overlay_ipc_tests PRIVATE hyprcast::warnings hyprcast_overlay_ipc Qt6::Network)
-  add_test(NAME overlay-ipc COMMAND overlay_ipc_tests)
+  hyprcast_overlay_test(overlay_ipc_tests Ipc.cpp hyprcast_overlay_ipc Qt6::Network)
+  gtest_discover_tests(overlay_ipc_tests DISCOVERY_MODE PRE_TEST)
 
-  add_executable(overlay_input_tests tests/Input.cpp)
-  target_link_libraries(overlay_input_tests PRIVATE hyprcast::warnings hyprcast_overlay_input)
-  add_test(NAME overlay-input COMMAND overlay_input_tests)
+  hyprcast_overlay_test(overlay_input_tests Input.cpp hyprcast_overlay_input)
+  gtest_discover_tests(overlay_input_tests DISCOVERY_MODE PRE_TEST)
 
-  add_executable(overlay_history_tests tests/History.cpp)
-  target_link_libraries(overlay_history_tests PRIVATE hyprcast::warnings hyprcast_overlay_history)
-  add_test(NAME overlay-history COMMAND overlay_history_tests)
+  hyprcast_overlay_test(overlay_history_tests History.cpp hyprcast_overlay_history)
+  gtest_discover_tests(overlay_history_tests DISCOVERY_MODE PRE_TEST)
 
-  add_executable(overlay_config_tests tests/Config.cpp)
-  target_link_libraries(overlay_config_tests PRIVATE hyprcast::warnings hyprcast_overlay_config)
-  add_test(NAME overlay-config COMMAND overlay_config_tests)
+  hyprcast_overlay_test(overlay_config_tests Config.cpp hyprcast_overlay_config)
+  gtest_discover_tests(overlay_config_tests DISCOVERY_MODE PRE_TEST)
 
-  add_executable(overlay_theme_tests tests/Theme.cpp)
+  hyprcast_overlay_test(overlay_theme_tests Theme.cpp hyprcast_overlay_theme)
   target_compile_definitions(overlay_theme_tests PRIVATE HYPRCAST_OVERLAY_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
-  target_link_libraries(overlay_theme_tests PRIVATE hyprcast::warnings hyprcast_overlay_theme)
-  add_test(NAME overlay-theme COMMAND overlay_theme_tests)
-  set_tests_properties(overlay-theme PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+  gtest_discover_tests(
+    overlay_theme_tests
+    DISCOVERY_MODE PRE_TEST
+    PROPERTIES ENVIRONMENT "LSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/tests/lsan.supp"
+  )
 
   # Feeds what the plugin encodes to the overlay's parser, so it needs both
-  # components. GoogleTest is only set up for a top-level build.
-  if(PROJECT_IS_TOP_LEVEL AND TARGET hyprcast::wire)
+  # components.
+  if(TARGET hyprcast::wire)
     add_executable(wire_contract_tests tests/WireContract.cpp)
     target_link_libraries(wire_contract_tests PRIVATE hyprcast::warnings hyprcast::wire hyprcast_overlay_ipc GTest::gtest_main)
     gtest_discover_tests(wire_contract_tests DISCOVERY_MODE PRE_TEST)

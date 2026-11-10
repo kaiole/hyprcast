@@ -1,18 +1,18 @@
 #include "ipc/Restart.hpp"
 
+#include "Support.hpp"
 #include "hyprcast/os/unique_fd.hpp"
 #include "hyprcast/protocol/wire.hpp"
 #include "ipc/OverlayInstance.hpp"
 
 #include <fcntl.h>
+#include <gtest/gtest.h>
 #include <sys/file.h>
 #include <xkbcommon/xkbcommon.h>
 
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QDir>
-#include <QElapsedTimer>
-#include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
 #include <QIODevice>
@@ -25,42 +25,24 @@
 #include <QProcessEnvironment>
 #include <QString>
 #include <QTemporaryDir>
-#include <QTimer>
 #include <cstdlib>
-#include <exception>
-#include <functional>
 #include <iostream>
 #include <memory>
-#include <stdexcept>
 
 using namespace hyprcast::overlay;
+using tests::waitFor;
 namespace {
 
-// The overlay binary under test: the only command-line argument.
+// The overlay binary under test.
 const QString& executable() {
-    static const QString path = QCoreApplication::arguments().at(1);
+    static const QString path = QStringLiteral(HYPRCAST_OVERLAY_BINARY);
     return path;
-}
-void check(bool value, const char* message) {
-    if (!value) {
-        throw std::runtime_error(message);
-    }
-}
-bool until(const std::function<bool()>& predicate, int budget = 4000) {
-    QElapsedTimer timer;
-    timer.start();
-    while (!predicate() && timer.elapsed() < budget) {
-        QEventLoop loop;
-        QTimer::singleShot(1, &loop, &QEventLoop::quit);
-        loop.exec();
-    }
-    return predicate();
 }
 void write(const QString& path, const QByteArray& bytes) {
     QFile file(path);
-    check(file.open(QIODevice::WriteOnly | QIODevice::Truncate),
-          "open fixture file");
-    check(file.write(bytes) == bytes.size(), "write fixture file");
+    ASSERT_TRUE(file.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        << "open fixture file";
+    ASSERT_EQ(file.write(bytes), bytes.size()) << "write fixture file";
 }
 void state(QLocalSocket& peer, bool paused) {
     peer.write(paused ? "{\"event\":\"casting_state\",\"keyboard_id\":0,"
@@ -69,12 +51,16 @@ void state(QLocalSocket& peer, bool paused) {
                         "\"paused\":false}\n");
     peer.flush();
 }
-// Waits for a caller to exit and returns its exit code.
-int result(QProcess& process,
-           int budget = static_cast<int>(RestartReplyTimeout.count()) + 4000) {
-    check(
-        until([&] { return process.state() == QProcess::NotRunning; }, budget),
-        "bounded command reply");
+// Waits for a caller to exit and returns its exit code, or -1 if it does not
+// answer in time.
+int result(QProcess& process) {
+    const int budget =
+        static_cast<int>(RestartReplyTimeout.count()) + tests::WaitTimeoutMs;
+    if (!waitFor([&] { return process.state() == QProcess::NotRunning; },
+                 budget)) {
+        ADD_FAILURE() << "bounded command reply";
+        return -1;
+    }
     if (process.exitCode() != 0) {
         std::cerr << process.readAllStandardError().constData();
     }
@@ -92,8 +78,17 @@ struct Fixture {
     QByteArray greeting = R"({"event":"hello","protocol_version":)"
         + QByteArray::number(hyprcast::wire::protocol_version) + "}\n";
     QByteArray log;
-    Fixture() {
-        check(directory.isValid(), "temporary directory");
+    Fixture() { prepare(); }
+    ~Fixture() {
+        resident.kill();
+        resident.waitForFinished();
+    }
+    Q_DISABLE_COPY_MOVE(Fixture)
+    // Not in the constructor: ASSERT_* needs a void function.
+    void prepare() {
+        ASSERT_TRUE(directory.isValid()) << "temporary directory";
+        // Starts from the environment of this process, which main has already
+        // moved away from the live session.
         environment.insert("QT_QPA_PLATFORM", "offscreen");
         environment.insert("QT_FORCE_STDERR_LOGGING", "1");
         environment.insert("QT_QUICK_BACKEND", "software");
@@ -106,34 +101,28 @@ struct Fixture {
         environment.remove("HYPRCAST_PRIVATE_REEXEC_FD");
         write(config, "[window]\nwidth = 610\n");
     }
-    ~Fixture() {
-        resident.kill();
-        resident.waitForFinished();
-    }
-    Q_DISABLE_COPY_MOVE(Fixture)
     void
     start(bool active = false, bool available = true, bool acknowledge = true) {
         if (available) {
-            check(plugin.listen(socket), "mock plugin listen");
+            ASSERT_TRUE(plugin.listen(socket)) << "mock plugin listen";
         }
         launch(active);
         if (available) {
             accept();
             state(*peer, true);
             if (active) {
-                check(until([&] { return peer->canReadLine(); }),
-                      "first activation");
-                check(peer->readLine() == "enable\n", "initial enable");
+                ASSERT_TRUE(waitFor([&] { return peer->canReadLine(); }))
+                    << "first activation";
+                ASSERT_EQ(peer->readLine(), "enable\n") << "initial enable";
                 if (acknowledge) {
                     state(*peer, false);
                 }
             }
         }
-        check(until([&] {
-                  log += resident.readAllStandardError();
-                  return log.contains("777x");
-              }),
-              "startup with original explicit width override");
+        ASSERT_TRUE(waitFor([&] {
+            log += resident.readAllStandardError();
+            return log.contains("777x");
+        })) << "startup with original explicit width override";
     }
     void launch(bool active) {
         resident.setProcessEnvironment(environment);
@@ -144,11 +133,11 @@ struct Fixture {
             args << "toggle";
         }
         resident.start(executable(), args);
-        check(resident.waitForStarted(), "start overlay");
+        ASSERT_TRUE(resident.waitForStarted()) << "start overlay";
     }
     void accept() {
-        check(until([&] { return plugin.hasPendingConnections(); }),
-              "plugin connection");
+        ASSERT_TRUE(waitFor([&] { return plugin.hasPendingConnections(); }))
+            << "plugin connection";
         peer.reset(plugin.nextPendingConnection());
         peer->write(greeting);
     }
@@ -159,17 +148,16 @@ struct Fixture {
         process.setWorkingDirectory("/");
         process.start(executable(),
                       QStringList {name, "--socket", socket} + extra);
-        check(process.waitForStarted(), "start caller");
+        ASSERT_TRUE(process.waitForStarted()) << "start caller";
     }
     void replacement() {
-        check(until([&] {
-                  return peer->state() == QLocalSocket::UnconnectedState;
-              }),
-              "exec closes old event connection (plugin pauses here)");
+        ASSERT_TRUE(waitFor([&] {
+            return peer->state() == QLocalSocket::UnconnectedState;
+        })) << "exec closes old event connection (plugin pauses here)";
         accept();
     }
 };
-void testRestart() {
+TEST(OverlayRestart, ActiveRestartRestoresCapture) {
     Fixture f;
     f.start(true);
     const auto pid = f.resident.processId();
@@ -177,11 +165,11 @@ void testRestart() {
     f.command(caller);
     f.replacement();
     state(*f.peer, true);
-    check(until([&] { return f.peer->canReadLine(); }),
-          "restore enable requested");
-    check(f.peer->readLine() == "enable\n", "restore is explicit enable");
-    check(caller.state() != QProcess::NotRunning,
-          "no premature restart success");
+    ASSERT_TRUE(waitFor([&] { return f.peer->canReadLine(); }))
+        << "restore enable requested";
+    ASSERT_EQ(f.peer->readLine(), "enable\n") << "restore is explicit enable";
+    ASSERT_NE(caller.state(), QProcess::NotRunning)
+        << "no premature restart success";
     QProcess busy;
     QProcess launch;
     QProcess toggle;
@@ -189,41 +177,53 @@ void testRestart() {
     f.command(toggle, {}, "toggle");
     launch.setProcessEnvironment(f.environment);
     launch.start(executable(), {"--socket", f.socket});
-    check(result(busy) == 1, "concurrent restart rejected");
-    check(result(toggle) == 1, "concurrent capture rejected");
-    check(result(launch) == 1, "ownership retained through exec");
+    ASSERT_EQ(result(busy), 1) << "concurrent restart rejected";
+    ASSERT_EQ(result(toggle), 1) << "concurrent capture rejected";
+    ASSERT_EQ(result(launch), 1) << "ownership retained through exec";
     state(*f.peer, false);
-    check(result(caller) == 0, "active restoration confirmed");
-    check(f.resident.processId() == pid
-              && f.resident.state() == QProcess::Running,
-          "same resident PID, new runtime");
+    ASSERT_EQ(result(caller), 0) << "active restoration confirmed";
+    ASSERT_TRUE(f.resident.processId() == pid
+                && f.resident.state() == QProcess::Running)
+        << "same resident PID, new runtime";
+}
 
+TEST(OverlayRestart, DepartedRequesterLeavesTheReplacementRunning) {
+    Fixture f;
+    f.start(true);
     QProcess departed;
     f.command(departed);
     f.replacement();
     state(*f.peer, true);
-    check(until([&] { return f.peer->canReadLine(); }),
-          "requester-exit restoration");
-    check(f.peer->readLine() == "enable\n", "requester-exit explicit enable");
+    ASSERT_TRUE(waitFor([&] { return f.peer->canReadLine(); }))
+        << "requester-exit restoration";
+    ASSERT_EQ(f.peer->readLine(), "enable\n")
+        << "requester-exit explicit enable";
     departed.kill();
     departed.waitForFinished();
     state(*f.peer, false);
-    QElapsedTimer settled;
-    settled.start();
-    until([&] { return settled.elapsed() > 100; });
-    check(f.resident.state() == QProcess::Running,
-          "departed requester does not crash replacement");
+    tests::runEventLoopFor(100);
+    ASSERT_EQ(f.resident.state(), QProcess::Running)
+        << "departed requester does not crash replacement";
+}
 
+TEST(OverlayRestart, PausedRestartNeverEnables) {
+    Fixture f;
+    f.start(true);
+    const auto pid = f.resident.processId();
     // Switch to paused, then repeatedly exec without ever enabling.
     QProcess off;
     f.command(off, {}, "toggle");
-    check(until([&] { return f.peer->canReadLine(); }), "pause command");
-    check(f.peer->readLine() == "disable\n", "pause target");
+    ASSERT_TRUE(waitFor([&] { return f.peer->canReadLine(); }))
+        << "pause command";
+    ASSERT_EQ(f.peer->readLine(), "disable\n") << "pause target";
     state(*f.peer, true);
-    check(result(off) == 0, "pause confirmed");
-    const auto fdCount = QDir(QStringLiteral("/proc/%1/fd").arg(pid))
-                             .entryList(QDir::AllEntries | QDir::NoDotAndDotDot)
-                             .size();
+    ASSERT_EQ(result(off), 0) << "pause confirmed";
+    const auto openDescriptors = [pid] {
+        return QDir(QStringLiteral("/proc/%1/fd").arg(pid))
+            .entryList(QDir::AllEntries | QDir::NoDotAndDotDot)
+            .size();
+    };
+    qsizetype fdCount = 0;
     for (int i = 0; i < 3; ++i) {
         QProcess again;
         f.command(again);
@@ -232,57 +232,60 @@ void testRestart() {
         // shown.
         state(*f.peer, i != 0);
         if (i == 0) {
-            check(until([&] { return f.peer->canReadLine(); }),
-                  "paused target reconciled");
-            check(f.peer->readLine() == "disable\n",
-                  "paused restart never enables");
+            ASSERT_TRUE(waitFor([&] { return f.peer->canReadLine(); }))
+                << "paused target reconciled";
+            ASSERT_EQ(f.peer->readLine(), "disable\n")
+                << "paused restart never enables";
             state(*f.peer, true);
         }
-        check(result(again) == 0, "paused restart complete");
-        check(f.peer->bytesAvailable() == 0, "no stray enable intent");
+        ASSERT_EQ(result(again), 0) << "paused restart complete";
+        ASSERT_EQ(f.peer->bytesAvailable(), 0) << "no stray enable intent";
+        if (i == 0) {
+            // Counted once the resident is a replacement, as every later one
+            // is.
+            fdCount = openDescriptors();
+        }
     }
-    const auto finalFdCount =
-        QDir(QStringLiteral("/proc/%1/fd").arg(pid))
-            .entryList(QDir::AllEntries | QDir::NoDotAndDotDot)
-            .size();
-    check(finalFdCount <= fdCount + 1,
-          "repeated restarts do not leak descriptors");
+    ASSERT_LE(openDescriptors(), fdCount + 1)
+        << "repeated restarts do not leak descriptors";
+}
 
+TEST(OverlayRestart, FailedRestorationIsNotReplayed) {
+    Fixture f;
+    f.start();
     // Fail restoration, disconnect to pause, then do not replay on reconnect.
     QProcess on;
     f.command(on, {}, "toggle");
-    check(until([&] { return f.peer->canReadLine(); }),
-          "enable before timeout test");
+    ASSERT_TRUE(waitFor([&] { return f.peer->canReadLine(); }))
+        << "enable before timeout test";
     f.peer->readLine();
     state(*f.peer, false);
-    check(result(on) == 0, "enable confirmed");
+    ASSERT_EQ(result(on), 0) << "enable confirmed";
     QProcess timeout;
     f.command(timeout);
     f.replacement();
     state(*f.peer, true);
-    check(until([&] { return f.peer->canReadLine(); }),
-          "unacknowledged restore request");
-    check(f.peer->readLine() == "enable\n", "one restore request");
-    check(result(timeout) == 1, "capture restoration timeout is failure");
-    check(until([&] {
-              return f.peer->state() == QLocalSocket::UnconnectedState;
-          }),
-          "uncertain enable disconnects to pause");
+    ASSERT_TRUE(waitFor([&] { return f.peer->canReadLine(); }))
+        << "unacknowledged restore request";
+    ASSERT_EQ(f.peer->readLine(), "enable\n") << "one restore request";
+    ASSERT_EQ(result(timeout), 1) << "capture restoration timeout is failure";
+    ASSERT_TRUE(waitFor([&] {
+        return f.peer->state() == QLocalSocket::UnconnectedState;
+    })) << "uncertain enable disconnects to pause";
     f.accept();
     state(*f.peer, true);
-    QElapsedTimer quiet;
-    quiet.start();
-    until([&] { return quiet.elapsed() > 300; });
-    check(f.peer->bytesAvailable() == 0,
-          "no delayed enable after restoration failure");
+    tests::runEventLoopFor(300);
+    ASSERT_EQ(f.peer->bytesAvailable(), 0)
+        << "no delayed enable after restoration failure";
 }
-void testSessionSelectors() {
+
+TEST(OverlayRestart, SignatureSelectsTheSession) {
     Fixture selected;
     Fixture other;
     selected.socket =
         selected.directory.filePath("hyprcast/session/events.sock");
-    check(QDir().mkpath(QFileInfo(selected.socket).absolutePath()),
-          "session socket directory");
+    ASSERT_TRUE(QDir().mkpath(QFileInfo(selected.socket).absolutePath()))
+        << "session socket directory";
     selected.environment.insert("XDG_RUNTIME_DIR", selected.directory.path());
     selected.environment.insert("HYPRLAND_INSTANCE_SIGNATURE", "wrong-session");
     selected.start();
@@ -292,52 +295,61 @@ void testSessionSelectors() {
     caller.start(executable(), {"restart", "--instance-signature", "session"});
     selected.replacement();
     state(*selected.peer, true);
-    check(result(caller) == 0, "signature selector routes to selected session");
-    check(other.peer->state() == QLocalSocket::ConnectedState,
-          "restart never broadcasts to another session");
+    ASSERT_EQ(result(caller), 0)
+        << "signature selector routes to selected session";
+    ASSERT_EQ(other.peer->state(), QLocalSocket::ConnectedState)
+        << "restart never broadcasts to another session";
     QProcess precedence;
     selected.command(precedence, {"--instance-signature", "invalid/session"});
     selected.replacement();
     state(*selected.peer, true);
-    check(result(precedence) == 0,
-          "explicit socket retains existing selector precedence");
+    ASSERT_EQ(result(precedence), 0)
+        << "explicit socket retains existing selector precedence";
 }
-void testInitialBusy() {
+
+TEST(OverlayRestart, PendingFirstActivationRejectsRestart) {
     Fixture f;
     f.start(true, true, false);
     QProcess busy;
     f.command(busy);
-    check(result(busy) == 1 && f.peer->state() == QLocalSocket::ConnectedState,
-          "first activation pending rejects restart");
+    ASSERT_TRUE(result(busy) == 1
+                && f.peer->state() == QLocalSocket::ConnectedState)
+        << "first activation pending rejects restart";
     state(*f.peer, false);
     QProcess pause;
     f.command(pause, {}, "toggle");
-    check(until([&] { return f.peer->canReadLine(); }),
-          "rejected restart does not lose initial capture intent");
-    check(f.peer->readLine() == "disable\n",
-          "acknowledged initial enable remains authoritative");
+    ASSERT_TRUE(waitFor([&] { return f.peer->canReadLine(); }))
+        << "rejected restart does not lose initial capture intent";
+    ASSERT_EQ(f.peer->readLine(), "disable\n")
+        << "acknowledged initial enable remains authoritative";
     state(*f.peer, true);
-    check(result(pause) == 0, "capture remains usable after busy restart");
+    ASSERT_EQ(result(pause), 0) << "capture remains usable after busy restart";
 }
-void testConfiguration() {
+
+TEST(OverlayRestart, BadConfigFailsPreflight) {
     Fixture f;
     f.start();
     const auto pid = f.resident.processId();
     write(f.config, "[window]\nwidth = 'invalid'\n");
     QProcess invalid;
     f.command(invalid);
-    check(result(invalid) == 1, "invalid config fails preflight");
-    check(f.peer->state() == QLocalSocket::ConnectedState
-              && f.resident.processId() == pid,
-          "preflight preserves running overlay");
+    ASSERT_EQ(result(invalid), 1) << "invalid config fails preflight";
+    ASSERT_TRUE(f.peer->state() == QLocalSocket::ConnectedState
+                && f.resident.processId() == pid)
+        << "preflight preserves running overlay";
     QFile::remove(f.config);
     QProcess missing;
     f.command(missing);
-    check(result(missing) == 1, "missing required config fails preflight");
-    check(f.peer->state() == QLocalSocket::ConnectedState,
-          "missing required config does not exec");
+    ASSERT_EQ(result(missing), 1) << "missing required config fails preflight";
+    ASSERT_EQ(f.peer->state(), QLocalSocket::ConnectedState)
+        << "missing required config does not exec";
+}
+
+TEST(OverlayRestart, LoadsFreshThemeContent) {
+    Fixture f;
+    f.start();
     const QString theme = f.directory.filePath("hyprcast/themes/fresh");
-    check(QDir().mkpath(theme), "theme package directory");
+    ASSERT_TRUE(QDir().mkpath(theme)) << "theme package directory";
     write(theme + "/theme.toml",
           "[theme]\nid = 'fresh'\nname = 'Fresh'\napi_version = 1\nentry = "
           "'Main.qml'\n[options.word]\ntype = 'string'\ndefault = 'one'\n");
@@ -357,16 +369,15 @@ void testConfiguration() {
     f.command(fresh);
     f.replacement();
     state(*f.peer, true);
-    check(result(fresh) == 0,
-          "new package discovered, restart-only setting applied");
-    check(until([&] {
-              f.log += f.resident.readAllStandardError();
-              return f.log.contains("FRESH-one helper-one one")
-                  && f.log.contains("theme=fresh");
-          }),
-          "fresh package instantiated");
-    check(f.log.contains("777x"),
-          "original CLI overrides survive different caller cwd");
+    ASSERT_EQ(result(fresh), 0)
+        << "new package discovered, restart-only setting applied";
+    ASSERT_TRUE(waitFor([&] {
+        f.log += f.resident.readAllStandardError();
+        return f.log.contains("FRESH-one helper-one one")
+            && f.log.contains("theme=fresh");
+    })) << "fresh package instantiated";
+    ASSERT_TRUE(f.log.contains("777x"))
+        << "original CLI overrides survive different caller cwd";
     // Same ID/path changes must load new QML, helper and manifest defaults.
     write(theme + "/theme.toml",
           "[theme]\nid = 'fresh'\nname = 'Fresh'\napi_version = 1\nentry = "
@@ -384,40 +395,46 @@ void testConfiguration() {
     f.command(changed);
     f.replacement();
     state(*f.peer, true);
-    check(result(changed) == 0, "same-ID package update restart");
-    check(until([&] {
-              f.log += f.resident.readAllStandardError();
-              return f.log.count("FRESH-two helper-two two") >= 2;
-          }),
-          "isolated preflight AND new runtime use fresh content");
-    check(f.log.contains("ASSET 2"),
-          "replacement observes same-path image asset update (Qt's image cache "
-          "can be process-global)");
+    ASSERT_EQ(result(changed), 0) << "same-ID package update restart";
+    ASSERT_TRUE(waitFor([&] {
+        f.log += f.resident.readAllStandardError();
+        return f.log.count("FRESH-two helper-two two") >= 2;
+    })) << "isolated preflight AND new runtime use fresh content";
+    ASSERT_TRUE(f.log.contains("ASSET 2"))
+        << "replacement observes same-path image asset update (Qt's image "
+           "cache "
+           "can be process-global)";
     write(theme + "/Main.qml", "not valid QML\n");
     QProcess badQml;
     f.command(badQml);
-    check(result(badQml) == 1
-              && f.peer->state() == QLocalSocket::ConnectedState,
-          "bad QML rejected without replacement");
+    ASSERT_TRUE(result(badQml) == 1
+                && f.peer->state() == QLocalSocket::ConnectedState)
+        << "bad QML rejected without replacement";
+}
+
+TEST(OverlayRestart, MisuseAndUnavailableOutputAreRejected) {
+    Fixture f;
+    f.start();
     QProcess misuse;
     f.command(misuse, {"--width", "999"});
-    check(result(misuse) == 2
-              && f.peer->state() == QLocalSocket::ConnectedState,
-          "restart override misuse never mutates resident");
+    ASSERT_TRUE(result(misuse) == 2
+                && f.peer->state() == QLocalSocket::ConnectedState)
+        << "restart override misuse never mutates resident";
     QProcess unknown;
     f.command(unknown, {"--not-an-option"});
-    check(result(unknown) == 2, "unknown restart option is CLI misuse");
+    ASSERT_EQ(result(unknown), 2) << "unknown restart option is CLI misuse";
     write(f.config, "[window]\nmonitor='not-an-output'\n");
     QProcess monitor;
     f.command(monitor);
-    check(result(monitor) == 1
-              && f.peer->state() == QLocalSocket::ConnectedState,
-          "unavailable output rejected without exec");
+    ASSERT_TRUE(result(monitor) == 1
+                && f.peer->state() == QLocalSocket::ConnectedState)
+        << "unavailable output rejected without exec";
 }
-void testHistoryAndSpaceReload() {
+
+TEST(OverlayRestart, StartsWithFreshHistoryAndHeldKeys) {
     Fixture f;
     const QString theme = f.directory.filePath("hyprcast/themes/input-test");
-    check(QDir().mkpath(theme), "input test theme directory");
+    ASSERT_TRUE(QDir().mkpath(theme)) << "input test theme directory";
     write(theme + "/theme.toml",
           "[theme]\nid='input-test'\nname='Input "
           "test'\napi_version=1\nentry='Main.qml'\n");
@@ -435,19 +452,19 @@ void testHistoryAndSpaceReload() {
     write(f.config, base);
     f.start(true);
     xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-    check(context != nullptr, "XKB context");
+    ASSERT_NE(context, nullptr) << "XKB context";
     xkb_rule_names names {};
     names.rules = "evdev";
     names.model = "pc105";
     names.layout = "us";
     xkb_keymap* keymap =
         xkb_keymap_new_from_names(context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
-    check(keymap != nullptr, "XKB keymap");
+    ASSERT_NE(keymap, nullptr) << "XKB keymap";
     // xkb_keymap_get_as_string() returns a malloc()ed string.
     const std::unique_ptr<char, decltype(&std::free)> text(
         xkb_keymap_get_as_string(keymap, XKB_KEYMAP_FORMAT_TEXT_V1),
         &std::free);
-    check(text != nullptr, "serialize keymap");
+    ASSERT_NE(text, nullptr) << "serialize keymap";
     const QJsonObject snapshot {
         {"event", "subscribe_keyboard"},
         {"keyboard_id", 1},
@@ -468,93 +485,91 @@ void testHistoryAndSpaceReload() {
     f.peer->write("{\"event\":\"key\",\"keyboard_id\":1,\"time_ms\":1,"
                   "\"keycode\":57,\"state\":\"pressed\"}\n");
     f.peer->flush();
-    check(until([&] {
-              f.log += f.resident.readAllStandardError();
-              return f.log.contains("HELD 1");
-          }),
-          "held key observed");
+    ASSERT_TRUE(waitFor([&] {
+        f.log += f.resident.readAllStandardError();
+        return f.log.contains("HELD 1");
+    })) << "held key observed";
     write(f.config, base + "[symbols]\nspace='<space>'\n");
-    check(until([&] {
-              f.log += f.resident.readAllStandardError();
-              return f.log.contains("HISTORY <space>");
-          }),
-          "space-only TOML edit applies live to existing history");
+    ASSERT_TRUE(waitFor([&] {
+        f.log += f.resident.readAllStandardError();
+        return f.log.contains("HISTORY <space>");
+    })) << "space-only TOML edit applies live to existing history";
     QProcess caller;
     f.command(caller);
     f.replacement();
     state(*f.peer, true);
-    check(until([&] { return f.peer->canReadLine(); }),
-          "history restart restoration");
-    check(f.peer->readLine() == "enable\n", "history restart enable");
+    ASSERT_TRUE(waitFor([&] { return f.peer->canReadLine(); }))
+        << "history restart restoration";
+    ASSERT_EQ(f.peer->readLine(), "enable\n") << "history restart enable";
     state(*f.peer, false);
-    check(result(caller) == 0, "history restart success");
+    ASSERT_EQ(result(caller), 0) << "history restart success";
     f.log.clear();
     f.log += f.resident.readAllStandardError();
-    check(f.log.contains("INITIAL 0 0"), "fresh history and held-key state");
+    ASSERT_TRUE(f.log.contains("INITIAL 0 0"))
+        << "fresh history and held-key state";
     f.peer->write(frame);
     f.peer->flush();
-    QElapsedTimer quiet;
-    quiet.start();
-    until([&] {
-        f.log += f.resident.readAllStandardError();
-        return quiet.elapsed() > 200;
-    });
-    check(!f.log.contains("HELD 1") && !f.log.contains("HISTORY <space>"),
-          "snapshot does not reconstruct old held keys/history");
+    tests::runEventLoopFor(200);
+    f.log += f.resident.readAllStandardError();
+    ASSERT_TRUE(!f.log.contains("HELD 1") && !f.log.contains("HISTORY <space>"))
+        << "snapshot does not reconstruct old held keys/history";
 }
-void testUnavailable() {
+
+TEST(OverlayRestart, WithoutAPluginRestartIsLocal) {
     Fixture f;
     QProcess absent;
     f.command(absent);
-    check(result(absent) == 1 && !QFile::exists(f.socket + ".overlay"),
-          "no resident restart does not start one");
+    ASSERT_TRUE(result(absent) == 1 && !QFile::exists(f.socket + ".overlay"))
+        << "no resident restart does not start one";
     f.start(false, false);
     QProcess local;
     f.command(local);
-    check(result(local) == 0, "local restart succeeds without plugin");
-    check(f.plugin.listen(f.socket), "late plugin listen");
+    ASSERT_EQ(result(local), 0) << "local restart succeeds without plugin";
+    ASSERT_TRUE(f.plugin.listen(f.socket)) << "late plugin listen";
     f.accept();
     state(*f.peer, true);
-    QElapsedTimer quiet;
-    quiet.start();
-    until([&] { return quiet.elapsed() > 400; });
-    check(f.peer->bytesAvailable() == 0,
-          "unavailable plugin restart has no pending enable");
+    tests::runEventLoopFor(400);
+    ASSERT_EQ(f.peer->bytesAvailable(), 0)
+        << "unavailable plugin restart has no pending enable";
 }
+
 // The overlay was updated but the compositor still runs the plugin from before:
 // a first `toggle` says what to do, asks that plugin for nothing and leaves no
 // resident behind.
-void testIncompatiblePlugin() {
+TEST(OverlayRestart, IncompatiblePluginIsAskedForNothing) {
     Fixture f;
     // A plugin from before the hello existed starts with its capture state.
     f.greeting.clear();
-    check(f.plugin.listen(f.socket), "old plugin listen");
+    ASSERT_TRUE(f.plugin.listen(f.socket)) << "old plugin listen";
     f.launch(true);
     f.accept();
     state(*f.peer, true);
-    check(until([&] { return f.resident.state() == QProcess::NotRunning; }),
-          "activation against an old plugin ends");
+    ASSERT_TRUE(waitFor([&] {
+        return f.resident.state() == QProcess::NotRunning;
+    })) << "activation against an old plugin ends";
     const QByteArray output = f.resident.readAllStandardError();
-    check(f.resident.exitCode() == 1, "activation against an old plugin fails");
-    check(output.contains("Reload the plugin or restart Hyprland"),
-          "the failure says how to load the updated plugin");
-    check(f.peer->readAll().isEmpty(),
-          "an old plugin is never asked to capture");
-    check(!QFile::exists(f.socket + ".overlay"),
-          "no resident stays behind an old plugin");
+    ASSERT_EQ(f.resident.exitCode(), 1)
+        << "activation against an old plugin fails";
+    ASSERT_TRUE(output.contains("Reload the plugin or restart Hyprland"))
+        << "the failure says how to load the updated plugin";
+    ASSERT_TRUE(f.peer->readAll().isEmpty())
+        << "an old plugin is never asked to capture";
+    ASSERT_FALSE(QFile::exists(f.socket + ".overlay"))
+        << "no resident stays behind an old plugin";
 }
-void testFailedExecAndBadReplies() {
+
+TEST(OverlayRestart, FailedExecKeepsOwnership) {
     QTemporaryDir dir;
     const QString path = dir.filePath("event.sock");
     OverlayInstance owner(path);
     QString error;
-    check(owner.acquire(OverlayInstance::Command::Start)
-                  .value_or(OverlayInstance::Ownership::Forwarded)
-              == OverlayInstance::Ownership::Owner,
-          "fixture owner");
+    ASSERT_EQ(owner.acquire(OverlayInstance::Command::Start)
+                  .value_or(OverlayInstance::Ownership::Forwarded),
+              OverlayInstance::Ownership::Owner)
+        << "fixture owner";
     QLocalSocket requester;
     requester.connectToServer(path + ".overlay");
-    check(requester.waitForConnected(), "handoff requester connects");
+    ASSERT_TRUE(requester.waitForConnected()) << "handoff requester connects";
     QObject::connect(&owner,
                      &OverlayInstance::restartRequested,
                      &owner,
@@ -568,34 +583,39 @@ void testFailedExecAndBadReplies() {
                              owner.lockDescriptor(),
                              static_cast<int>(client->socketDescriptor()),
                              dir.filePath("not-an-executable"));
-                         check(!error.isEmpty(), "exec failure returns");
+                         // Not ASSERT: the event loop calls this.
+                         EXPECT_FALSE(error.isEmpty())
+                             << "exec failure returns";
                          OverlayInstance::reply(client, error);
                      });
     requester.write("restart\n");
     requester.flush();
-    check(until([&] { return requester.canReadLine(); }),
-          "exec failure response");
-    check(requester.readLine().contains("Executable replacement failed"),
-          "exec failure distinguished");
+    ASSERT_TRUE(waitFor([&] { return requester.canReadLine(); }))
+        << "exec failure response";
+    ASSERT_TRUE(requester.readLine().contains("Executable replacement failed"))
+        << "exec failure distinguished";
     OverlayInstance duplicate(path);
-    check(!duplicate.acquire(OverlayInstance::Command::Start),
-          "failed exec retains ownership");
+    ASSERT_FALSE(duplicate.acquire(OverlayInstance::Command::Start))
+        << "failed exec retains ownership";
+}
 
+TEST(OverlayRestart, BadReplyNeverMeansSuccess) {
+    const QTemporaryDir dir;
     const Fixture environment;
     for (const QByteArray& response :
          {QByteArray {}, QByteArray("ok\nextra\n")}) {
         const QString badPath = dir.filePath(
             response.isEmpty() ? "disconnected.sock" : "malformed.sock");
         QLocalServer bad;
-        check(bad.listen(badPath + ".overlay"), "bad response fixture");
+        ASSERT_TRUE(bad.listen(badPath + ".overlay")) << "bad response fixture";
         // Hold the ownership lock as a resident would, so the caller forwards
         // here.
         const hyprcast::unique_fd lock {::open(
             (badPath + ".overlay.owner-lock").toLocal8Bit().constData(),
             O_RDWR | O_CREAT | O_CLOEXEC,
             0600)};
-        check(lock && ::flock(lock.get(), LOCK_EX | LOCK_NB) == 0,
-              "bad response fixture holds ownership");
+        ASSERT_TRUE(lock && ::flock(lock.get(), LOCK_EX | LOCK_NB) == 0)
+            << "bad response fixture holds ownership";
         QObject::connect(&bad, &QLocalServer::newConnection, &bad, [&] {
             while (auto* client = bad.nextPendingConnection()) {
                 QObject::connect(client,
@@ -615,31 +635,17 @@ void testFailedExecAndBadReplies() {
         QProcess caller;
         caller.setProcessEnvironment(environment.environment);
         caller.start(executable(), {"restart", "--socket", badPath});
-        check(until([&] { return caller.state() == QProcess::NotRunning; }),
-              "bad response caller exits boundedly");
-        check(caller.exitCode() == 1
-                  && caller.readAllStandardError().contains("outcome unknown"),
-              "disconnect/malformed reply never means success");
+        ASSERT_TRUE(waitFor([&] {
+            return caller.state() == QProcess::NotRunning;
+        })) << "bad response caller exits boundedly";
+        ASSERT_TRUE(
+            caller.exitCode() == 1
+            && caller.readAllStandardError().contains("outcome unknown"))
+            << "disconnect/malformed reply never means success";
     }
 }
 
 } // namespace
 int main(int argc, char** argv) {
-    const QCoreApplication app(argc, argv);
-    try {
-        check(QCoreApplication::arguments().size() == 2,
-              "overlay executable argument");
-        testSessionSelectors();
-        testInitialBusy();
-        testRestart();
-        testConfiguration();
-        testHistoryAndSpaceReload();
-        testUnavailable();
-        testIncompatiblePlugin();
-        testFailedExecAndBadReplies();
-        return 0;
-    } catch (const std::exception& error) {
-        std::cerr << "check failed: " << error.what() << '\n';
-        return 1;
-    }
+    return tests::run<QCoreApplication>(argc, argv);
 }

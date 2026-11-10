@@ -55,7 +55,7 @@ developed on. These rules have no exceptions.
 | `overlay/src/config/` | `overlay.toml` parsing, validation and live reload |
 | `overlay/src/theme/` | Theme discovery, manifests and the QML runtime |
 | `overlay/qml/`, `overlay/examples/themes/` | Theme host, bundled default theme, example themes |
-| `overlay/tests/` | Overlay tests, one executable per area; `WireContract.cpp` feeds the plugin's encoder output to the overlay's parser |
+| `overlay/tests/` | GoogleTest tests of the overlay, one executable per area; `Support.hpp` holds their shared `main`, which keeps them away from the live session; `WireContract.cpp` feeds the plugin's encoder output to the overlay's parser |
 | `docs/` | User documentation for configuration and themes |
 | `cmake/`, `CMakePresets.json` | Build helpers and the `dev`, `lint` and `release` presets |
 
@@ -79,9 +79,9 @@ owner asked for exactly that.
 | Capture pauses when the client goes away: closed, replaced, disconnected or shut down | `session_test.cpp` (`PausesWhen...`, `ShutdownDropsTheClientAndPauses`) |
 | While paused the client is told the capture state and nothing else: no keys, modifiers, keymaps, repeat settings or keyboards | `session_test.cpp` (`SendsNothingDerivedFromInputWhilePaused`, `DropsEverythingWhileNoClientIsConnected`) |
 | While the session is locked nothing derived from input is sent, enabled or not | `session_test.cpp` (`SendsNothingDerivedFromInputWhileLocked`, `EnableWhileLockedAnnouncesNoKeyboards`) |
-| Nothing from a gap leaks out after it: every keyboard is announced afresh when input flows again, and the release of a key whose press was not sent is dropped | `session_test.cpp` (`EveryEnableSendsAFreshSnapshot`, `ResumesWithAFreshSnapshotAfterUnlock`, `DropsTheReleaseOf...`); the overlay side in `overlay/tests/Input.cpp` (`testResentSnapshotReplacesKeyboardState`) and `overlay/tests/Ipc.cpp` (`testConnectionStateFollowsResentSnapshots`) |
+| Nothing from a gap leaks out after it: every keyboard is announced afresh when input flows again, and the release of a key whose press was not sent is dropped | `session_test.cpp` (`EveryEnableSendsAFreshSnapshot`, `ResumesWithAFreshSnapshotAfterUnlock`, `DropsTheReleaseOf...`); the overlay side in `overlay/tests/Input.cpp` (`KeyboardInterpreterTest.ResentSnapshotReplacesKeyboardState`) and `overlay/tests/Ipc.cpp` (`ConnectionStateTest.FollowsResentSnapshots`) |
 | Only the connected client's `enable` turns capture on: nothing on the compositor side (Lua function, config value, compositor event) does | `session_test.cpp` (`OnlyAClientCommandUnpauses`) |
-| The overlay asks nothing of a plugin that speaks another protocol version | `overlay/tests/Ipc.cpp` (`testIncompatiblePluginIsRefused`), `overlay/tests/Lifecycle.cpp` and `overlay/tests/Restart.cpp` (`testIncompatiblePlugin`) |
+| The overlay asks nothing of a plugin that speaks another protocol version | `overlay/tests/Ipc.cpp` (`IncompatiblePlugin.*IsRefused`), `overlay/tests/Lifecycle.cpp` (`OverlayLifecycle.IncompatiblePluginIsAskedForNothing`) and `overlay/tests/Restart.cpp` (`OverlayRestart.IncompatiblePluginIsAskedForNothing`) |
 
 "Locked" is Hyprland's session lock (`ext-session-lock-v1`, as `hyprlock`
 takes it), which the adapter reads through the session's `locked_cb`; with no
@@ -120,7 +120,10 @@ env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u DISPLAY \
 Do not weaken a check, warning or test to get green. A lint suppression is a
 `NOLINTNEXTLINE(check-name)` on the one line it applies to, with the reason in
 a comment directly above it. A check is disabled in `.clang-tidy` only when it
-is wrong for the code base as a whole, with the reason next to it.
+is wrong for the code base as a whole, with the reason next to it. A leak that
+LeakSanitizer reports inside a library goes in `overlay/tests/lsan.supp` by the
+name of the leaking function, with the reason above it; ctest passes that file
+to the theme tests.
 
 ## Conventions
 

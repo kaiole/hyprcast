@@ -2,8 +2,8 @@
 
 #include <string>
 
-namespace Hyprcast {
+namespace hyprcast {
 
 using Keymap = std::string;
 
-} // namespace Hyprcast
+} // namespace hyprcast

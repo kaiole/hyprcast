@@ -44,7 +44,7 @@
 
 namespace {
 
-using namespace Hyprcast::Overlay;
+using namespace hyprcast::overlay;
 using LayerWindow = LayerShellQt::Window;
 
 constexpr QStringView ThemeHostUrl = u"qrc:/hyprcast/overlay/qml/ThemeHost.qml";
@@ -849,7 +849,7 @@ int main(int argc, char* argv[]) {
     QGuiApplication application(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("hyprcast-overlay"));
     QCoreApplication::setApplicationVersion(
-        QString::fromLatin1(Hyprcast::PROJECT_VERSION));
+        QString::fromLatin1(hyprcast::PROJECT_VERSION));
 
     CommandLine commandLine;
     const auto command = commandLine.parse(QGuiApplication::arguments());

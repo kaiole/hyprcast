@@ -14,7 +14,7 @@
 #include <limits>
 #include <utility>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 
 KeyboardPresenter::KeyboardPresenter(QObject* parent) : QObject(parent) {
     m_timer.setSingleShot(true);
@@ -263,4 +263,4 @@ void KeyboardPresenter::onTimer() {
     advance(Clock::now());
 }
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

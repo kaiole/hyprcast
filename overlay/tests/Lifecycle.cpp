@@ -19,7 +19,7 @@
 #include <iostream>
 #include <memory>
 
-using namespace Hyprcast::Overlay;
+using namespace hyprcast::overlay;
 
 namespace {
 

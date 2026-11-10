@@ -7,7 +7,7 @@
 #include <expected>
 #include <optional>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 
 // Connection-scoped view of the plugin's state, validated message by message.
 // It tracks only what validation needs; the keyboards themselves live in the
@@ -34,4 +34,4 @@ private:
         m_keyboards; // Subscribed keyboards; never contains the reserved id 0.
 };
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

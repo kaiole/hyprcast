@@ -26,7 +26,7 @@
 #include <tuple>
 #include <utility>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 namespace {
 
 using Toml::TableReader;
@@ -807,4 +807,4 @@ void OverlayConfigManager::onFileSystemChange() {
     m_reloadTimer.start();
 }
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

@@ -12,7 +12,7 @@
 
 class QLocalSocket;
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 
 // steady_clock is CLOCK_MONOTONIC on Linux, so deadlines survive exec()
 // unchanged.
@@ -108,4 +108,4 @@ private:
     Preflight m_preflight;
 };
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

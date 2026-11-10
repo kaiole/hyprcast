@@ -6,7 +6,7 @@
 #include <expected>
 #include <variant>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 namespace {
 
 // The overload-set idiom: it only inherits the call operators of the lambdas
@@ -65,4 +65,4 @@ void ConnectionState::reset() noexcept {
     m_keyboards.clear();
 }
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

@@ -5,7 +5,7 @@
 #include <filesystem>
 #include <utility>
 
-namespace Hyprcast {
+namespace hyprcast {
 
 class CSockFile {
 public:
@@ -29,4 +29,4 @@ private:
     bool m_bound = false;
 };
 
-} // namespace Hyprcast
+} // namespace hyprcast

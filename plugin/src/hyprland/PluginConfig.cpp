@@ -9,7 +9,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace Hyprcast {
+namespace hyprcast {
 namespace {
 
 // Lua calls configure() as a plain function, which cannot carry `this`.
@@ -54,4 +54,4 @@ void CPluginConfig::handleConfigReload() {
     m_callbacks.onConfigReload();
 }
 
-} // namespace Hyprcast
+} // namespace hyprcast

@@ -17,7 +17,7 @@
 #include <memory>
 #include <optional>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 
 enum class ThemeOptionType : std::uint8_t {
     Boolean,
@@ -180,4 +180,4 @@ private:
     std::unique_ptr<Instance> m_staged;
 };
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

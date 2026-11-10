@@ -21,7 +21,7 @@
 #include <expected>
 #include <utility>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 namespace {
 
 using namespace std::chrono_literals;
@@ -221,4 +221,4 @@ void OverlayInstance::reply(QLocalSocket* client, const QString& error) {
     client->disconnectFromServer();
 }
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

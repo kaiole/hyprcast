@@ -8,7 +8,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace Hyprcast {
+namespace hyprcast {
 
 template <typename Function, typename Recovery>
 void runGuarded(std::string_view context,
@@ -28,4 +28,4 @@ void runGuarded(std::string_view context,
     std::forward<Recovery>(recover)();
 }
 
-} // namespace Hyprcast
+} // namespace hyprcast

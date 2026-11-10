@@ -13,7 +13,7 @@
 #include <iostream>
 #include <utility>
 
-using namespace Hyprcast::Overlay;
+using namespace hyprcast::overlay;
 
 namespace {
 

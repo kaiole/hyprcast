@@ -9,7 +9,7 @@
 #include <string_view>
 #include <utility>
 
-namespace Hyprcast {
+namespace hyprcast {
 
 class CPluginConfig {
 public:
@@ -41,7 +41,7 @@ private:
 
     template <typename Function>
     void runGuarded(std::string_view context, Function&& function) {
-        Hyprcast::runGuarded(context,
+        hyprcast::runGuarded(context,
                              std::forward<Function>(function),
                              m_callbacks.onException);
     }
@@ -52,4 +52,4 @@ private:
     CHyprSignalListener m_preReload, m_reloaded;
 };
 
-} // namespace Hyprcast
+} // namespace hyprcast

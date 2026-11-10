@@ -10,7 +10,7 @@
 
 class QLocalSocket;
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 
 class CaptureController final : public QObject {
     Q_OBJECT
@@ -48,4 +48,4 @@ private:
     bool m_blocked = false;
 };
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

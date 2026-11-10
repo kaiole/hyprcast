@@ -24,10 +24,10 @@
 #include <string_view>
 #include <utility>
 
-namespace Hyprcast {
+namespace hyprcast {
 namespace {
 
-using namespace Wire;
+using namespace wire;
 
 [[nodiscard]] std::string key(std::string_view name) {
     return std::string {name};
@@ -275,4 +275,4 @@ void CHyprcast::shutdown() noexcept {
     m_shutdown = true;
 }
 
-} // namespace Hyprcast
+} // namespace hyprcast

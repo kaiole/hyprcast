@@ -4,8 +4,8 @@
 
 #include <vector>
 
-namespace Hyprcast {
+namespace hyprcast {
 
 using RegistrySnapshot = std::vector<SKeyboardSnapshot>;
 
-} // namespace Hyprcast
+} // namespace hyprcast

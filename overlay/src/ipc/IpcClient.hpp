@@ -8,7 +8,7 @@
 #include <QString>
 #include <QTimer>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 
 class IpcClient final : public QObject {
     Q_OBJECT
@@ -67,4 +67,4 @@ private:
     bool m_connected = false;
 };
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

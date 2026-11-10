@@ -12,7 +12,7 @@
 #include <functional>
 #include <string>
 
-namespace Hyprcast {
+namespace hyprcast {
 
 class CEventServer {
 public:
@@ -78,4 +78,4 @@ private:
     std::size_t m_messageOffset = 0;
 };
 
-} // namespace Hyprcast
+} // namespace hyprcast

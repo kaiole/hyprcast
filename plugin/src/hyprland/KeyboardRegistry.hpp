@@ -21,7 +21,7 @@
 #include <utility>
 #include <vector>
 
-namespace Hyprcast {
+namespace hyprcast {
 
 class CKeyboardRegistry {
 public:
@@ -64,7 +64,7 @@ public:
 private:
     template <typename Function>
     void runGuarded(std::string_view context, Function&& function) {
-        Hyprcast::runGuarded(context,
+        hyprcast::runGuarded(context,
                              std::forward<Function>(function),
                              m_callbacks.onException);
     }
@@ -81,4 +81,4 @@ private:
     CWlEventSource m_wlIdleKeyboardRemoval;
 };
 
-} // namespace Hyprcast
+} // namespace hyprcast

@@ -8,7 +8,7 @@
 
 #include <string>
 
-namespace Hyprcast {
+namespace hyprcast {
 
 struct SKeyboardInfo {
     WP<IKeyboard> keyboard;
@@ -27,4 +27,4 @@ struct SKeyboardInfo {
         repeatInfoListener, destroyListener;
 };
 
-} // namespace Hyprcast
+} // namespace hyprcast

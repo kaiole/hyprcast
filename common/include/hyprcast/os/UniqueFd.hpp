@@ -4,7 +4,7 @@
 
 #include <utility>
 
-namespace Hyprcast {
+namespace hyprcast {
 
 // Move-only owner of a POSIX file descriptor, in the spirit of std::unique_ptr.
 // A negative descriptor means "empty".
@@ -44,4 +44,4 @@ private:
     int m_fd = -1;
 };
 
-} // namespace Hyprcast
+} // namespace hyprcast

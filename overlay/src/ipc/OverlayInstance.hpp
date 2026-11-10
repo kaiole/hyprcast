@@ -11,7 +11,7 @@
 
 class QLocalSocket;
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 
 // One resident overlay per event socket. The lock protects stale-socket cleanup
 // and closes the simultaneous-first-launch race.
@@ -56,4 +56,4 @@ private:
     QLocalServer m_server;
 };
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

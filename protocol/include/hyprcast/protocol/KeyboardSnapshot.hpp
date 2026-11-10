@@ -7,7 +7,7 @@
 
 #include <string>
 
-namespace Hyprcast {
+namespace hyprcast {
 
 struct SKeyboardSnapshot {
     KeyboardId id = 0;
@@ -17,4 +17,4 @@ struct SKeyboardSnapshot {
     SRepeatInfo repeatInfo;
 };
 
-} // namespace Hyprcast
+} // namespace hyprcast

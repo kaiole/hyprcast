@@ -10,7 +10,7 @@
 #include <expected>
 #include <variant>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 
 struct CastingStateMessage {
     bool paused = false;
@@ -62,4 +62,4 @@ using ProtocolMessage = std::variant<CastingStateMessage,
 [[nodiscard]] std::expected<ProtocolMessage, QString>
 parseMessage(const QByteArray& jsonLine);
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

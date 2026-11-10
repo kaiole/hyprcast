@@ -6,7 +6,7 @@
 
 struct lua_State;
 
-namespace Hyprcast {
+namespace hyprcast {
 
 enum class eKeyboardFilterSetting : std::uint8_t {
     INCLUDE,
@@ -35,4 +35,4 @@ private:
     bool m_failed = false;
 };
 
-} // namespace Hyprcast
+} // namespace hyprcast

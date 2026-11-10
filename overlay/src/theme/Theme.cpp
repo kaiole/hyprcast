@@ -38,7 +38,7 @@
 #include <string_view>
 #include <utility>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 namespace {
 
 using Toml::TableReader;
@@ -935,4 +935,4 @@ void ThemeRuntime::resizeSlots() {
     }
 }
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

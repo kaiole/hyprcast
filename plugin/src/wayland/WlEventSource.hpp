@@ -4,7 +4,7 @@
 
 struct wl_event_source;
 
-namespace Hyprcast {
+namespace hyprcast {
 
 struct SWlEventSourceRemover {
     void operator()(struct ::wl_event_source* eventSource) const noexcept;
@@ -13,4 +13,4 @@ struct SWlEventSourceRemover {
 using CWlEventSource =
     std::unique_ptr<::wl_event_source, SWlEventSourceRemover>;
 
-} // namespace Hyprcast
+} // namespace hyprcast

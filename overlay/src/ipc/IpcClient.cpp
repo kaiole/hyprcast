@@ -12,7 +12,7 @@
 #include <string_view>
 #include <utility>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 
 IpcClient::IpcClient(QString socketPath, QObject* parent)
     : QObject(parent),
@@ -80,7 +80,7 @@ bool IpcClient::setCaptureEnabled(bool enabled) {
         return false;
     }
     const std::string_view name =
-        enabled ? Wire::COMMAND_ENABLE : Wire::COMMAND_DISABLE;
+        enabled ? wire::COMMAND_ENABLE : wire::COMMAND_DISABLE;
     const QByteArray command =
         QByteArray(name.data(), static_cast<qsizetype>(name.size())) + '\n';
     return m_socket.write(command) == command.size();
@@ -198,4 +198,4 @@ void IpcClient::failConnection(const QString& reason) {
     }
 }
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

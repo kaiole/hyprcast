@@ -14,7 +14,7 @@
 #include <optional>
 #include <vector>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 
 struct HistoryEntry {
     std::uint64_t id = 0;
@@ -213,4 +213,4 @@ private:
                                   // erased intervening input.
 };
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

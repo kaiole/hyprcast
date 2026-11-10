@@ -21,7 +21,7 @@ namespace {
 // is unloaded, which leaves the unique_ptr destructor nothing to do.
 // NOLINTBEGIN(cppcoreguidelines-avoid-non-const-global-variables)
 // NOLINTNEXTLINE(clang-diagnostic-global-constructors)
-std::unique_ptr<Hyprcast::CHyprcast> g_pHyprcast;
+std::unique_ptr<hyprcast::CHyprcast> g_pHyprcast;
 
 CFunctionHook* g_pSetupKeyboardHook = nullptr;
 // NOLINTEND(cppcoreguidelines-avoid-non-const-global-variables)
@@ -47,11 +47,11 @@ int toggleCasting(lua_State*) noexcept {
 
         g_pHyprcast->setPause(!g_pHyprcast->isPaused());
     } catch (const std::exception& error) {
-        Hyprcast::logError("Cannot toggle casting: {}", error.what());
-        Hyprcast::notifyFailure("Cannot toggle casting; see Hyprland logs.");
+        hyprcast::logError("Cannot toggle casting: {}", error.what());
+        hyprcast::notifyFailure("Cannot toggle casting; see Hyprland logs.");
     } catch (...) {
-        Hyprcast::logError("Cannot toggle casting: unknown exception");
-        Hyprcast::notifyFailure("Cannot toggle casting; see Hyprland logs.");
+        hyprcast::logError("Cannot toggle casting: unknown exception");
+        hyprcast::notifyFailure("Cannot toggle casting; see Hyprland logs.");
     }
 
     return 0;
@@ -62,11 +62,11 @@ int toggleCasting(lua_State*) noexcept {
 // explicit.
 void teardown() noexcept {
     if (g_pSetupKeyboardHook) {
-        HyprlandAPI::removeFunctionHook(Hyprcast::PHANDLE,
+        HyprlandAPI::removeFunctionHook(hyprcast::PHANDLE,
                                         g_pSetupKeyboardHook);
         g_pSetupKeyboardHook = nullptr;
     }
-    HyprlandAPI::removeLuaFunction(Hyprcast::PHANDLE, "hyprcast", "toggle");
+    HyprlandAPI::removeLuaFunction(hyprcast::PHANDLE, "hyprcast", "toggle");
     g_pHyprcast.reset();
 }
 
@@ -86,7 +86,7 @@ APICALL EXPORT std::string PLUGIN_API_VERSION() {
 }
 
 APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) try {
-    Hyprcast::PHANDLE = handle;
+    hyprcast::PHANDLE = handle;
 
     const std::string COMPOSITOR_HASH = __hyprland_api_get_hash();
     const std::string CLIENT_HASH = __hyprland_api_get_client_hash();
@@ -96,10 +96,10 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) try {
                                  "against the running Hyprland version");
     }
 
-    g_pHyprcast = std::make_unique<Hyprcast::CHyprcast>();
+    g_pHyprcast = std::make_unique<hyprcast::CHyprcast>();
 
     const auto methods =
-        HyprlandAPI::findFunctionsByName(Hyprcast::PHANDLE, "setupKeyboard");
+        HyprlandAPI::findFunctionsByName(hyprcast::PHANDLE, "setupKeyboard");
     if (methods.empty()) {
         throw std::runtime_error("Cannot find Hyprland setupKeyboard function");
     }
@@ -122,22 +122,22 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) try {
             "Cannot register Lua function hyprcast.toggle");
     }
 
-    Hyprcast::logMessage(Log::TRACE, "Plugin loaded");
+    hyprcast::logMessage(Log::TRACE, "Plugin loaded");
 
     return {
-        .name {Hyprcast::PLUGIN_NAME},
-        .description {Hyprcast::DESCRIPTION},
-        .author {Hyprcast::AUTHOR},
-        .version {Hyprcast::VERSION},
+        .name {hyprcast::PLUGIN_NAME},
+        .description {hyprcast::DESCRIPTION},
+        .author {hyprcast::AUTHOR},
+        .version {hyprcast::VERSION},
     };
 } catch (const std::exception& error) {
-    Hyprcast::logError("Cannot load plugin: {}", error.what());
-    Hyprcast::notifyFailure(error.what());
+    hyprcast::logError("Cannot load plugin: {}", error.what());
+    hyprcast::notifyFailure(error.what());
     teardown();
     throw;
 } catch (...) {
-    Hyprcast::logError("Cannot load plugin: unknown exception");
-    Hyprcast::notifyFailure(
+    hyprcast::logError("Cannot load plugin: unknown exception");
+    hyprcast::notifyFailure(
         "Cannot load plugin; see Hyprland logs for details.");
     teardown();
     throw;
@@ -149,5 +149,5 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) try {
 
 APICALL EXPORT void PLUGIN_EXIT() {
     teardown();
-    Hyprcast::logMessage(Log::TRACE, "Plugin unloaded");
+    hyprcast::logMessage(Log::TRACE, "Plugin unloaded");
 }

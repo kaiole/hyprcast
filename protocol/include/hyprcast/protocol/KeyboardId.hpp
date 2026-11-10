@@ -2,8 +2,8 @@
 
 #include <cstdint>
 
-namespace Hyprcast {
+namespace hyprcast {
 
 using KeyboardId = std::uint32_t;
 
-} // namespace Hyprcast
+} // namespace hyprcast

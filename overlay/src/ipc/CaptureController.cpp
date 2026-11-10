@@ -12,7 +12,7 @@
 #include <chrono>
 #include <variant>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 namespace {
 
 // How long the plugin has to echo a capture change before we give up.
@@ -157,4 +157,4 @@ void CaptureController::finish(const QString& error) {
     }
 }
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

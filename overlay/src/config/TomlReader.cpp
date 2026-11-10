@@ -8,7 +8,7 @@
 #include <string_view>
 #include <utility>
 
-namespace Hyprcast::Overlay::Toml {
+namespace hyprcast::overlay::Toml {
 
 QString toQString(std::string_view text) {
     return QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size()));
@@ -136,4 +136,4 @@ QString TableReader::name(std::string_view key) const {
                             : m_path + QLatin1Char('.') + toQString(key);
 }
 
-} // namespace Hyprcast::Overlay::Toml
+} // namespace hyprcast::overlay::Toml

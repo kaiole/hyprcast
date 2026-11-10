@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-namespace Hyprcast {
+namespace hyprcast {
 namespace {
 
 void require(bool condition, std::string_view message) {
@@ -154,4 +154,4 @@ int CConfig::configure(lua_State* L) noexcept {
     return 0;
 }
 
-} // namespace Hyprcast
+} // namespace hyprcast

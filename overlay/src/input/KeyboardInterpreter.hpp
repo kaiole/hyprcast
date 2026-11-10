@@ -11,7 +11,7 @@
 #include <memory>
 #include <vector>
 
-namespace Hyprcast::Overlay {
+namespace hyprcast::overlay {
 
 struct HeldKey {
     enum class Kind : std::uint8_t {
@@ -57,4 +57,4 @@ private:
     std::unique_ptr<Impl> m_impl;
 };
 
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

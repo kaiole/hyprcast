@@ -13,7 +13,6 @@ CheckOptions:
   readability-identifier-naming.EnumCase: CamelCase
   readability-identifier-naming.EnumPrefix: e
   readability-identifier-naming.EnumConstantCase: UPPER_CASE
-  readability-identifier-naming.NamespaceCase: CamelCase
   readability-identifier-naming.FunctionCase: camelBack
   readability-identifier-naming.VariableCase: aNy_CasE
   readability-identifier-naming.ParameterCase: aNy_CasE

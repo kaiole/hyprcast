@@ -80,9 +80,12 @@ private:
     disconnected_cb on_disconnected_;
     std::string command_buffer_;
 
-    // Members are destroyed in reverse order: event sources are removed first,
-    // then the client and listening descriptors close, the socket file is
-    // unlinked, and the lock is released last. Keep this order when adding
+    // Members are destroyed in reverse order, so reading upwards from the
+    // event sources: the sources are removed while the descriptors they watch
+    // are still open, the client descriptor closes, the socket file is
+    // unlinked, the listening descriptor closes, and the lock is released
+    // last. Holding the lock until the socket file is gone is what keeps this
+    // server from unlinking a successor's socket. Keep this order when adding
     // members.
     sock_paths sock_paths_;
     file_lock sock_lock_;

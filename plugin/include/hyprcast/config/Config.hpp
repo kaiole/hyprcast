@@ -21,7 +21,9 @@ struct SConfig {
 
 class CConfig {
 public:
-    const SConfig& accepted() const noexcept { return m_accepted; }
+    [[nodiscard]] const SConfig& accepted() const noexcept {
+        return m_accepted;
+    }
     void beginReload() noexcept;
     void finishReload(bool successful) noexcept;
     int configure(lua_State* L) noexcept;

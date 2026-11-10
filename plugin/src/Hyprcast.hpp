@@ -22,7 +22,7 @@ public:
     void addKeyboard(const SP<IKeyboard>& keyboard);
 
     void setPause(bool paused);
-    bool isPaused() const noexcept;
+    [[nodiscard]] bool isPaused() const noexcept;
 
 private:
     void requestRegistrySnapshot();

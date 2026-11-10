@@ -268,7 +268,7 @@ struct KeyboardInterpreter::Impl {
         if (index == XKB_MOD_INVALID || index >= sizeof(xkb_mod_mask_t) * 8) {
             return 0;
         }
-        return static_cast<xkb_mod_mask_t>(xkb_mod_mask_t {1} << index);
+        return xkb_mod_mask_t {1} << index;
     }
 
     struct ActiveModifiers {
@@ -449,7 +449,7 @@ struct KeyboardInterpreter::Impl {
         return actions;
     }
 
-    TimePoint nextRepeatDeadline() const noexcept {
+    [[nodiscard]] TimePoint nextRepeatDeadline() const noexcept {
         auto next = TimePoint::max();
         for (const auto& keyboard : keyboards | std::views::values) {
             for (const auto& key : keyboard.pressed | std::views::values) {
@@ -461,7 +461,7 @@ struct KeyboardInterpreter::Impl {
         return next;
     }
 
-    std::vector<HeldKey> heldKeyItems() const {
+    [[nodiscard]] std::vector<HeldKey> heldKeyItems() const {
         std::vector<HeldKey> items;
         for (const auto& keyboard : keyboards | std::views::values) {
             for (const auto& key : keyboard.pressed | std::views::values) {

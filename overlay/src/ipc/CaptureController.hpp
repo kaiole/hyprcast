@@ -19,9 +19,11 @@ public:
     void enableWhenReady();
     void toggle(QLocalSocket* requester);
     void restoreWhenReady(bool enabled, Deadline deadline);
-    bool busy() const { return m_waiting || m_target.has_value() || m_blocked; }
+    [[nodiscard]] bool busy() const {
+        return m_waiting || m_target.has_value() || m_blocked;
+    }
     void setBlocked(bool blocked) { m_blocked = blocked; }
-    std::optional<bool> confirmedTarget() const {
+    [[nodiscard]] std::optional<bool> confirmedTarget() const {
         return m_ipc.connected() && m_ipc.hasCastingState()
             ? std::optional<bool>(!m_ipc.paused())
             : std::nullopt;

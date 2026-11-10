@@ -183,9 +183,9 @@ void testUnavailableAndCleanup() {
 
 int main(int argc, char** argv) {
     const QCoreApplication app(argc, argv);
-    if (app.arguments().size() == 3) {
-        OverlayInstance instance(app.arguments().at(2));
-        const bool crash = app.arguments().at(1) == "crash";
+    if (QCoreApplication::arguments().size() == 3) {
+        OverlayInstance instance(QCoreApplication::arguments().at(2));
+        const bool crash = QCoreApplication::arguments().at(1) == "crash";
         const auto result =
             instance.acquire(crash ? OverlayInstance::Command::Start
                                    : OverlayInstance::Command::Toggle);

@@ -6,13 +6,16 @@
 #include "hyprcast/test_support/socket_client.hpp"
 #include "hyprcast/test_support/temp_dir.hpp"
 
+#include <dlfcn.h>
 #include <gtest/gtest.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <wayland-server-core.h>
 
 #include <algorithm>
 #include <cerrno>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -23,6 +26,31 @@
 #include <string>
 #include <system_error>
 #include <vector>
+
+struct wl_event_source;
+
+namespace {
+
+// How often the server changed the events a descriptor is watched for.
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+int fd_update_count = 0;
+
+} // namespace
+
+// Stands in front of libwayland's function of the same name, which the server
+// library then calls through here: the only trace such an update leaves is
+// the call itself.
+extern "C" int wl_event_source_fd_update(::wl_event_source* source,
+                                         std::uint32_t mask) {
+    using fd_update_fn = int (*)(::wl_event_source*, std::uint32_t);
+    // dlsym() hands every symbol back as a void*.
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+    static const auto next = reinterpret_cast<fd_update_fn>(
+        ::dlsym(RTLD_NEXT, "wl_event_source_fd_update"));
+
+    ++fd_update_count;
+    return next(source, mask);
+}
 
 namespace {
 
@@ -385,6 +413,41 @@ TEST_F(EventServerTest, DeliversAMessageLargerThanTheSocketBuffer) {
 
     EXPECT_TRUE(wait([&] { return client.received().ends_with("after\n"); }));
     EXPECT_EQ(client.received(), large + "\nafter\n");
+    EXPECT_FALSE(client.closed());
+}
+
+// Changing the watched events is a system call, so the server only does it
+// when a client starts or stops being behind, not with every message.
+TEST_F(EventServerTest, ChangesTheWatchedEventsOnlyWhenTheClientFallsBehind) {
+    start();
+    auto client = connect();
+    constexpr int messages = 100;
+    const int updates_before = fd_update_count;
+
+    for (int index = 0; index < messages; ++index) {
+        server->queue_message("fits into the socket");
+    }
+    EXPECT_EQ(fd_update_count - updates_before, 0);
+
+    // More than the socket takes: the client is now behind, and stays behind
+    // while more messages queue up.
+    server->queue_message(std::string(std::size_t {512} * 1024, 'k'));
+    for (int index = 0; index < messages; ++index) {
+        server->queue_message("queued");
+    }
+    server->queue_message("caught up");
+    EXPECT_EQ(fd_update_count - updates_before, 1);
+
+    // Catching up takes several rounds of the client reading and the server
+    // sending more, and ends with one change back.
+    EXPECT_TRUE(
+        wait([&] { return client.received().ends_with("caught up\n"); }));
+    EXPECT_EQ(fd_update_count - updates_before, 2);
+
+    for (int index = 0; index < messages; ++index) {
+        server->queue_message("fits again");
+    }
+    EXPECT_EQ(fd_update_count - updates_before, 2);
     EXPECT_FALSE(client.closed());
 }
 

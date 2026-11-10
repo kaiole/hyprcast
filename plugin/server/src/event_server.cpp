@@ -161,6 +161,7 @@ void event_server::disconnect_client() noexcept {
     queued_bytes_ = 0;
     message_queue_.clear();
     wl_client_events_.reset();
+    client_writable_watched_ = false;
     client_fd_.reset();
     if (had_client) {
         run_guarded(*log_,
@@ -395,7 +396,7 @@ void event_server::flush_messages() {
             }
 
             if (error == EAGAIN || error == EWOULDBLOCK) {
-                update_wl_dispatch_event(WL_EVENT_WRITABLE);
+                watch_client_writable(true);
                 return;
             }
 
@@ -411,7 +412,7 @@ void event_server::flush_messages() {
         message_offset_ += static_cast<std::size_t>(bytes_sent);
         queued_bytes_ -= static_cast<std::size_t>(bytes_sent);
         if (message_offset_ != full_message_size) {
-            update_wl_dispatch_event(WL_EVENT_WRITABLE);
+            watch_client_writable(true);
             return;
         }
 
@@ -419,18 +420,26 @@ void event_server::flush_messages() {
         message_offset_ = 0;
     }
 
-    update_wl_dispatch_event(0);
+    watch_client_writable(false);
 }
 
-void event_server::update_wl_dispatch_event(std::uint32_t mask) {
-    if (::wl_event_source_fd_update(wl_client_events_.get(),
-                                    mask | WL_EVENT_READABLE)
-        == -1) {
+void event_server::watch_client_writable(bool watch) {
+    // Nearly every flush ends the way the previous one did, so only a change
+    // is worth the system call behind the update.
+    if (watch == client_writable_watched_) {
+        return;
+    }
+
+    const std::uint32_t mask =
+        watch ? WL_EVENT_READABLE | WL_EVENT_WRITABLE : WL_EVENT_READABLE;
+    if (::wl_event_source_fd_update(wl_client_events_.get(), mask) == -1) {
         log_error(
             *log_,
             "Cannot update client Wayland event source; disconnecting client");
         disconnect_client();
+        return;
     }
+    client_writable_watched_ = watch;
 }
 
 } // namespace hyprcast

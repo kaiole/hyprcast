@@ -7,6 +7,16 @@ find . \( -path ./build -o -path ./.cache -o -path ./.git \) -prune -o \
   -type f \( -name '*.cpp' -o -name '*.hpp' \) -print0 |
   xargs -0 clang-format --dry-run --Werror
 
+# Only the adapter may include compositor headers: everything else has to
+# build and be tested without Hyprland.
+if grep -rnE '#include [<"](hyprland|hyprutils)/' \
+  --include='*.cpp' --include='*.hpp' \
+  --exclude-dir=build --exclude-dir=.cache --exclude-dir=.git \
+  --exclude-dir=Hyprland --exclude-dir=adapter .; then
+  echo "check: Hyprland headers included outside plugin/adapter" >&2
+  exit 1
+fi
+
 for preset in lint dev release; do
   cmake --workflow --preset "$preset"
 done

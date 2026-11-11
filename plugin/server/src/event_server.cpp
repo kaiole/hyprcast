@@ -2,9 +2,13 @@
 
 #include "hyprcast/log/log_sink.hpp"
 #include "hyprcast/log/run_guarded.hpp"
+#include "hyprcast/os/unique_fd.hpp"
 #include "hyprcast/protocol/wire.hpp"
 
+#include <fcntl.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/un.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
@@ -118,7 +122,6 @@ event_server::event_server(wl_event_loop* loop,
 
     sock_file_.mark_bound();
 
-    // TODO: if multiple clients is needed we need to increase backlog_size
     const int listen_status = ::listen(sock_fd_.get(), backlog_size);
     if (listen_status == -1) {
         throw std::system_error(errno,
@@ -211,12 +214,49 @@ event_server::init_sock_paths(const std::filesystem::path& sock_dir) {
                                 "Cannot create socket directory '"
                                     + sock_dir.string() + "'");
     }
+    restrict_to_owner(sock_dir);
 
     return {
         .sock_dir = sock_dir,
         .sock_file = sock_file,
         .lock_file = sock_dir / lock_file_name,
     };
+}
+
+void event_server::restrict_to_owner(const std::filesystem::path& sock_dir) {
+    // Opened without following a symlink, so the checks and the chmod apply
+    // to the directory itself and not to wherever a link would lead.
+    const unique_fd dir_fd {::open(sock_dir.c_str(),
+                                   O_RDONLY | O_DIRECTORY | O_NOFOLLOW
+                                       | O_CLOEXEC)};
+    if (!dir_fd) {
+        throw std::system_error(errno,
+                                std::generic_category(),
+                                "Cannot open socket directory '"
+                                    + sock_dir.string() + "'");
+    }
+    struct ::stat info {};
+    if (::fstat(dir_fd.get(), &info) == -1) {
+        throw std::system_error(errno,
+                                std::generic_category(),
+                                "Cannot inspect socket directory '"
+                                    + sock_dir.string() + "'");
+    }
+    if (info.st_uid != ::geteuid()) {
+        throw std::runtime_error("Refusing socket directory owned by another "
+                                 "user: '"
+                                 + sock_dir.string() + "'");
+    }
+    // Every keystroke passes through this directory: no one else may reach
+    // it, whatever the runtime directory above it allows.
+    constexpr ::mode_t owner_only = S_IRWXU;
+    if ((info.st_mode & 07777u) != owner_only
+        && ::fchmod(dir_fd.get(), owner_only) == -1) {
+        throw std::system_error(errno,
+                                std::generic_category(),
+                                "Cannot restrict socket directory '"
+                                    + sock_dir.string() + "'");
+    }
 }
 
 unique_fd event_server::create_socket() {

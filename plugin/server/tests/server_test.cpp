@@ -230,6 +230,41 @@ TEST_F(EventServerTest, CreatesTheDirectoryTheSocketAndTheLock) {
     EXPECT_TRUE(calls.empty());
 }
 
+TEST_F(EventServerTest, OnlyTheOwnerCanEnterTheDirectory) {
+    start();
+
+    EXPECT_EQ(std::filesystem::status(sock_dir()).permissions(),
+              std::filesystem::perms::owner_all);
+}
+
+TEST_F(EventServerTest, NarrowsAnExistingDirectory) {
+    std::filesystem::create_directories(sock_dir());
+    std::filesystem::permissions(sock_dir(),
+                                 std::filesystem::perms::owner_all
+                                     | std::filesystem::perms::group_all
+                                     | std::filesystem::perms::others_read
+                                     | std::filesystem::perms::others_exec);
+
+    start();
+
+    EXPECT_EQ(std::filesystem::status(sock_dir()).permissions(),
+              std::filesystem::perms::owner_all);
+}
+
+TEST_F(EventServerTest, RefusesADirectoryThatIsASymlink) {
+    const auto target = dir.path() / "elsewhere";
+    std::filesystem::create_directories(target);
+    std::filesystem::create_directories(sock_dir().parent_path());
+    std::filesystem::create_directory_symlink(target, sock_dir());
+    const auto before = std::filesystem::status(target).permissions();
+
+    EXPECT_THROW(start(), std::system_error);
+
+    EXPECT_FALSE(std::filesystem::exists(target / "events.sock"));
+    EXPECT_EQ(std::filesystem::status(target).permissions(), before)
+        << "the link's target is left as it was";
+}
+
 TEST_F(EventServerTest, RemovesAStaleSocket) {
     std::filesystem::create_directories(sock_dir());
     // Bound and closed again: the file stays, nothing listens on it.

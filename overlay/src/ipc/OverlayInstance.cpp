@@ -5,7 +5,6 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QLocalSocket>
-#include <QLockFile>
 #include <QThread>
 #include <QTimer>
 
@@ -27,12 +26,6 @@ namespace Hyprcast::Overlay {
         constexpr auto      ConnectRetry    = 25ms;
         constexpr auto      ConnectBudget   = 3s;
         constexpr auto      ToggleReplyWait = 4s;
-
-        bool                liveServer(const QString& path) {
-            QLocalSocket probe;
-            probe.connectToServer(path);
-            return probe.waitForConnected(static_cast<int>(ProbeTimeout.count()));
-        }
     }
 
     OverlayInstance::OverlayInstance(const QString& eventSocket, QObject* parent) :
@@ -83,18 +76,21 @@ namespace Hyprcast::Overlay {
         if (!lock || ::fstat(lock.get(), &info) || !S_ISREG(info.st_mode) || info.st_uid != ::getuid() || (info.st_mode & 0077)) {
             return std::unexpected(QStringLiteral("Cannot safely open overlay ownership lock"));
         }
-        const bool locked = ::flock(lock.get(), LOCK_EX | LOCK_NB) == 0;
-        // A pre-feature owner uses QLockFile, not flock. Never unlink its live server.
-        const bool live = locked && liveServer(m_path);
-        if (!locked || live || command == Command::Restart) {
-            lock.reset(); // Closing releases our flock before talking to the resident.
-            if (command == Command::Start) {
-                return std::unexpected(QStringLiteral("An overlay is already running for this session; use 'toggle'"));
-            }
-            return forward(command, locked && !live);
+        // A resident holds this lock for its whole life, including across a restart
+        // exec, so winning it means there is none.
+        const bool noResident = ::flock(lock.get(), LOCK_EX | LOCK_NB) == 0;
+        if (noResident && command != Command::Restart) {
+            m_lockFd = std::move(lock);
+            return listen();
         }
-        m_lockFd = std::move(lock);
-        return listen();
+        lock.reset();
+        if (noResident) {
+            return std::unexpected(QStringLiteral("No overlay is running for this session; use toggle to start it."));
+        }
+        if (command == Command::Start) {
+            return std::unexpected(QStringLiteral("An overlay is already running for this session; use 'toggle'"));
+        }
+        return forward(command);
     }
 
     std::expected<void, QString> OverlayInstance::adoptLock(const QString& lockPath, CUniqueFd inheritedLock) {
@@ -107,7 +103,7 @@ namespace Hyprcast::Overlay {
         return {};
     }
 
-    std::expected<OverlayInstance::Ownership, QString> OverlayInstance::forward(Command command, bool noResident) const {
+    std::expected<OverlayInstance::Ownership, QString> OverlayInstance::forward(Command command) const {
         QLocalSocket         client;
         const QDeadlineTimer connectDeadline(ConnectBudget);
         do {
@@ -119,8 +115,7 @@ namespace Hyprcast::Overlay {
             QThread::msleep(static_cast<unsigned long>(ConnectRetry.count()));
         } while (!connectDeadline.hasExpired());
         if (client.state() != QLocalSocket::ConnectedState) {
-            return std::unexpected(noResident ? QStringLiteral("No overlay is running for this session; use toggle to start it.") :
-                                                QStringLiteral("Overlay is starting or unresponsive; try again"));
+            return std::unexpected(QStringLiteral("Overlay is starting or unresponsive; try again"));
         }
 
         client.write(command == Command::Restart ? "restart\n" : "toggle\n");
@@ -137,9 +132,6 @@ namespace Hyprcast::Overlay {
         if (response == "ok\n") {
             return Ownership::Forwarded;
         }
-        if (command == Command::Restart && response == "error: Invalid overlay command\n") {
-            return std::unexpected(QStringLiteral("Resident does not support restart; manually close/relaunch the overlay once after upgrading"));
-        }
         if (response.startsWith("error: ") && response.endsWith('\n') && response.size() <= MaxReplyBytes) {
             return std::unexpected(QString::fromUtf8(response).trimmed());
         }
@@ -147,13 +139,7 @@ namespace Hyprcast::Overlay {
     }
 
     std::expected<OverlayInstance::Ownership, QString> OverlayInstance::listen() {
-        // Also guard against an older binary still starting. Its lock is held until
-        // our socket is listening; a live old owner is never treated as stale.
-        QLockFile legacy(m_path + QStringLiteral(".lock"));
-        legacy.setStaleLockTime(0);
-        if (!legacy.tryLock()) {
-            return std::unexpected(QStringLiteral("Legacy overlay is starting or running; relaunch it manually once to support restart"));
-        }
+        // We hold the ownership lock, so a socket left at the path is stale.
         struct stat info{};
         if (::lstat(m_path.toLocal8Bit().constData(), &info) == 0) {
             if (!S_ISSOCK(info.st_mode)) {

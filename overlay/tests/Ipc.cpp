@@ -101,24 +101,20 @@ namespace {
                                                  "\"keymap\":\"xkb\",\"rate\":30,\"delay\":500}")))
                   .has_value(),
               "keyboard snapshot applied");
-        check(state.keyboards().size() == 1, "keyboard subscription stored");
+        check(state.keyboardCount() == 1, "keyboard subscription stored");
         check(state.apply(parse(QByteArrayLiteral("{\"event\":\"modifiers\",\"keyboard_id\":1,\"depressed\":1,\"latched\":0,\"locked\":0,\"group\":0}"))).has_value(),
               "modifier update applied");
-        check(state.keyboards().value(1).modifiers.depressed == 1, "modifier state updated");
         check(state.apply(parse(QByteArrayLiteral("{\"event\":\"keymap\",\"keyboard_id\":1,\"keymap\":\"updated\"}"))).has_value(), "keymap update applied");
-        check(state.keyboards().value(1).keymap == QStringLiteral("updated"), "keymap state updated");
         check(state.apply(parse(QByteArrayLiteral("{\"event\":\"repeat_info\",\"keyboard_id\":1,\"rate\":60,\"delay\":700}"))).has_value(), "repeat update applied");
-        check(state.keyboards().value(1).repeatInfo.rate == 60, "repeat state updated");
         check(state.apply(parse(QByteArrayLiteral("{\"event\":\"key\",\"keyboard_id\":1,\"time_ms\":1,\"keycode\":30,\"state\":\"pressed\"}"))).has_value(),
               "key event accepted for subscribed keyboard");
-        check(state.lastEventSummary().contains(QStringLiteral("pressed")), "key event summarized for diagnostics");
         check(state.apply(parse(QByteArrayLiteral("{\"event\":\"unsubscribe_keyboard\",\"keyboard_id\":1}"))).has_value(), "keyboard unsubscribe applied");
-        check(state.keyboards().isEmpty(), "keyboard unsubscription removes state");
+        check(state.keyboardCount() == 0, "keyboard unsubscription removes state");
         check(!state.apply(parse(QByteArrayLiteral("{\"event\":\"key\",\"keyboard_id\":1,\"time_ms\":2,\"keycode\":30,\"state\":\"released\"}"))).has_value(),
               "events for unsubscribed keyboards rejected");
 
         state.reset();
-        check(!state.hasCastingState() && state.keyboards().isEmpty() && state.lastEventSummary().isEmpty(), "reset clears connection-dependent state");
+        check(!state.hasCastingState() && state.keyboardCount() == 0, "reset clears connection-dependent state");
     }
 
     template <typename Predicate>
@@ -140,8 +136,10 @@ namespace {
         QLocalServer::removeServer(socketPath);
 
         IpcClient client(socketPath);
+        int       failedAttempts = 0;
+        QObject::connect(&client, &IpcClient::connectionReset, &client, [&] { ++failedAttempts; }, Qt::DirectConnection);
         client.start();
-        check(waitUntil([&] { return client.statusText() == QStringLiteral("Reconnecting…"); }, 1000), "failed connection schedules an asynchronous retry");
+        check(waitUntil([&] { return failedAttempts > 0 && !client.connected(); }, 1000), "failed connection attempt is abandoned before the server exists");
 
         QLocalServer server;
         check(server.listen(socketPath), "late test IPC server listens");
@@ -200,8 +198,7 @@ namespace {
             Qt::DirectConnection);
         QObject::connect(&client, &IpcClient::connectionReset, &client, [&] { ++resetNotifications; }, Qt::DirectConnection);
         client.start();
-        check(waitUntil([&] { return client.connected() && client.hasCastingState() && client.keyboardCount() == 1 && client.lastEventText().contains(QStringLiteral("pressed")); },
-                        2000),
+        check(waitUntil([&] { return client.connected() && client.hasCastingState() && client.keyboardCount() == 1 && deliveredEvents.size() == 3; }, 2000),
               "async client connects and consumes coalesced state messages");
         check(deliveredEvents == std::vector<int>{0, 1, 3}, "validated protocol messages are delivered in wire order");
         check(client.paused(), "casting pause state received over socket");
@@ -213,7 +210,6 @@ namespace {
         check(waitUntil([&] { return connectionCount >= 2 && client.connected() && client.hasCastingState() && client.keyboardCount() == 1; }, 3000),
               "client reconnects after bounded delay and accepts a fresh snapshot");
         check(!client.paused(), "reconnected casting snapshot replaces stale pause state");
-        check(client.detailsText().contains(QStringLiteral("reconnected keyboard")), "reconnected keyboard snapshot replaces prior registry");
         check(deliveredEvents == std::vector<int>{0, 1, 3, 0, 1}, "reconnected messages continue in wire order");
 
         server.close();
@@ -243,7 +239,8 @@ namespace {
         QObject::connect(
             &client, &IpcClient::protocolMessageReceived, &client, [&](const ProtocolMessage& message) { deliveredEvents.push_back(static_cast<int>(message.index())); },
             Qt::DirectConnection);
-        QObject::connect(&client, &IpcClient::protocolError, &client, [&](const QString&) { rejected = true; }, Qt::DirectConnection);
+        // The valid first message is delivered; the reset that follows it is the rejection.
+        QObject::connect(&client, &IpcClient::connectionReset, &client, [&] { rejected = rejected || !deliveredEvents.empty(); }, Qt::DirectConnection);
         client.start();
         check(waitUntil([&] { return rejected; }, 1000), "invalid connection-state transition is rejected");
         check(deliveredEvents == std::vector<int>{0}, "rejected transition never reaches the keyboard interpreter");

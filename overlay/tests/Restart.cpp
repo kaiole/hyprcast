@@ -15,10 +15,12 @@
 #include <QTemporaryDir>
 #include <QThread>
 #include <cstdlib>
+#include <fcntl.h>
 #include <functional>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <sys/file.h>
 #include <xkbcommon/xkbcommon.h>
 
 using namespace Hyprcast::Overlay;
@@ -390,7 +392,7 @@ namespace {
         until([&] { return quiet.elapsed() > 400; });
         check(!f.peer->bytesAvailable(), "unavailable plugin restart has no pending enable");
     }
-    void testFailedExecAndMigration() {
+    void testFailedExecAndBadReplies() {
         QTemporaryDir   dir;
         const QString   path = dir.filePath("event.sock");
         OverlayInstance owner(path);
@@ -415,33 +417,14 @@ namespace {
         OverlayInstance duplicate(path);
         check(!duplicate.acquire(OverlayInstance::Command::Start), "failed exec retains ownership");
 
-        // Old servers need not hold the new flock. A live socket is never stale.
-        const QString oldPath = dir.filePath("old.sock");
-        QLocalServer  old;
-        check(old.listen(oldPath + ".overlay"), "old resident fixture");
-        OverlayInstance newLaunch(oldPath);
-        check(!newLaunch.acquire(OverlayInstance::Command::Start), "legacy live socket not taken over");
-        check(QFile::exists(oldPath + ".overlay"), "legacy socket remains");
-        QObject::connect(&old, &QLocalServer::newConnection, &old, [&] {
-            while (auto* client = old.nextPendingConnection()) {
-                QObject::connect(client, &QLocalSocket::disconnected, client, &QObject::deleteLater);
-                QObject::connect(client, &QLocalSocket::readyRead, client, [client] {
-                    client->readAll();
-                    OverlayInstance::reply(client, QStringLiteral("Invalid overlay command"));
-                });
-            }
-        });
-        Fixture  environment;
-        QProcess unsupported;
-        unsupported.setProcessEnvironment(environment.environment);
-        unsupported.start(executable, {"restart", "--socket", oldPath});
-        check(until([&] { return unsupported.state() == QProcess::NotRunning; }), "unsupported old resident response");
-        check(unsupported.exitCode() == 1 && unsupported.readAllStandardError().contains("does not support restart"), "upgrade diagnostic without kill/takeover");
-
+        Fixture environment;
         for (const QByteArray& response : {QByteArray{}, QByteArray("ok\nextra\n")}) {
             const QString badPath = dir.filePath(response.isEmpty() ? "disconnected.sock" : "malformed.sock");
             QLocalServer  bad;
             check(bad.listen(badPath + ".overlay"), "bad response fixture");
+            // Hold the ownership lock as a resident would, so the caller forwards here.
+            const Hyprcast::CUniqueFd lock{::open((badPath + ".overlay.owner-lock").toLocal8Bit().constData(), O_RDWR | O_CREAT | O_CLOEXEC, 0600)};
+            check(lock && ::flock(lock.get(), LOCK_EX | LOCK_NB) == 0, "bad response fixture holds ownership");
             QObject::connect(&bad, &QLocalServer::newConnection, &bad, [&] {
                 while (auto* client = bad.nextPendingConnection()) {
                     QObject::connect(client, &QLocalSocket::disconnected, client, &QObject::deleteLater);
@@ -471,7 +454,7 @@ int main(int argc, char** argv) {
         testConfiguration();
         testHistoryAndSpaceReload();
         testUnavailable();
-        testFailedExecAndMigration();
+        testFailedExecAndBadReplies();
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "check failed: " << error.what() << '\n';

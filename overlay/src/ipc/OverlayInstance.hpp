@@ -46,7 +46,7 @@ namespace Hyprcast::Overlay {
 
       private:
         [[nodiscard]] std::expected<void, QString>      adoptLock(const QString& lockPath, CUniqueFd inheritedLock);
-        [[nodiscard]] std::expected<Ownership, QString> forward(Command command, bool noResident) const;
+        [[nodiscard]] std::expected<Ownership, QString> forward(Command command) const;
         [[nodiscard]] std::expected<Ownership, QString> listen();
 
         QString                                         m_path;

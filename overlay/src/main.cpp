@@ -155,11 +155,7 @@ namespace {
     // parameter lists.
     class CommandLine {
       public:
-        enum class Command {
-            Start,
-            Toggle,
-            Restart,
-        };
+        using Command = OverlayInstance::Command;
 
         CommandLine() {
             m_parser.setApplicationDescription(QStringLiteral("A lightweight Hyprland keyboard overlay."));
@@ -311,38 +307,37 @@ namespace {
         }
 
       private:
-        static QCommandLineOption option(const QString& name, const QString& description, const QString& value) {
-            return QCommandLineOption(name, description, value);
-        }
-
         QCommandLineParser       m_parser;
         const QCommandLineOption m_help    = m_parser.addHelpOption();
         const QCommandLineOption m_version = m_parser.addVersionOption();
-        const QCommandLineOption m_config  = option(QStringLiteral("config"), QStringLiteral("Load this TOML configuration file (must exist)."), QStringLiteral("path"));
+        const QCommandLineOption m_config = QCommandLineOption(QStringLiteral("config"), QStringLiteral("Load this TOML configuration file (must exist)."), QStringLiteral("path"));
         const QCommandLineOption m_monitor{
             {QStringLiteral("m"), QStringLiteral("monitor")}, QStringLiteral("Output name (defaults to the primary output)."), QStringLiteral("name")};
         const QCommandLineOption m_anchor =
-            option(QStringLiteral("anchor"), QStringLiteral("Position: top, bottom, left, right, or a corner such as bottom-right."), QStringLiteral("position"));
-        const QCommandLineOption m_margins = option(QStringLiteral("margins"), QStringLiteral("Layer-shell margins in left,top,right,bottom order."), QStringLiteral("pixels"));
-        const QCommandLineOption m_width   = option(QStringLiteral("width"), QStringLiteral("Maximum surface/panel width in logical pixels."), QStringLiteral("pixels"));
-        const QCommandLineOption m_height  = option(QStringLiteral("height"), QStringLiteral("Maximum surface/panel height in logical pixels."), QStringLiteral("pixels"));
-        const QCommandLineOption m_opacity = option(QStringLiteral("background-opacity"),
-                                                    QStringLiteral("Panel fill opacity from 0 (transparent) to 1 (opaque); borders are independent."), QStringLiteral("alpha"));
+            QCommandLineOption(QStringLiteral("anchor"), QStringLiteral("Position: top, bottom, left, right, or a corner such as bottom-right."), QStringLiteral("position"));
+        const QCommandLineOption m_margins =
+            QCommandLineOption(QStringLiteral("margins"), QStringLiteral("Layer-shell margins in left,top,right,bottom order."), QStringLiteral("pixels"));
+        const QCommandLineOption m_width = QCommandLineOption(QStringLiteral("width"), QStringLiteral("Maximum surface/panel width in logical pixels."), QStringLiteral("pixels"));
+        const QCommandLineOption m_height =
+            QCommandLineOption(QStringLiteral("height"), QStringLiteral("Maximum surface/panel height in logical pixels."), QStringLiteral("pixels"));
+        const QCommandLineOption m_opacity = QCommandLineOption(
+            QStringLiteral("background-opacity"), QStringLiteral("Panel fill opacity from 0 (transparent) to 1 (opaque); borders are independent."), QStringLiteral("alpha"));
         const QCommandLineOption m_expireAfter =
-            option(QStringLiteral("expire-after-ms"), QStringLiteral("Remove history after this much inactivity; 0 disables expiration."), QStringLiteral("ms"));
+            QCommandLineOption(QStringLiteral("expire-after-ms"), QStringLiteral("Remove history after this much inactivity; 0 disables expiration."), QStringLiteral("ms"));
         const QCommandLineOption m_fadeDuration =
-            option(QStringLiteral("fade-duration-ms"), QStringLiteral("Fade expired history over this duration; 0 disables fading."), QStringLiteral("ms"));
-        const QCommandLineOption m_backspace = option(QStringLiteral("backspace-mode"), QStringLiteral("Plain Backspace behavior: delete or symbol."), QStringLiteral("mode"));
+            QCommandLineOption(QStringLiteral("fade-duration-ms"), QStringLiteral("Fade expired history over this duration; 0 disables fading."), QStringLiteral("ms"));
+        const QCommandLineOption m_backspace =
+            QCommandLineOption(QStringLiteral("backspace-mode"), QStringLiteral("Plain Backspace behavior: delete or symbol."), QStringLiteral("mode"));
         const QCommandLineOption m_retention =
-            option(QStringLiteral("max-retained-utf16-code-units"), QStringLiteral("History retention limit in formatted UTF-16 code units."), QStringLiteral("units"));
+            QCommandLineOption(QStringLiteral("max-retained-utf16-code-units"), QStringLiteral("History retention limit in formatted UTF-16 code units."), QStringLiteral("units"));
         const QCommandLineOption m_repeatEnabled =
-            option(QStringLiteral("repeat-enabled"), QStringLiteral("Enable locally generated key repeats (true or false)."), QStringLiteral("boolean"));
-        const QCommandLineOption m_socket =
-            option(QStringLiteral("socket"), QStringLiteral("Connect to this Hyprcast event socket instead of discovering it from the environment."), QStringLiteral("path"));
-        const QCommandLineOption m_instance =
-            option(QStringLiteral("instance-signature"), QStringLiteral("Hyprland instance signature (defaults to HYPRLAND_INSTANCE_SIGNATURE)."), QStringLiteral("signature"));
+            QCommandLineOption(QStringLiteral("repeat-enabled"), QStringLiteral("Enable locally generated key repeats (true or false)."), QStringLiteral("boolean"));
+        const QCommandLineOption m_socket = QCommandLineOption(
+            QStringLiteral("socket"), QStringLiteral("Connect to this Hyprcast event socket instead of discovering it from the environment."), QStringLiteral("path"));
+        const QCommandLineOption m_instance = QCommandLineOption(
+            QStringLiteral("instance-signature"), QStringLiteral("Hyprland instance signature (defaults to HYPRLAND_INSTANCE_SIGNATURE)."), QStringLiteral("signature"));
         const QCommandLineOption m_quitAfter =
-            option(QStringLiteral("quit-after-ms"), QStringLiteral("Exit after this many milliseconds (useful for smoke tests)."), QStringLiteral("ms"));
+            QCommandLineOption(QStringLiteral("quit-after-ms"), QStringLiteral("Exit after this many milliseconds (useful for smoke tests)."), QStringLiteral("ms"));
     };
 
     // Settings that pick which configuration file the overlay reads.
@@ -464,10 +459,7 @@ int main(int argc, char* argv[]) {
     }
 
     OverlayInstance instance(*socketPath);
-    const auto      instanceCommand = *command == CommandLine::Command::Restart ? OverlayInstance::Command::Restart :
-        *command == CommandLine::Command::Toggle                                ? OverlayInstance::Command::Toggle :
-                                                                                  OverlayInstance::Command::Start;
-    const auto      ownership       = instance.acquire(instanceCommand, handoff.takeLock());
+    const auto      ownership = instance.acquire(*command, handoff.takeLock());
     if (!ownership) {
         writeError(ownership.error());
         return ExitFailure;
@@ -559,7 +551,6 @@ int main(int argc, char* argv[]) {
         return ExitFailure;
     }
 
-    OverlayConfig appliedConfig = initialConfig;
     QObject::connect(&configuration, &OverlayConfigManager::configurationChanged, &view, [&] {
         const OverlayConfig& config = configuration.config();
         theme.applyAcceptedConfiguration(config);
@@ -567,16 +558,10 @@ int main(int argc, char* argv[]) {
         layerWindow->setDesiredSize(QSize(config.width, config.height));
         layerWindow->setAnchors(toLayerAnchors(config.anchor));
         layerWindow->setMargins(config.margins);
-        if (historyOptions(config) != historyOptions(appliedConfig)) {
-            keyboardPresenter.setHistoryOptions(historyOptions(config));
-        }
-        if (config.repeatsEnabled != appliedConfig.repeatsEnabled) {
-            keyboardPresenter.setRepeatsEnabled(config.repeatsEnabled);
-        }
-        if (config.expireAfterMs != appliedConfig.expireAfterMs || config.fadeDurationMs != appliedConfig.fadeDurationMs) {
-            keyboardPresenter.setExpiration(config.expireAfterMs, config.fadeDurationMs);
-        }
-        appliedConfig = config;
+        // Each setter ignores a value it already has.
+        keyboardPresenter.setHistoryOptions(historyOptions(config));
+        keyboardPresenter.setRepeatsEnabled(config.repeatsEnabled);
+        keyboardPresenter.setExpiration(config.expireAfterMs, config.fadeDurationMs);
     });
     QObject::connect(&application, &QGuiApplication::screenRemoved, &view, [&](QScreen* removedScreen) {
         if (removedScreen != selectedScreen) {
@@ -610,7 +595,7 @@ int main(int argc, char* argv[]) {
         view.setVisible(active);
     });
     // A failed first `toggle` launch exits instead of leaving an idle resident behind.
-    bool initialActivation = *command == CommandLine::Command::Toggle;
+    bool initialActivation = *command == OverlayInstance::Command::Toggle;
     QObject::connect(&capture, &CaptureController::commandFailed, &application, [&](const QString& error) {
         writeError(error);
         if (initialActivation) {

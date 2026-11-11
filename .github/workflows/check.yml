@@ -1,0 +1,52 @@
+# Runs the gate (./check) on Arch, the distribution Hyprcast is developed on
+# and packaged for. The image and its packages are rolling on purpose: the
+# plugin has to build against the Hyprland that Arch ships today.
+name: check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # A new Hyprland, Qt or compiler can break the build with no change here.
+  # Mondays, 05:17 UTC.
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Branch protection requires this job by name. Renaming it means updating
+  # the ruleset.
+  check:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    timeout-minutes: 60
+    steps:
+      # hyprland brings its headers and the libraries they include. gtest and
+      # tomlplusplus are the system copies CMake prefers over a download.
+      - name: Install dependencies
+        run: >
+          pacman -Syu --noconfirm --needed
+          git cmake ninja clang
+          hyprland
+          qt6-base qt6-declarative layer-shell-qt
+          gtest tomlplusplus
+
+      # Pinned by commit; the comment names the release.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The tests make their own temporary session directories. The runtime
+      # directory is set as AGENTS.md has it, so nothing depends on a default.
+      - name: Run the gate
+        run: |
+          XDG_RUNTIME_DIR="$(mktemp -d)"
+          export XDG_RUNTIME_DIR
+          ./check

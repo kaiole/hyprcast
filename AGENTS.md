@@ -13,10 +13,11 @@ developed on. These rules have no exceptions.
    Anything that could open the socket runs with `XDG_RUNTIME_DIR` pointing at
    a fresh temporary directory. Tests create their own temporary directories
    and never use the real runtime directory.
-2. Never write to or delete `build/debug`. The running compositor has
-   `build/debug/plugin/libhyprcast.so` loaded and keybinds point into
-   `build/debug/overlay`. The presets build into `build/dev`, `build/lint` and
-   `build/release`.
+2. Never write to or delete `build/release` or `build/debug`. The running
+   compositor has `build/release/plugin/libhyprcast.so` loaded and keybinds
+   point into `build/release/overlay`. Agents build only the `dev`, `lint` and
+   `gcc` presets, into `build/dev`, `build/lint` and `build/gcc`; the
+   `release` preset is for the owner and for users.
 3. Never edit anything outside this repository, in particular not `~/dotfiles`
    (Hyprland hot-reloads its config). Scratch files go in a temporary
    directory, not in the repository.
@@ -33,7 +34,7 @@ developed on. These rules have no exceptions.
 - **overlay** (`hyprcast-overlay`, `overlay/`): a Qt 6 / QML layer-shell window
   that connects to that socket, interprets the events with xkbcommon and shows
   them through a QML theme. One resident process per session; later
-  invocations forward `toggle` or `restart` to it and exit.
+  invocations forward `toggle`, `restart` or `quit` to it and exit.
 
 Both are single-threaded by design.
 
@@ -42,7 +43,7 @@ Sockets, all below `$XDG_RUNTIME_DIR/hyprcast/<Hyprland instance signature>/`:
 | Path | Owner | Carries |
 |---|---|---|
 | `events.sock` (lock: `server.lock`) | plugin | The wire protocol below. One client at a time; a new connection replaces the current one |
-| `events.sock.overlay` (lock: `events.sock.overlay.owner-lock`) | resident overlay | `toggle` or `restart` from a later invocation, answered with `ok` or `error: ...` |
+| `events.sock.overlay` (lock: `events.sock.overlay.owner-lock`) | resident overlay | `toggle`, `restart` or `quit` from a later invocation, answered with `ok` or `error: ...` |
 
 The overlay starts capture by sending `enable` and shows its window only while
 the plugin confirms capture is on. `toggle` with no resident overlay starts
@@ -73,7 +74,7 @@ process and keeps capture as it is.
 | `overlay/qml/`, `overlay/examples/themes/` | Theme host, bundled default theme, example themes |
 | `overlay/tests/` | GoogleTest tests of the overlay, one executable per area; `Support.hpp` holds their shared `main`, which keeps them away from the live session |
 | `docs/` | User documentation for configuration and themes |
-| `cmake/`, `CMakePresets.json`, `check` | Build helpers, the `dev`, `lint` and `release` presets, and the gate |
+| `cmake/`, `CMakePresets.json`, `check` | Build helpers, the `dev`, `lint`, `gcc` and `release` presets, and the gate |
 
 Every plugin library has the same layout: `CMakeLists.txt`,
 `include/hyprcast/<library>/` and, where it has any, `src/` and `tests/`, with
@@ -154,7 +155,7 @@ any other input while capture is on.
 ```sh
 cmake --workflow --preset dev      # configure, build, test
 cmake --workflow --preset lint     # configure, build
-cmake --workflow --preset release  # configure, build, test
+cmake --workflow --preset gcc      # configure, build, test
 ./check                            # the gate: format, layering, then all three
 ```
 
@@ -162,10 +163,11 @@ cmake --workflow --preset release  # configure, build, test
 |---|---|---|
 | `dev` | clang, Debug, ASan + UBSan, `_GLIBCXX_ASSERTIONS`, in `build/dev` | Day-to-day work. A memory error, undefined behaviour or a leak fails the test that hits it. Its plugin is never loaded anywhere |
 | `lint` | clang with clang-tidy, every finding an error, in `build/lint` | Static checks, naming and the function bans. Runs no tests. Ninja lints only what it rebuilds: `cmake --build build/lint --target clean` first for a full pass |
-| `release` | g++, RelWithDebInfo, in `build/release` | What users build and install, and the diagnostics only gcc gives. The only plugin a human may load |
+| `gcc` | g++, RelWithDebInfo, in `build/gcc` | The release build with warnings as errors: the diagnostics only gcc gives |
+| `release` | as `gcc`, but warnings stay warnings, in `build/release` | What users build and install, so that a newer compiler's new warning does not break an install. The only plugin a human may load. Agents never build it (safety rule 2) |
 
-All three treat warnings as errors and compile every header under an
-`include/` directory on its own.
+`dev`, `lint` and `gcc` treat warnings as errors; all four compile every
+header under an `include/` directory on its own.
 
 `./check` must pass before every commit: `clang-format --dry-run --Werror` over
 every `.cpp` and `.hpp` outside `build/`, the include rule above, then the
@@ -239,7 +241,7 @@ change to it, or a Hyprland update, ask the owner to run this and report back.
 1. Build: `cmake --workflow --preset release`. Never the `dev` build.
 2. Clear the way: `hyprctl plugin list`. If a hyprcast plugin is loaded, unload
    it with `hyprctl plugin unload <its path>`, since two copies cannot share
-   the socket. End a running overlay with `killall hyprcast-overlay`.
+   the socket. End a running overlay with `hyprcast-overlay quit`.
 3. Load: `hyprctl plugin load "$PWD/build/release/plugin/libhyprcast.so"`.
    `hyprctl plugin list` shows `Hyprcast`.
 4. Start: `build/release/overlay/hyprcast-overlay toggle` in a terminal. Type
@@ -250,7 +252,8 @@ change to it, or a Hyprland update, ask the owner to run this and report back.
    unlock. Nothing typed while locked appears; keys typed after unlocking do.
 7. Restart: `build/release/overlay/hyprcast-overlay restart` prints nothing,
    exits 0, and the window comes back with capture still on.
-8. Unload: stop the overlay with Ctrl+C, then
+8. Unload: `build/release/overlay/hyprcast-overlay quit` exits 0 and the
+   overlay is gone; then
    `hyprctl plugin unload "$PWD/build/release/plugin/libhyprcast.so"`.
    Hyprland keeps running, `hyprctl plugin list` no longer shows the plugin,
    and Hyprland's log has no hyprcast error.

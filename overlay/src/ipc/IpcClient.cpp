@@ -6,7 +6,6 @@
 #include <QDebug>
 #include <QIODevice>
 #include <QLocalSocket>
-#include <QStringList>
 
 #include <algorithm>
 #include <string_view>
@@ -65,81 +64,36 @@ namespace Hyprcast::Overlay {
         return m_socket.write(command) == command.size();
     }
 
-    QString IpcClient::statusText() const {
-        if (m_connected) {
-            return QStringLiteral("Connected");
-        }
-        if (m_connecting) {
-            return QStringLiteral("Connecting…");
-        }
-        if (m_reconnectTimer.isActive()) {
-            return QStringLiteral("Reconnecting…");
-        }
-        if (m_started) {
-            return QStringLiteral("Waiting for Hyprcast");
-        }
-        return QStringLiteral("Stopped");
-    }
-
-    QString IpcClient::detailsText() const {
-        if (!m_connected) {
-            return m_lastError.isEmpty() ? QStringLiteral("Waiting for the Hyprcast event socket") : m_lastError;
-        }
-        if (!m_state.hasCastingState()) {
-            return QStringLiteral("Awaiting casting state and keyboard snapshots");
-        }
-
-        QStringList keyboardNames;
-        keyboardNames.reserve(m_state.keyboards().size());
-        for (const auto& keyboard : m_state.keyboards()) {
-            keyboardNames.push_back(QStringLiteral("%1 (#%2)").arg(keyboard.name).arg(keyboard.id));
-        }
-        const QString keyboards = keyboardNames.isEmpty() ? QStringLiteral("no subscribed keyboards") : keyboardNames.join(QStringLiteral(", "));
-        return QStringLiteral("Casting %1 · %2").arg(m_state.paused() ? QStringLiteral("paused") : QStringLiteral("active"), keyboards);
-    }
-
-    QString IpcClient::lastEventText() const {
-        return m_state.lastEventSummary().isEmpty() ? QStringLiteral("No IPC messages received yet") : m_state.lastEventSummary();
-    }
-
     void IpcClient::connectNow() {
         if (!m_started || m_socket.state() != QLocalSocket::UnconnectedState) {
             return;
         }
 
         m_reconnectTimer.stop();
-        m_connecting = true;
-        m_connected  = false;
+        m_connected = false;
         m_connectionTimeoutTimer.start(ConnectionTimeoutMs);
-        emit stateChanged();
         m_socket.connectToServer(m_socketPath, QIODevice::ReadWrite);
     }
 
     void IpcClient::handleConnected() {
         m_reconnectTimer.stop();
         m_connectionTimeoutTimer.stop();
-        m_connecting = false;
-        m_connected  = true;
-        m_lastError.clear();
+        m_connected = true;
         m_stableConnectionTimer.start(StableConnectionMs);
-        emit stateChanged();
     }
 
     void IpcClient::handleDisconnected() {
         m_connectionTimeoutTimer.stop();
         m_stableConnectionTimer.stop();
-        m_connecting = false;
-        m_connected  = false;
+        m_connected = false;
         resetConnectionState();
-        emit stateChanged();
         scheduleReconnect();
     }
 
     void IpcClient::handleSocketError(QLocalSocket::LocalSocketError error) {
+        // A refused or missing socket is the normal state while Hyprcast is not loaded,
+        // so socket errors only drive the reconnect loop and are not reported.
         Q_UNUSED(error);
-        m_lastError = m_socket.errorString();
-        emit stateChanged();
-
         if (m_socket.state() == QLocalSocket::UnconnectedState) {
             handleDisconnected();
         } else {
@@ -185,7 +139,6 @@ namespace Hyprcast::Overlay {
         // The state transition is committed before consumers interpret the event. This is
         // emitted synchronously on the socket's thread so event order is preserved.
         emit protocolMessageReceived(*message);
-        emit stateChanged();
     }
 
     void IpcClient::resetConnectionState() {
@@ -202,14 +155,10 @@ namespace Hyprcast::Overlay {
         const int delayMs      = m_nextReconnectDelayMs;
         m_nextReconnectDelayMs = std::min(m_nextReconnectDelayMs * 2, MaxReconnectDelayMs);
         m_reconnectTimer.start(delayMs);
-        emit stateChanged();
     }
 
     void IpcClient::failConnection(const QString& reason) {
-        m_lastError = reason;
         qWarning().noquote() << QStringLiteral("hyprcast-overlay: %1").arg(reason);
-        emit protocolError(reason);
-        emit stateChanged();
 
         if (m_socket.state() != QLocalSocket::UnconnectedState) {
             m_socket.abort();

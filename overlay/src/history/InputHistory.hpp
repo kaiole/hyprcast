@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../input/KeyboardInterpreter.hpp"
 #include "BackspaceMode.hpp"
+#include "InterpretedAction.hpp"
 
 #include <QAbstractListModel>
 #include <QHash>
@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <optional>
 #include <vector>
 
 namespace Hyprcast::Overlay {
@@ -65,12 +66,10 @@ namespace Hyprcast::Overlay {
         [[nodiscard]] int                    rowCount(const QModelIndex& parent = {}) const override;
         [[nodiscard]] QVariant               data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
         [[nodiscard]] QHash<int, QByteArray> roleNames() const override;
-        [[nodiscard]] QString                displayText() const {
-            return m_displayText;
-        }
-        [[nodiscard]] QString displayRichText() const {
-            return m_displayRichText;
-        }
+        // Formatted on first read after a change, so themes that render rows through
+        // delegates never pay for strings they do not show.
+        [[nodiscard]] QString displayText() const;
+        [[nodiscard]] QString displayRichText() const;
         // Rebuilds rows from the source. Takes the repeat runs collapsed so far and returns
         // them updated: runs no longer present are dropped, newly collapsed ones added.
         [[nodiscard]] QSet<quint64> refresh(const QSet<quint64>& collapsedRuns);
@@ -94,12 +93,16 @@ namespace Hyprcast::Overlay {
         [[nodiscard]] Row         makeRow(const HistoryEntry& entry, std::uint32_t occurrences, bool counted) const;
         [[nodiscard]] static bool sameRow(const Row& a, const Row& b);
         [[nodiscard]] QString     formatText(bool rich) const;
-        void                      applyRows(std::vector<Row> nextRows);
+        // Returns whether any row was removed, inserted or changed.
+        bool                    applyRows(std::vector<Row> nextRows);
 
-        const HistoryListModel&   m_source;
-        std::vector<Row>          m_rows;
-        QString                   m_displayText;
-        QString                   m_displayRichText;
+        const HistoryListModel& m_source;
+        std::vector<Row>        m_rows;
+        // Options formatText depends on, as of the last refresh.
+        QString                        m_symbolFontFamily;
+        int                            m_repeatThreshold = 0;
+        mutable std::optional<QString> m_displayText;
+        mutable std::optional<QString> m_displayRichText;
     };
 
     class HistoryListModel : public QAbstractListModel {
@@ -169,7 +172,7 @@ namespace Hyprcast::Overlay {
       private:
         void                eraseLast();
         void                eraseLastTextGrapheme();
-        void                trimRetention();
+        bool                trimRetention(); // Returns whether anything was removed.
         void                removeTextPrefix(qsizetype length, std::size_t entryCount);
         void                removeTextSuffix(qsizetype length, std::size_t entryCount);
 

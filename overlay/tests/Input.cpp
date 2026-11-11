@@ -55,6 +55,14 @@ namespace {
 
     using TimePoint = KeyboardInterpreter::Clock::time_point;
 
+    QStringList heldLabels(const KeyboardInterpreter& interpreter) {
+        QStringList labels;
+        for (const HeldKey& item : interpreter.heldKeyItems()) {
+            labels.push_back(item.label());
+        }
+        return labels;
+    }
+
     void send(KeyboardInterpreter& interpreter, const ProtocolMessage& message, TimePoint now) {
         check(interpreter.process(message, now).has_value(), "valid keyboard message interpreted without error");
     }
@@ -93,7 +101,7 @@ namespace {
         send(interpreter, snapshot(keymap), now);
 
         check(process(interpreter, key(1, 42, true), now).empty(), "modifier press is held rather than appended");
-        check(interpreter.heldModifiers() == QStringLiteral("Shift"), "held modifier is exposed immediately");
+        check(heldLabels(interpreter) == QStringList{QStringLiteral("Shift")}, "held modifier is exposed immediately");
         send(interpreter, ModifiersMessage{.keyboardId = 1, .modifiers = {.depressed = keymap.shiftMask}}, now);
         const auto shifted = process(interpreter, key(1, 30, true, 2), now);
         check(shifted.size() == 1 && shifted.front().kind == InterpretedActionKind::Text && shifted.front().text == QStringLiteral("A"),
@@ -102,7 +110,7 @@ namespace {
         check(process(interpreter, key(1, 30, false, 3), now).empty(), "shifted letter release emits nothing");
         check(process(interpreter, key(1, 42, false, 4), now).empty(), "modifier used for text is not emitted as a standalone key");
         send(interpreter, ModifiersMessage{.keyboardId = 1}, now);
-        check(interpreter.heldModifiers().isEmpty(), "released modifier is no longer held");
+        check(heldLabels(interpreter).isEmpty(), "released modifier is no longer held");
 
         process(interpreter, key(1, 42, true, 5), now);
         send(interpreter, ModifiersMessage{.keyboardId = 1, .modifiers = {.depressed = keymap.shiftMask}}, now);
@@ -115,7 +123,7 @@ namespace {
         send(interpreter, ModifiersMessage{.keyboardId = 1}, now);
 
         check(process(interpreter, key(1, 29, true, 9), now).empty(), "standalone Control press is held");
-        check(interpreter.heldModifiers() == QStringLiteral("Ctrl"), "standalone Control is shown while held");
+        check(heldLabels(interpreter) == QStringList{QStringLiteral("Ctrl")}, "standalone Control is shown while held");
         const auto standalone = process(interpreter, key(1, 29, false, 6), now);
         check(standalone.size() == 1 && standalone.front().kind == InterpretedActionKind::Key && standalone.front().key == QStringLiteral("Ctrl"),
               "unused standalone modifier is emitted on release");
@@ -161,18 +169,18 @@ namespace {
         send(interpreter, snapshot(keymap, 1, 20, 200), now);
         process(interpreter, key(1, 42, true), now);
         process(interpreter, key(1, 30, true), now);
-        check(interpreter.heldModifiers() == QStringLiteral("Shift"), "held modifier recorded before keymap replacement");
-        check(interpreter.heldKeys().size() == 2, "held-key snapshot includes the modifier and ordinary key");
+        check(heldLabels(interpreter).contains(QStringLiteral("Shift")), "held modifier recorded before keymap replacement");
+        check(heldLabels(interpreter).size() == 2, "held-key snapshot includes the modifier and ordinary key");
         check(interpreter.nextRepeatDeadline() != TimePoint::max(), "repeat active before keymap replacement");
 
         send(interpreter, KeymapMessage{.keyboardId = 1, .keymap = keymap.text}, now + std::chrono::milliseconds(50));
-        check(interpreter.heldModifiers().isEmpty() && interpreter.heldKeys().isEmpty(), "keymap replacement clears observed held keys");
+        check(heldLabels(interpreter).isEmpty(), "keymap replacement clears observed held keys");
         check(interpreter.nextRepeatDeadline() == TimePoint::max(), "keymap replacement cancels repeats");
 
         process(interpreter, key(1, 30, true, 3), now + std::chrono::milliseconds(60));
-        check(interpreter.nextRepeatDeadline() != TimePoint::max() && interpreter.heldKeys() == QStringList{QStringLiteral("a")}, "new key presses use the replacement keymap");
+        check(interpreter.nextRepeatDeadline() != TimePoint::max() && heldLabels(interpreter) == QStringList{QStringLiteral("a")}, "new key presses use the replacement keymap");
         send(interpreter, UnsubscribeKeyboardMessage{.id = 1}, now + std::chrono::milliseconds(70));
-        check(interpreter.nextRepeatDeadline() == TimePoint::max() && interpreter.heldKeys().isEmpty(), "keyboard removal clears held keys and cancels repeats");
+        check(interpreter.nextRepeatDeadline() == TimePoint::max() && heldLabels(interpreter).isEmpty(), "keyboard removal clears held keys and cancels repeats");
         check(process(interpreter, key(1, 30, true, 4), now + std::chrono::milliseconds(80)).empty(), "removed keyboard cannot produce further output");
     }
 
@@ -411,7 +419,7 @@ namespace {
         check(repress.size() == 1 && !repress.front().repeated && repress.front().repeatCount == 0 && repress.front().text == initial.front().text,
               "release and repress produce a new ordinary input while repeat scheduling restarts");
         send(interpreter, CastingStateMessage{.paused = true}, start + std::chrono::seconds(11));
-        check(interpreter.heldModifiers().isEmpty(), "pause clears observed held state");
+        check(heldLabels(interpreter).isEmpty(), "pause clears observed held state");
         check(interpreter.nextRepeatDeadline() == TimePoint::max(), "pause cancels active repeats");
         check(interpreter.advance(start + std::chrono::seconds(20)).empty(), "paused key does not repeat");
 

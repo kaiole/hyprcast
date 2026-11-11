@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <utility>
 
 namespace Hyprcast::Overlay {
     KeyboardPresenter::KeyboardPresenter(QObject* parent) : QObject(parent) {
@@ -13,10 +14,18 @@ namespace Hyprcast::Overlay {
         connect(&m_history, &HistoryListModel::displayTextChanged, this, &KeyboardPresenter::outputTextChanged);
     }
 
+    QStringList KeyboardPresenter::heldKeys() const {
+        QStringList labels;
+        for (const HeldKey& item : m_heldKeys) {
+            labels.push_back(item.label());
+        }
+        return labels;
+    }
+
     QVariantList KeyboardPresenter::heldKeyItems() const {
         QVariantList result;
         const auto&  symbols = m_history.presentationOptions();
-        for (const HeldKey& item : m_interpreter.heldKeyItems()) {
+        for (const HeldKey& item : m_heldKeys) {
             // QML sees the kind as a string; these names are part of the theme API.
             QString kind;
             QString label;
@@ -39,8 +48,15 @@ namespace Hyprcast::Overlay {
         return result;
     }
 
+    void KeyboardPresenter::refreshHeldKeys() {
+        auto held = m_interpreter.heldKeyItems();
+        if (held != m_heldKeys) {
+            m_heldKeys = std::move(held);
+            emit heldKeysChanged();
+        }
+    }
+
     void KeyboardPresenter::processMessage(const ProtocolMessage& message, Clock::time_point now) {
-        const QStringList previousHeldKeys = m_interpreter.heldKeys();
         if (const auto actions = m_interpreter.process(message, now); !actions) {
             qWarning().noquote() << QStringLiteral("hyprcast-overlay: keyboard interpretation failed: %1").arg(actions.error());
         } else {
@@ -48,20 +64,14 @@ namespace Hyprcast::Overlay {
                 append(action, now);
             }
         }
-        if (previousHeldKeys != m_interpreter.heldKeys()) {
-            emit heldKeysChanged();
-        }
+        refreshHeldKeys();
         scheduleTimer(now);
     }
 
     void KeyboardPresenter::advance(Clock::time_point now) {
-        const QStringList previousHeldKeys = m_interpreter.heldKeys();
-        const auto        actions          = m_interpreter.advance(now);
-        for (const auto& action : actions) {
+        // Repeats re-emit keys that are already held, so the held set cannot change here.
+        for (const auto& action : m_interpreter.advance(now)) {
             append(action, now);
-        }
-        if (previousHeldKeys != m_interpreter.heldKeys()) {
-            emit heldKeysChanged();
         }
 
         if (m_expirationDeadline && now >= *m_expirationDeadline) {
@@ -75,11 +85,8 @@ namespace Hyprcast::Overlay {
     }
 
     void KeyboardPresenter::resetConnection() {
-        const QStringList previousHeldKeys = m_interpreter.heldKeys();
         m_interpreter.reset();
-        if (previousHeldKeys != m_interpreter.heldKeys()) {
-            emit heldKeysChanged();
-        }
+        refreshHeldKeys();
         scheduleTimer(Clock::now());
     }
 

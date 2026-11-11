@@ -18,8 +18,8 @@ struct lua_closer {
 };
 
 // A Lua state whose global `configure` reaches `state` the way the function
-// Hyprland exposes as hyprcast.configure does. `configure_unloaded` is the
-// same function with no state behind it.
+// Hyprland exposes as hl.plugin.hyprcast.configure does. `configure_unloaded`
+// is the same function with no state behind it.
 class ConfigStateTest : public testing::Test {
 protected:
     ConfigStateTest() : lua(luaL_newstate()) {
@@ -68,7 +68,7 @@ protected:
     // Every failure is reported as a Lua error that names the function.
     void expect_failure(const std::string& code) {
         const std::string error = run(code);
-        EXPECT_TRUE(error.contains("hyprcast.configure:"))
+        EXPECT_TRUE(error.contains("hl.plugin.hyprcast.configure:"))
             << code << "\n"
             << (error.empty() ? "unexpected success" : error);
     }
@@ -242,7 +242,8 @@ TEST_F(ConfigStateTest, ReportsWhichFieldIsInvalid) {
         SCOPED_TRACE(code);
         state.begin_reload();
         const std::string error = run(code);
-        EXPECT_TRUE(error.contains("hyprcast.configure: " + expected)) << error;
+        EXPECT_TRUE(error.contains("hl.plugin.hyprcast.configure: " + expected))
+            << error;
         state.finish_reload(false);
     }
 }
@@ -253,7 +254,8 @@ TEST_F(ConfigStateTest, ConfigureWithoutAStateIsALuaError) {
     state.begin_reload();
 
     const std::string error = run("configure_unloaded({filter='include'})");
-    EXPECT_TRUE(error.ends_with("hyprcast.configure: hyprcast is not loaded"))
+    EXPECT_TRUE(
+        error.ends_with("hl.plugin.hyprcast.configure: hyprcast is not loaded"))
         << error;
     expect_success("assert(not pcall(configure_unloaded, {}))");
 

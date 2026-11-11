@@ -9,7 +9,7 @@ not evidence that a historical key is still down.
 
 Install this entire directory in
 `${XDG_DATA_HOME:-~/.local/share}/hyprcast/themes/text-held/` and select the ID.
-Theme files are not watched: restart the overlay after editing QML.
+Theme files are not watched: run `hyprcast-overlay restart` after editing QML.
 
 ## Demo configuration
 
@@ -151,8 +151,8 @@ accepted configuration. Increase the surface height explicitly when migrating.
 ## Validation
 
 ```sh
-cmake --build build/debug --target overlay_theme_tests -j2
-ctest --preset debug -R overlay-theme --output-on-failure
+cmake --build build/dev --target overlay_theme_tests -j2
+ctest --preset dev -R TextHeld --output-on-failure
 ```
 
 Tests exercise final-state geometry with reduced motion, Unicode/plain labels,

@@ -1,85 +1,86 @@
 #pragma once
 
-#include "KeyboardInterpreter.hpp"
 #include "../history/InputHistory.hpp"
+#include "KeyboardInterpreter.hpp"
 
 #include <QObject>
 #include <QTimer>
 #include <QVariantList>
-
 #include <chrono>
 #include <optional>
 #include <vector>
 
-namespace Hyprcast::Overlay {
-    class KeyboardPresenter final : public QObject {
-        Q_OBJECT
-        Q_PROPERTY(QString outputText READ outputText NOTIFY outputTextChanged)
-        Q_PROPERTY(QStringList heldKeys READ heldKeys NOTIFY heldKeysChanged)
-        Q_PROPERTY(QVariantList heldKeyItems READ heldKeyItems NOTIFY heldKeysChanged)
-        Q_PROPERTY(int heldKeyCount READ heldKeyCount NOTIFY heldKeysChanged)
-        Q_PROPERTY(bool fading READ fading NOTIFY fadingChanged)
-        Q_PROPERTY(int fadeDurationMs READ fadeDurationMs NOTIFY fadeDurationMsChanged)
+namespace hyprcast::overlay {
 
-      public:
-        using Clock = KeyboardInterpreter::Clock;
+class KeyboardPresenter final : public QObject {
+    Q_OBJECT
+    Q_PROPERTY(QString outputText READ outputText NOTIFY outputTextChanged)
+    Q_PROPERTY(QStringList heldKeys READ heldKeys NOTIFY heldKeysChanged)
+    Q_PROPERTY(
+        QVariantList heldKeyItems READ heldKeyItems NOTIFY heldKeysChanged)
+    Q_PROPERTY(int heldKeyCount READ heldKeyCount NOTIFY heldKeysChanged)
+    Q_PROPERTY(bool fading READ fading NOTIFY fadingChanged)
+    Q_PROPERTY(
+        int fadeDurationMs READ fadeDurationMs NOTIFY fadeDurationMsChanged)
 
-        explicit KeyboardPresenter(QObject* parent = nullptr);
+public:
+    using Clock = KeyboardInterpreter::Clock;
 
-        [[nodiscard]] QString outputText() const {
-            return m_history.displayText();
-        }
-        [[nodiscard]] QStringList  heldKeys() const;
-        [[nodiscard]] QVariantList heldKeyItems() const;
-        [[nodiscard]] int          heldKeyCount() const noexcept {
-            return static_cast<int>(m_heldKeys.size());
-        }
-        [[nodiscard]] bool fading() const noexcept {
-            return m_fading;
-        }
-        [[nodiscard]] int fadeDurationMs() const noexcept {
-            return m_fadeDurationMs;
-        }
-        [[nodiscard]] InputHistory& historyModel() noexcept {
-            return m_history;
-        }
-        [[nodiscard]] HistoryListModel& fadingHistoryModel() noexcept {
-            return m_fadingHistory;
-        }
+    explicit KeyboardPresenter(QObject* parent = nullptr);
 
-        void processMessage(const ProtocolMessage& message, Clock::time_point now = Clock::now());
-        void advance(Clock::time_point now = Clock::now());
-        void resetConnection();
-        void clearHistory();
-        void setHistoryOptions(InputHistoryOptions options);
-        void setRepeatsEnabled(bool enabled, Clock::time_point now = Clock::now());
-        void setExpiration(int expireAfterMs, int fadeDurationMs, Clock::time_point now = Clock::now());
+    [[nodiscard]] QString outputText() const { return m_history.displayText(); }
+    [[nodiscard]] QStringList heldKeys() const;
+    [[nodiscard]] QVariantList heldKeyItems() const;
+    [[nodiscard]] int heldKeyCount() const noexcept {
+        return static_cast<int>(m_heldKeys.size());
+    }
+    [[nodiscard]] bool fading() const noexcept { return m_fading; }
+    [[nodiscard]] int fadeDurationMs() const noexcept {
+        return m_fadeDurationMs;
+    }
+    [[nodiscard]] InputHistory& historyModel() noexcept { return m_history; }
+    [[nodiscard]] HistoryListModel& fadingHistoryModel() noexcept {
+        return m_fadingHistory;
+    }
 
-      signals:
-        void outputTextChanged();
-        void heldKeysChanged();
-        void fadingChanged();
-        void fadeDurationMsChanged();
+    void processMessage(const ProtocolMessage& message,
+                        Clock::time_point now = Clock::now());
+    void advance(Clock::time_point now = Clock::now());
+    void resetConnection();
+    void clearHistory();
+    void setHistoryOptions(const InputHistoryOptions& options);
+    void setRepeatsEnabled(bool enabled, Clock::time_point now = Clock::now());
+    void setExpiration(int expireAfterMs,
+                       int fadeDurationMs,
+                       Clock::time_point now = Clock::now());
 
-      private:
-        void                             append(const InterpretedAction& action, Clock::time_point now);
-        void                             refreshHeldKeys();
-        void                             noteHistoryActivity(Clock::time_point now);
-        void                             beginExpiration(Clock::time_point now);
-        void                             finishFade();
-        void                             setFading(bool fading);
-        void                             scheduleTimer(Clock::time_point now);
-        void                             onTimer();
+signals:
+    void outputTextChanged();
+    void heldKeysChanged();
+    void fadingChanged();
+    void fadeDurationMsChanged();
 
-        KeyboardInterpreter              m_interpreter;
-        std::vector<HeldKey>             m_heldKeys; // Interpreter's held keys as last announced to QML.
-        QTimer                           m_timer;
-        InputHistory                     m_history;
-        HistoryListModel                 m_fadingHistory;
-        int                              m_expireAfterMs  = 0;
-        int                              m_fadeDurationMs = 0;
-        bool                             m_fading         = false;
-        std::optional<Clock::time_point> m_expirationDeadline;
-        std::optional<Clock::time_point> m_fadeDeadline;
-    };
-} // namespace Hyprcast::Overlay
+private:
+    void append(const InterpretedAction& action, Clock::time_point now);
+    void refreshHeldKeys();
+    void noteHistoryActivity(Clock::time_point now);
+    void beginExpiration(Clock::time_point now);
+    void finishFade();
+    void setFading(bool fading);
+    void scheduleTimer(Clock::time_point now);
+    void onTimer();
+
+    KeyboardInterpreter m_interpreter;
+    std::vector<HeldKey>
+        m_heldKeys; // Interpreter's held keys as last announced to QML.
+    QTimer m_timer;
+    InputHistory m_history;
+    HistoryListModel m_fadingHistory;
+    int m_expireAfterMs = 0;
+    int m_fadeDurationMs = 0;
+    bool m_fading = false;
+    std::optional<Clock::time_point> m_expirationDeadline;
+    std::optional<Clock::time_point> m_fadeDeadline;
+};
+
+} // namespace hyprcast::overlay

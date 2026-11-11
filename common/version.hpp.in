@@ -1,0 +1,8 @@
+#pragma once
+
+#include <string_view>
+
+// Generated from the CMake project version; do not edit the generated copy.
+namespace hyprcast {
+    inline constexpr std::string_view project_version = "@PROJECT_VERSION@";
+}

@@ -1,0 +1,5 @@
+# Leaks in libraries that LeakSanitizer reports against the theme tests.
+#
+# Qt loses fontconfig patterns when one font needs several fallback families:
+# QFontEngineMultiFontConfig caches them with insert(), then truncates the list.
+leak:QFontEngineMultiFontConfig::getMatchPatternForFallback

@@ -9,168 +9,198 @@
 #include <QStringView>
 #include <QTimer>
 #include <QVariantMap>
-
+#include <cstdint>
 #include <expected>
 #include <functional>
 #include <optional>
 
-namespace Hyprcast::Overlay {
-    // Layer-shell placement: one edge, or a corner when both axes are set.
-    struct Anchor {
-        enum class Vertical {
-            None,
-            Top,
-            Bottom,
-        };
-        enum class Horizontal {
-            None,
-            Left,
-            Right,
-        };
+namespace hyprcast::overlay {
 
-        Vertical    vertical   = Vertical::Bottom;
-        Horizontal  horizontal = Horizontal::Right;
-
-        friend bool operator==(const Anchor&, const Anchor&) = default;
+// Layer-shell placement: one edge, or a corner when both axes are set.
+struct Anchor {
+    enum class Vertical : std::uint8_t {
+        None,
+        Top,
+        Bottom,
+    };
+    enum class Horizontal : std::uint8_t {
+        None,
+        Left,
+        Right,
     };
 
-    enum class PanelVisibility {
-        Always,
-        WithContent,
-        Never,
-    };
+    Vertical vertical = Vertical::Bottom;
+    Horizontal horizontal = Horizontal::Right;
 
-    enum class RepeatPresentation {
-        Expanded,
-        Counted,
-    };
+    friend bool operator==(const Anchor&, const Anchor&) = default;
+};
 
-    // Text forms used in TOML, on the command line and in theme QML.
-    [[nodiscard]] std::expected<Anchor, QString>             parseAnchor(QStringView text);
-    [[nodiscard]] std::expected<BackspaceMode, QString>      parseBackspaceMode(QStringView text);
-    [[nodiscard]] std::expected<PanelVisibility, QString>    parsePanelVisibility(QStringView text);
-    [[nodiscard]] std::expected<RepeatPresentation, QString> parseRepeatPresentation(QStringView text);
-    [[nodiscard]] QString                                    toString(Anchor anchor);
-    [[nodiscard]] QString                                    toString(PanelVisibility visibility);
-    [[nodiscard]] QString                                    toString(RepeatPresentation presentation);
+enum class PanelVisibility : std::uint8_t {
+    Always,
+    WithContent,
+    Never,
+};
 
-    template <typename T>
-    struct Range {
-        T                            minimum;
-        T                            maximum;
+enum class RepeatPresentation : std::uint8_t {
+    Expanded,
+    Counted,
+};
 
-        [[nodiscard]] constexpr bool contains(T value) const noexcept {
-            return value >= minimum && value <= maximum;
-        }
-    };
+// Text forms used in TOML, on the command line and in theme QML.
+[[nodiscard]] std::expected<Anchor, QString> parseAnchor(QStringView text);
+[[nodiscard]] std::expected<BackspaceMode, QString>
+parseBackspaceMode(QStringView text);
+[[nodiscard]] std::expected<PanelVisibility, QString>
+parsePanelVisibility(QStringView text);
+[[nodiscard]] std::expected<RepeatPresentation, QString>
+parseRepeatPresentation(QStringView text);
+[[nodiscard]] QString toString(Anchor anchor);
+[[nodiscard]] QString toString(PanelVisibility visibility);
+[[nodiscard]] QString toString(RepeatPresentation presentation);
 
-    // Accepted ranges, shared by config validation and command-line parsing.
-    namespace Limits {
-        inline constexpr Range<int>       SurfaceSize{1, 8192};
-        inline constexpr Range<int>       Margin{0, 8192};
-        inline constexpr Range<int>       ExpireAfterMs{0, 86'400'000};
-        inline constexpr Range<int>       FadeDurationMs{0, 60'000};
-        inline constexpr Range<qsizetype> RetainedUtf16CodeUnits{1, 1'048'576};
+template <typename T>
+struct Range {
+    T minimum;
+    T maximum;
+
+    [[nodiscard]] constexpr bool contains(T value) const noexcept {
+        return value >= minimum && value <= maximum;
     }
+};
 
-    struct OverlayConfig {
-        QString            monitor;
-        Anchor             anchor;
-        QMargins           margins{24, 24, 24, 24};
-        int                width        = 600;
-        int                height       = 88;
-        bool               dynamicSize  = true;
-        int                minWidth     = 240;
-        int                minHeight    = 64;
-        bool               clickThrough = true;
+// Accepted ranges, shared by config validation and command-line parsing.
+namespace Limits {
 
-        QString            backgroundColor   = QStringLiteral("#0e1116");
-        double             backgroundOpacity = 0.78;
-        int                cornerRadius      = 12;
-        int                panelBorderWidth  = 1;
-        QString            panelBorderColor  = QStringLiteral("#ffffff");
-        QString            foregroundColor   = QStringLiteral("#ffffff");
-        QString            fontFamily        = QStringLiteral("Sans Serif");
-        int                fontSize          = 30;
-        int                fontWeight        = 500;
-        int                historyPaddingX   = 16;
-        int                textExtraPaddingX = 4;
+inline constexpr Range<int> SurfaceSize {.minimum = 1, .maximum = 8192};
+inline constexpr Range<int> Margin {.minimum = 0, .maximum = 8192};
+inline constexpr Range<int> ExpireAfterMs {.minimum = 0, .maximum = 86'400'000};
+inline constexpr Range<int> FadeDurationMs {.minimum = 0, .maximum = 60'000};
+inline constexpr Range<qsizetype> RetainedUtf16CodeUnits {
+    .minimum = 1,
+    .maximum = 16'384,
+};
 
-        QString            symbolFontFamily;
-        QString            spaceSymbol = QStringLiteral(" ");
-        QVariantMap        keySymbols;
-        QVariantMap        modifierSymbols;
+} // namespace Limits
 
-        QString            themeId = QStringLiteral("builtin:default");
-        QVariantMap        themeOptions;
-        PanelVisibility    panelVisibility           = PanelVisibility::WithContent;
-        BackspaceMode      backspaceMode             = BackspaceMode::Delete;
-        qsizetype          maxRetainedUtf16CodeUnits = 4096;
-        bool               repeatsEnabled            = true;
-        RepeatPresentation repeatPresentation        = RepeatPresentation::Counted;
-        int                repeatCountThreshold      = 4;
-        int                expireAfterMs             = 3000;
-        int                fadeDurationMs            = 250;
+struct OverlayConfig {
+    QString monitor;
+    Anchor anchor;
+    QMargins margins {24, 24, 24, 24};
+    int width = 600;
+    int height = 88;
+    bool dynamicSize = true;
+    int minWidth = 240;
+    int minHeight = 64;
+    bool clickThrough = true;
 
-        friend bool        operator==(const OverlayConfig&, const OverlayConfig&) = default;
-    };
+    QString backgroundColor = QStringLiteral("#0e1116");
+    double backgroundOpacity = 0.78;
+    int cornerRadius = 12;
+    int panelBorderWidth = 1;
+    QString panelBorderColor = QStringLiteral("#ffffff");
+    QString foregroundColor = QStringLiteral("#ffffff");
+    QString fontFamily = QStringLiteral("Sans Serif");
+    int fontSize = 30;
+    int fontWeight = 500;
+    int historyPaddingX = 16;
+    int textExtraPaddingX = 4;
 
-    struct ConfigOverrides {
-        std::optional<QString>       monitor;
-        std::optional<Anchor>        anchor;
-        std::optional<QMargins>      margins;
-        std::optional<int>           width;
-        std::optional<int>           height;
-        std::optional<double>        backgroundOpacity;
-        std::optional<BackspaceMode> backspaceMode;
-        std::optional<qsizetype>     maxRetainedUtf16CodeUnits;
-        std::optional<bool>          repeatsEnabled;
-        std::optional<int>           expireAfterMs;
-        std::optional<int>           fadeDurationMs;
-    };
+    QString symbolFontFamily;
+    QString spaceSymbol = QStringLiteral(" ");
+    QVariantMap keySymbols;
+    QVariantMap modifierSymbols;
 
-    [[nodiscard]] QString                               defaultConfigPath(QString* warning = nullptr);
-    [[nodiscard]] QVariantMap                           overlayConfigToQmlValues(const OverlayConfig& config);
-    [[nodiscard]] std::expected<OverlayConfig, QString> parseOverlayConfig(const QString& path);
-    [[nodiscard]] std::expected<void, QString>          validateOverlayConfig(const OverlayConfig& config);
-    [[nodiscard]] OverlayConfig                         applyOverrides(OverlayConfig config, const ConfigOverrides& overrides);
+    QString themeId = QStringLiteral("builtin:default");
+    QVariantMap themeOptions;
+    PanelVisibility panelVisibility = PanelVisibility::WithContent;
+    BackspaceMode backspaceMode = BackspaceMode::Delete;
+    qsizetype maxRetainedUtf16CodeUnits = 4096;
+    bool repeatsEnabled = true;
+    RepeatPresentation repeatPresentation = RepeatPresentation::Counted;
+    int repeatCountThreshold = 4;
+    int expireAfterMs = 3000;
+    int fadeDurationMs = 250;
 
-    class OverlayConfigManager final : public QObject {
-        Q_OBJECT
-      public:
-        using RuntimeValidator = std::function<std::expected<void, QString>(const std::optional<OverlayConfig>& previous, const OverlayConfig& candidate)>;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wfloat-equal"
+    // Reload detection asks whether two parsed configs are identical, so the
+    // exact comparison of backgroundOpacity is the intended one.
+    friend bool operator==(const OverlayConfig&,
+                           const OverlayConfig&) = default;
+#pragma GCC diagnostic pop
+};
 
-        OverlayConfigManager(QString path, bool requireExisting, ConfigOverrides overrides = {}, QObject* parent = nullptr);
+struct ConfigOverrides {
+    std::optional<QString> monitor;
+    std::optional<Anchor> anchor;
+    std::optional<QMargins> margins;
+    std::optional<int> width;
+    std::optional<int> height;
+    std::optional<double> backgroundOpacity;
+    std::optional<BackspaceMode> backspaceMode;
+    std::optional<qsizetype> maxRetainedUtf16CodeUnits;
+    std::optional<bool> repeatsEnabled;
+    std::optional<int> expireAfterMs;
+    std::optional<int> fadeDurationMs;
+};
 
-        [[nodiscard]] std::expected<void, QString> initialize();
-        void                                       startWatching();
-        void                                       setRuntimeValidator(RuntimeValidator validator);
-        void                                       reloadNow();
+[[nodiscard]] QString defaultConfigPath(QString* warning = nullptr);
+[[nodiscard]] QVariantMap overlayConfigToQmlValues(const OverlayConfig& config);
+[[nodiscard]] std::expected<OverlayConfig, QString>
+parseOverlayConfig(const QString& path);
+[[nodiscard]] std::expected<void, QString>
+validateOverlayConfig(const OverlayConfig& config);
+[[nodiscard]] OverlayConfig applyOverrides(OverlayConfig config,
+                                           const ConfigOverrides& overrides);
 
-        [[nodiscard]] const OverlayConfig&         config() const noexcept {
-            return m_config;
-        }
-        [[nodiscard]] const QString& configPath() const noexcept {
-            return m_path;
-        }
+class OverlayConfigManager final : public QObject {
+    Q_OBJECT
+public:
+    using RuntimeValidator = std::function<std::expected<void, QString>(
+        const std::optional<OverlayConfig>& previous,
+        const OverlayConfig& candidate)>;
 
-      signals:
-        void configurationChanged();
-        void reloadRejected(const QString& reason);
+    OverlayConfigManager(const QString& path,
+                         bool requireExisting,
+                         // False positive: this comma separates parameters.
+                         // NOLINTNEXTLINE(readability-trailing-comma)
+                         ConfigOverrides overrides = {},
+                         QObject* parent = nullptr);
 
-      private:
-        [[nodiscard]] std::expected<OverlayConfig, QString> loadCandidate() const;
-        [[nodiscard]] std::expected<void, QString>          accept(OverlayConfig candidate);
-        void                                                refreshWatchTargets();
-        void                                                onFileSystemChange();
+    [[nodiscard]] std::expected<void, QString> initialize();
+    void startWatching();
+    void setRuntimeValidator(RuntimeValidator validator);
+    void reloadNow();
+    // The configuration on disk with the overrides applied, checked on its own
+    // and not by the runtime validator. Changes nothing.
+    [[nodiscard]] std::expected<OverlayConfig, QString> loadCandidate() const;
+    // Makes `config` the current configuration without asking the runtime
+    // validator and without configurationChanged(): for a caller that has
+    // checked it and applies it itself.
+    void adopt(OverlayConfig config);
 
-        QString                                             m_path;
-        bool                                                m_requireExisting = false;
-        bool                                                m_initialized     = false;
-        ConfigOverrides                                     m_overrides;
-        OverlayConfig                                       m_config;
-        RuntimeValidator                                    m_runtimeValidator;
-        QFileSystemWatcher                                  m_watcher;
-        QTimer                                              m_reloadTimer;
-    };
-} // namespace Hyprcast::Overlay
+    [[nodiscard]] const OverlayConfig& config() const noexcept {
+        return m_config;
+    }
+    [[nodiscard]] const QString& configPath() const noexcept { return m_path; }
+
+signals:
+    void configurationChanged();
+    void reloadRejected(const QString& reason);
+
+private:
+    [[nodiscard]] std::expected<void, QString> accept(OverlayConfig candidate);
+    void refreshWatchTargets();
+    void onFileSystemChange();
+
+    QString m_path;
+    bool m_requireExisting = false;
+    bool m_initialized = false;
+    ConfigOverrides m_overrides;
+    OverlayConfig m_config;
+    RuntimeValidator m_runtimeValidator;
+    QFileSystemWatcher m_watcher;
+    QTimer m_reloadTimer;
+};
+
+} // namespace hyprcast::overlay

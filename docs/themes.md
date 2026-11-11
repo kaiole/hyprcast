@@ -37,7 +37,7 @@ Themes are QML code that runs with your user's permissions. Only install themes 
 
 A theme is a folder with a `theme.toml` and a QML entry file. Copy an example theme and edit it.
 
-After every edit, run `hyprcast-overlay restart`.
+After every edit, run `hyprcast-overlay restart`. It loads the theme again in the running overlay, without interrupting capture. If the theme fails to load, the command prints the QML error and the overlay shows the built-in theme until a restart loads yours.
 
 ### `theme.toml`
 

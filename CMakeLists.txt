@@ -1,5 +1,4 @@
-cmake_minimum_required(VERSION 3.27)
-
+cmake_minimum_required(VERSION 3.27...4.4)
 project(
   hyprcast
   VERSION 0.1.0
@@ -9,23 +8,15 @@ project(
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-include(CTest)
+include(cmake/warnings.cmake)
 
-# Warning set for project-owned targets only; dependencies keep their own flags.
-add_library(hyprcast_warnings INTERFACE)
-target_compile_options(
-  hyprcast_warnings
-  INTERFACE -Wall
-            -Wextra
-            -Wno-missing-field-initializers # designated initializers rely on defaults
-            -Wshadow
-            -Wconversion
-            -Wsign-conversion
-            -Wold-style-cast
-            -Wnon-virtual-dtor
-            -Woverloaded-virtual)
+if(PROJECT_IS_TOP_LEVEL)
+  include(CTest)
+  if(BUILD_TESTING)
+    include(cmake/gtest.cmake)
+  endif()
+endif()
 
 option(HYPRCAST_BUILD_PLUGIN "Build the Hyprland plugin" ON)
 option(HYPRCAST_BUILD_OVERLAY "Build the Qt Quick overlay" ON)

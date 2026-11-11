@@ -2,16 +2,20 @@
 
 Config file: `~/.config/hyprcast/overlay.toml`. Every setting is optional.
 
-Changes apply on save. If the file is invalid, the overlay prints the error and keeps the last working config.
+Changes apply on save. If the file is invalid or the theme it selects cannot be loaded, the overlay prints the error and keeps the last working config.
 
-These need a restart:
-
-- Changing `window.monitor` or `window.click_through`
-- Installing or editing a theme
+Theme files are not watched. After installing or editing a theme, run:
 
 ```sh
 hyprcast-overlay restart
 ```
+
+This rebuilds the overlay window from the saved config and the installed themes, in the running overlay. Capture stays as it is and the keys already shown stay on screen.
+
+- If the config is invalid, names a monitor that is not connected, selects a theme that is not installed or gives the theme an invalid option, the command prints the error and changes nothing.
+- If the theme's QML fails to load, the command prints the error and the overlay shows the built-in theme until a restart loads yours.
+
+The options the overlay was started with (such as `--width`) stay in effect. The overlay also keeps running the program it was started from: see the [README](../README.md#install) for updating Hyprcast.
 
 ## Example
 
@@ -51,7 +55,7 @@ Sizes are in logical pixels. Colors are names (`white`) or hex (`#RRGGBB`, `#AAR
 
 | Key | Default | Values |
 |---|---|---|
-| `monitor` | primary | Output name from `hyprctl monitors`. Needs restart. |
+| `monitor` | primary | Output name from `hyprctl monitors`. The overlay exits if its output is removed. |
 | `anchor` | `"bottom-right"` | `top`, `bottom`, `left`, `right`, `top-left`, `top-right`, `bottom-left`, `bottom-right` |
 | `margins` | `[24, 24, 24, 24]` | Left, top, right, bottom |
 | `width` | `600` | Max width, 1–8192 |
@@ -59,7 +63,7 @@ Sizes are in logical pixels. Colors are names (`white`) or hex (`#RRGGBB`, `#AAR
 | `dynamic_size` | `true` | Panel grows and shrinks with content |
 | `min_width` | `240` | Up to `width` |
 | `min_height` | `64` | Up to `height` |
-| `click_through` | `true` | Clicks pass through the overlay. Needs restart. |
+| `click_through` | `true` | Clicks pass through the overlay |
 
 ### `[appearance]`
 
@@ -88,7 +92,7 @@ Sizes are in logical pixels. Colors are names (`white`) or hex (`#RRGGBB`, `#AAR
 | Key | Default | Values |
 |---|---|---|
 | `backspace` | `"delete"` | `delete`: Backspace erases. `symbol`: Backspace is shown as a key. |
-| `max_retained_utf16_code_units` | `4096` | How much history to keep (about one per character), 1–1048576 |
+| `max_retained_utf16_code_units` | `4096` | How much history to keep (about one per character), 1–16384 |
 
 ### `[repeat]`
 
@@ -114,7 +118,7 @@ Sizes are in logical pixels. Colors are names (`white`) or hex (`#RRGGBB`, `#AAR
 
 `[symbols.keys]` replaces key labels: `Enter`, `Esc`, `Tab`, `Backspace`, `Delete`, `Insert`, `Home`, `End`, `Page Up`, `Page Down`, `Left`, `Right`, `Up`, `Down`, `Space`, `Print Screen`, `Pause`, `Menu`, `F1`–`F35`.
 
-`[symbols.modifiers]` replaces modifier labels: `Ctrl`, `Shift`, `Alt`, `Super`, `AltGr`.
+`[symbols.modifiers]` replaces modifier labels: `Shift`, `Ctrl`, `Alt`, `Super`, `AltGr`, `Meta`, `Hyper`.
 
 Quote keys with spaces: `"Page Up" = "⇞"`. Symbol glyphs must exist in the chosen font.
 
@@ -127,17 +131,21 @@ See [themes](themes.md).
 By default every keyboard is captured. To limit it, add this to your Hyprland config. Names come from `hyprctl devices`.
 
 ```lua
-hyprcast.configure({
-    filter = "exclude", -- or "include"
-    keyboards = { "my-macro-pad" },
-})
+if hl.plugin.hyprcast then
+    hl.plugin.hyprcast.configure({
+        filter = "exclude", -- or "include"
+        keyboards = { "my-macro-pad" },
+    })
+end
 ```
 
-The filter applies on the next config reload after the plugin is loaded.
+The `if` is needed: Hyprland first reads the config before it has loaded any plugin, when `hl.plugin.hyprcast` does not exist yet, and calling it then is an error that stops the rest of the config. Hyprland reloads the config right after loading the plugin, and the filter applies from that reload on.
 
 ## Command line
 
-Flags override the config file. They apply only when starting the overlay.
+Flags override the config file. They apply only when starting the overlay; `restart` and `quit` take none of them.
+
+`hyprcast-overlay quit` ends the running overlay, which pauses capture. It succeeds when no overlay is running, so it can be used before an update.
 
 ```sh
 hyprcast-overlay --help

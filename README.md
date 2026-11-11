@@ -11,9 +11,10 @@ Shows your keystrokes on screen in Hyprland.
 Requirements:
 
 - Hyprland with Lua config
-- CMake 3.27+ and a C++23 compiler
+- CMake 3.27+, Ninja and GCC with C++23 support
 - Plugin: Hyprland headers matching your running version, Lua 5.5, libdrm, libinput, libudev, pixman, wayland-server, libxkbcommon
-- Overlay: Qt 6.5+ (Core, Gui, Network, Qml, Quick), LayerShellQt, libxkbcommon
+- Overlay: Qt 6.5+ (Core, Gui, Network, Qml, Quick), LayerShellQt, libxkbcommon, toml++ 3.4+ (downloaded if not installed)
+- Tests, built by default: GoogleTest (downloaded if not installed) and hyprutils
 
 ```sh
 cmake --preset release
@@ -21,9 +22,13 @@ cmake --build --preset release
 cmake --install build/release --prefix "$HOME/.local"
 ```
 
-This installs `hyprcast-overlay` to `~/.local/bin`, `libhyprcast.so` to `~/.local/lib`, and the example themes to `~/.local/share/hyprcast/themes`.
+The first command needs network access: it downloads libjson, and toml++ and GoogleTest if they are not installed. Add `-DBUILD_TESTING=OFF` to it to leave the tests out.
 
-Rebuild and reload the plugin after every Hyprland update.
+This installs `hyprcast-overlay` to `~/.local/bin`, `libhyprcast.so` to `~/.local/lib`, and the example themes to `~/.local/share/hyprcast/themes`. The key binding below needs `~/.local/bin` on the `PATH` of your Hyprland session.
+
+Build and install again after every Hyprland update: the plugin refuses to load into a Hyprland it was not built for.
+
+After updating Hyprcast, reload the plugin (`hyprctl plugin unload` and then `hyprctl plugin load` with the path from Setup, or restart Hyprland) and end the running overlay, with `hyprcast-overlay quit`: the next `hyprcast-overlay toggle` starts the new one. `hyprcast-overlay restart` is not enough, because it keeps the running program. The overlay refuses to capture with a plugin from another version of the protocol and tells you which of the two to replace.
 
 ## Setup
 
@@ -72,5 +77,11 @@ Select one with `[theme] id`. See [themes](docs/themes.md) for options and makin
 ## Privacy
 
 - Capture is off until you press the toggle key, and stops when the overlay closes.
-- Keystrokes go over a local socket in your Hyprland session only.
+- Nothing is sent to the overlay while the session is locked by a session-lock screen such as `hyprlock`, so a password typed there is never shown.
+- A password typed anywhere else, such as a terminal, a polkit prompt or a locker that is an ordinary window, is shown like any other input while capture is on.
+- Keystrokes go over a local Unix socket under `$XDG_RUNTIME_DIR`, to one overlay at a time.
 - Themes run as code with your user's permissions. Only install themes you trust.
+
+## License
+
+[MIT](LICENSE)

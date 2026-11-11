@@ -1,227 +1,266 @@
 #include "KeyboardPresenter.hpp"
 
-#include <QDebug>
+#include "../history/InputHistory.hpp"
+#include "../history/InterpretedAction.hpp"
+#include "../ipc/Protocol.hpp"
+#include "KeyboardInterpreter.hpp"
 
+#include <QDebug>
+#include <QObject>
+#include <QString>
 #include <algorithm>
+#include <chrono>
+#include <cstdint>
 #include <limits>
 #include <utility>
 
-namespace Hyprcast::Overlay {
-    KeyboardPresenter::KeyboardPresenter(QObject* parent) : QObject(parent) {
-        m_timer.setSingleShot(true);
-        m_timer.setTimerType(Qt::PreciseTimer);
-        connect(&m_timer, &QTimer::timeout, this, [this] { onTimer(); });
-        connect(&m_history, &HistoryListModel::displayTextChanged, this, &KeyboardPresenter::outputTextChanged);
-    }
+namespace hyprcast::overlay {
 
-    QStringList KeyboardPresenter::heldKeys() const {
-        QStringList labels;
-        for (const HeldKey& item : m_heldKeys) {
-            labels.push_back(item.label());
+KeyboardPresenter::KeyboardPresenter(QObject* parent) : QObject(parent) {
+    m_timer.setSingleShot(true);
+    m_timer.setTimerType(Qt::PreciseTimer);
+    connect(&m_timer, &QTimer::timeout, this, [this] { onTimer(); });
+    connect(&m_history,
+            &HistoryListModel::displayTextChanged,
+            this,
+            &KeyboardPresenter::outputTextChanged);
+}
+
+QStringList KeyboardPresenter::heldKeys() const {
+    QStringList labels;
+    for (const HeldKey& item : m_heldKeys) {
+        labels.push_back(item.label());
+    }
+    return labels;
+}
+
+QVariantList KeyboardPresenter::heldKeyItems() const {
+    QVariantList result;
+    const auto& symbols = m_history.presentationOptions();
+    for (const HeldKey& item : m_heldKeys) {
+        // QML sees the kind as a string; these names are part of the theme API.
+        QString kind;
+        QString label;
+        switch (item.kind) {
+        case HeldKey::Kind::Modifier:
+            kind = QStringLiteral("modifier");
+            label = symbols.modifierSymbols.value(item.identity, item.identity)
+                        .toString();
+            break;
+        case HeldKey::Kind::Text:
+            kind = QStringLiteral("text");
+            label = item.text;
+            break;
+        case HeldKey::Kind::Key:
+            kind = QStringLiteral("key");
+            label = symbols.keySymbols.value(item.identity, item.identity)
+                        .toString();
+            break;
         }
-        return labels;
+        result.push_back(QVariantMap {
+            {QStringLiteral("kind"), kind},
+            {QStringLiteral("identity"), item.identity},
+            {QStringLiteral("label"), label},
+        });
     }
+    return result;
+}
 
-    QVariantList KeyboardPresenter::heldKeyItems() const {
-        QVariantList result;
-        const auto&  symbols = m_history.presentationOptions();
-        for (const HeldKey& item : m_heldKeys) {
-            // QML sees the kind as a string; these names are part of the theme API.
-            QString kind;
-            QString label;
-            switch (item.kind) {
-                case HeldKey::Kind::Modifier:
-                    kind  = QStringLiteral("modifier");
-                    label = symbols.modifierSymbols.value(item.identity, item.identity).toString();
-                    break;
-                case HeldKey::Kind::Text:
-                    kind  = QStringLiteral("text");
-                    label = item.text;
-                    break;
-                case HeldKey::Kind::Key:
-                    kind  = QStringLiteral("key");
-                    label = symbols.keySymbols.value(item.identity, item.identity).toString();
-                    break;
-            }
-            result.push_back(QVariantMap{{QStringLiteral("kind"), kind}, {QStringLiteral("identity"), item.identity}, {QStringLiteral("label"), label}});
-        }
-        return result;
+void KeyboardPresenter::refreshHeldKeys() {
+    auto held = m_interpreter.heldKeyItems();
+    if (held != m_heldKeys) {
+        m_heldKeys = std::move(held);
+        emit heldKeysChanged();
     }
+}
 
-    void KeyboardPresenter::refreshHeldKeys() {
-        auto held = m_interpreter.heldKeyItems();
-        if (held != m_heldKeys) {
-            m_heldKeys = std::move(held);
-            emit heldKeysChanged();
-        }
-    }
-
-    void KeyboardPresenter::processMessage(const ProtocolMessage& message, Clock::time_point now) {
-        if (const auto actions = m_interpreter.process(message, now); !actions) {
-            qWarning().noquote() << QStringLiteral("hyprcast-overlay: keyboard interpretation failed: %1").arg(actions.error());
-        } else {
-            for (const auto& action : *actions) {
-                append(action, now);
-            }
-        }
-        refreshHeldKeys();
-        scheduleTimer(now);
-    }
-
-    void KeyboardPresenter::advance(Clock::time_point now) {
-        // Repeats re-emit keys that are already held, so the held set cannot change here.
-        for (const auto& action : m_interpreter.advance(now)) {
+void KeyboardPresenter::processMessage(const ProtocolMessage& message,
+                                       Clock::time_point now) {
+    if (const auto actions = m_interpreter.process(message, now); !actions) {
+        qWarning().noquote()
+            << QStringLiteral(
+                   "hyprcast-overlay: keyboard interpretation failed: %1")
+                   .arg(actions.error());
+    } else {
+        for (const auto& action : *actions) {
             append(action, now);
         }
+    }
+    refreshHeldKeys();
+    scheduleTimer(now);
+}
 
-        if (m_expirationDeadline && now >= *m_expirationDeadline) {
+void KeyboardPresenter::advance(Clock::time_point now) {
+    // Repeats re-emit keys that are already held, so the held set cannot change
+    // here.
+    for (const auto& action : m_interpreter.advance(now)) {
+        append(action, now);
+    }
+
+    if (m_expirationDeadline && now >= *m_expirationDeadline) {
+        m_expirationDeadline.reset();
+        beginExpiration(now);
+    }
+    if (m_fadeDeadline && now >= *m_fadeDeadline) {
+        finishFade();
+    }
+    scheduleTimer(now);
+}
+
+void KeyboardPresenter::resetConnection() {
+    m_interpreter.reset();
+    refreshHeldKeys();
+    scheduleTimer(Clock::now());
+}
+
+void KeyboardPresenter::clearHistory() {
+    m_history.clear();
+    m_expirationDeadline.reset();
+    finishFade();
+    scheduleTimer(Clock::now());
+}
+
+void KeyboardPresenter::setHistoryOptions(const InputHistoryOptions& options) {
+    const auto previousPresentation = m_history.presentationOptions();
+    m_history.setOptions(options);
+    m_fadingHistory.setPresentationOptions(
+        options.presentation,
+        m_fadingHistory.collapsedRepeatRuns());
+    if (previousPresentation.keySymbols != options.presentation.keySymbols
+        || previousPresentation.modifierSymbols
+            != options.presentation.modifierSymbols
+        || previousPresentation.symbolFontFamily
+            != options.presentation.symbolFontFamily) {
+        emit heldKeysChanged();
+    }
+}
+
+void KeyboardPresenter::setRepeatsEnabled(bool enabled, Clock::time_point now) {
+    m_interpreter.setRepeatsEnabled(enabled, now);
+    scheduleTimer(now);
+}
+
+void KeyboardPresenter::setExpiration(int expireAfterMs,
+                                      int fadeDurationMs,
+                                      Clock::time_point now) {
+    const int boundedExpiration = std::max(0, expireAfterMs);
+    const int boundedFade = std::max(0, fadeDurationMs);
+    const bool expirationChanged = boundedExpiration != m_expireAfterMs;
+    const bool fadeChanged = boundedFade != m_fadeDurationMs;
+    m_expireAfterMs = boundedExpiration;
+    m_fadeDurationMs = boundedFade;
+
+    if (expirationChanged) {
+        if (m_expireAfterMs == 0 || m_history.rowCount() == 0) {
             m_expirationDeadline.reset();
-            beginExpiration(now);
+        } else {
+            // Updating an inactivity interval starts the new interval from the
+            // reload.
+            m_expirationDeadline =
+                now + std::chrono::milliseconds(m_expireAfterMs);
         }
-        if (m_fadeDeadline && now >= *m_fadeDeadline) {
+    }
+
+    if (m_fading && fadeChanged) {
+        if (m_fadeDurationMs == 0) {
+            finishFade();
+        } else {
+            // An in-progress fade restarts from full opacity for the new
+            // duration.
+            m_fadeDeadline = now + std::chrono::milliseconds(m_fadeDurationMs);
+        }
+    }
+    if (fadeChanged) {
+        emit fadeDurationMsChanged();
+    }
+    scheduleTimer(now);
+}
+
+void KeyboardPresenter::append(const InterpretedAction& action,
+                               Clock::time_point now) {
+    if (m_history.apply(action)) {
+        noteHistoryActivity(now);
+    }
+}
+
+void KeyboardPresenter::noteHistoryActivity(Clock::time_point now) {
+    if (m_fading) {
+        m_fadingHistory.clear();
+        setFading(false);
+    }
+
+    if (m_history.rowCount() == 0 || m_expireAfterMs == 0) {
+        m_expirationDeadline.reset();
+        m_fadeDeadline.reset();
+        return;
+    }
+
+    m_expirationDeadline = now + std::chrono::milliseconds(m_expireAfterMs);
+    m_fadeDeadline.reset();
+}
+
+void KeyboardPresenter::beginExpiration(Clock::time_point now) {
+    if (m_history.rowCount() == 0) {
+        return;
+    }
+
+    if (m_fadeDurationMs > 0) {
+        // Expired entries leave editable history immediately. The snapshot
+        // exists only for QML's visual fade and can never consume Backspace.
+        m_fadingHistory.setSnapshot(m_history.entries(),
+                                    m_history.presentationOptions(),
+                                    m_history.collapsedRepeatRuns());
+        m_history.clear();
+        setFading(true);
+        m_fadeDeadline = now + std::chrono::milliseconds(m_fadeDurationMs);
+        if (now >= *m_fadeDeadline) {
             finishFade();
         }
-        scheduleTimer(now);
+        return;
     }
 
-    void KeyboardPresenter::resetConnection() {
-        m_interpreter.reset();
-        refreshHeldKeys();
-        scheduleTimer(Clock::now());
+    m_history.clear();
+    m_fadingHistory.clear();
+    setFading(false);
+}
+
+void KeyboardPresenter::finishFade() {
+    m_fadeDeadline.reset();
+    m_fadingHistory.clear();
+    setFading(false);
+}
+
+void KeyboardPresenter::setFading(bool fading) {
+    if (m_fading == fading) {
+        return;
+    }
+    m_fading = fading;
+    emit fadingChanged();
+}
+
+void KeyboardPresenter::scheduleTimer(Clock::time_point now) {
+    auto deadline = m_interpreter.nextRepeatDeadline();
+    if (m_expirationDeadline && *m_expirationDeadline < deadline) {
+        deadline = *m_expirationDeadline;
+    }
+    if (m_fadeDeadline && *m_fadeDeadline < deadline) {
+        deadline = *m_fadeDeadline;
+    }
+    if (deadline == Clock::time_point::max()) {
+        m_timer.stop();
+        return;
     }
 
-    void KeyboardPresenter::clearHistory() {
-        m_history.clear();
-        m_expirationDeadline.reset();
-        finishFade();
-        scheduleTimer(Clock::now());
-    }
+    const auto remaining = deadline - now;
+    const auto delayMs =
+        std::chrono::ceil<std::chrono::milliseconds>(remaining).count();
+    const auto bounded =
+        std::clamp<std::int64_t>(delayMs, 0, std::numeric_limits<int>::max());
+    m_timer.start(static_cast<int>(bounded));
+}
 
-    void KeyboardPresenter::setHistoryOptions(InputHistoryOptions options) {
-        const auto previousPresentation = m_history.presentationOptions();
-        m_history.setOptions(options);
-        m_fadingHistory.setPresentationOptions(options.presentation, m_fadingHistory.collapsedRepeatRuns());
-        if (previousPresentation.keySymbols != options.presentation.keySymbols || previousPresentation.modifierSymbols != options.presentation.modifierSymbols ||
-            previousPresentation.symbolFontFamily != options.presentation.symbolFontFamily) {
-            emit heldKeysChanged();
-        }
-    }
+void KeyboardPresenter::onTimer() {
+    advance(Clock::now());
+}
 
-    void KeyboardPresenter::setRepeatsEnabled(bool enabled, Clock::time_point now) {
-        m_interpreter.setRepeatsEnabled(enabled, now);
-        scheduleTimer(now);
-    }
-
-    void KeyboardPresenter::setExpiration(int expireAfterMs, int fadeDurationMs, Clock::time_point now) {
-        const int  boundedExpiration = std::max(0, expireAfterMs);
-        const int  boundedFade       = std::max(0, fadeDurationMs);
-        const bool expirationChanged = boundedExpiration != m_expireAfterMs;
-        const bool fadeChanged       = boundedFade != m_fadeDurationMs;
-        m_expireAfterMs              = boundedExpiration;
-        m_fadeDurationMs             = boundedFade;
-
-        if (expirationChanged) {
-            if (m_expireAfterMs == 0 || m_history.rowCount() == 0) {
-                m_expirationDeadline.reset();
-            } else {
-                // Updating an inactivity interval starts the new interval from the reload.
-                m_expirationDeadline = now + std::chrono::milliseconds(m_expireAfterMs);
-            }
-        }
-
-        if (m_fading && fadeChanged) {
-            if (m_fadeDurationMs == 0) {
-                finishFade();
-            } else {
-                // An in-progress fade restarts from full opacity for the new duration.
-                m_fadeDeadline = now + std::chrono::milliseconds(m_fadeDurationMs);
-            }
-        }
-        if (fadeChanged) {
-            emit fadeDurationMsChanged();
-        }
-        scheduleTimer(now);
-    }
-
-    void KeyboardPresenter::append(const InterpretedAction& action, Clock::time_point now) {
-        if (m_history.apply(action)) {
-            noteHistoryActivity(now);
-        }
-    }
-
-    void KeyboardPresenter::noteHistoryActivity(Clock::time_point now) {
-        if (m_fading) {
-            m_fadingHistory.clear();
-            setFading(false);
-        }
-
-        if (m_history.rowCount() == 0 || m_expireAfterMs == 0) {
-            m_expirationDeadline.reset();
-            m_fadeDeadline.reset();
-            return;
-        }
-
-        m_expirationDeadline = now + std::chrono::milliseconds(m_expireAfterMs);
-        m_fadeDeadline.reset();
-    }
-
-    void KeyboardPresenter::beginExpiration(Clock::time_point now) {
-        if (m_history.rowCount() == 0) {
-            return;
-        }
-
-        if (m_fadeDurationMs > 0) {
-            // Expired entries leave editable history immediately. The snapshot exists only
-            // for QML's visual fade and can never consume Backspace.
-            m_fadingHistory.setSnapshot(m_history.entries(), m_history.presentationOptions(), m_history.collapsedRepeatRuns());
-            m_history.clear();
-            setFading(true);
-            m_fadeDeadline = now + std::chrono::milliseconds(m_fadeDurationMs);
-            if (now >= *m_fadeDeadline) {
-                finishFade();
-            }
-            return;
-        }
-
-        m_history.clear();
-        m_fadingHistory.clear();
-        setFading(false);
-    }
-
-    void KeyboardPresenter::finishFade() {
-        m_fadeDeadline.reset();
-        m_fadingHistory.clear();
-        setFading(false);
-    }
-
-    void KeyboardPresenter::setFading(bool fading) {
-        if (m_fading == fading) {
-            return;
-        }
-        m_fading = fading;
-        emit fadingChanged();
-    }
-
-    void KeyboardPresenter::scheduleTimer(Clock::time_point now) {
-        auto deadline = m_interpreter.nextRepeatDeadline();
-        if (m_expirationDeadline && *m_expirationDeadline < deadline) {
-            deadline = *m_expirationDeadline;
-        }
-        if (m_fadeDeadline && *m_fadeDeadline < deadline) {
-            deadline = *m_fadeDeadline;
-        }
-        if (deadline == Clock::time_point::max()) {
-            m_timer.stop();
-            return;
-        }
-
-        const auto remaining = deadline - now;
-        const auto delayMs   = std::chrono::ceil<std::chrono::milliseconds>(remaining).count();
-        const auto bounded   = std::clamp<std::int64_t>(delayMs, 0, std::numeric_limits<int>::max());
-        m_timer.start(static_cast<int>(bounded));
-    }
-
-    void KeyboardPresenter::onTimer() {
-        advance(Clock::now());
-    }
-} // namespace Hyprcast::Overlay
+} // namespace hyprcast::overlay

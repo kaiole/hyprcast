@@ -17,8 +17,8 @@ hyprcast-overlay restart
 
 Install only trusted themes: QML executes in the overlay process and is not
 sandboxed. Package helpers are local; no other example or extra effect module
-is required. Restart after changing any theme files; configuration options can
-reload live.
+is required. Run `hyprcast-overlay restart` after changing any theme files;
+configuration options reload live.
 
 ## Demo configuration
 
@@ -109,7 +109,7 @@ never layered together. Clear/pause/disconnect cannot revive cached history.
 Build `overlay_theme_tests`, then run:
 
 ```sh
-ctest --preset debug -R overlay-theme --output-on-failure
+ctest --preset dev -R Cascade --output-on-failure
 ```
 
 Tests cover discovery/loading, final geometry, bounded delegate count, small
@@ -119,10 +119,10 @@ software-rendered example from the test fixture:
 
 ```sh
 HYPRCAST_CASCADE_SCREENSHOT=/tmp/cascade.png QT_QUICK_BACKEND=software \
-  ctest --preset debug -R overlay-theme --output-on-failure
+  ctest --preset dev -R Cascade --output-on-failure
 ```
 
-The fixture uses reduced motion and its existing symbol overrides; its white
+The fixture uses reduced motion and the default symbols; its white
 background is the test window, not a theme panel. Static software rendering has
 been inspected. Live Hyprland animation, rapid-input smoothness, and installed
 font glyph coverage still require practical validation.

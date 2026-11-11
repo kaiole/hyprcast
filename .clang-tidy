@@ -1,195 +1,154 @@
-WarningsAsErrors: >
-  -*,
-  bugprone-*,
-  -bugprone-multi-level-implicit-pointer-conversion,
-  -bugprone-empty-catch,
-  -bugprone-unused-return-value,
-  -bugprone-reserved-identifier,
-  -bugprone-switch-missing-default-case,
-  -bugprone-unused-local-non-trivial-variable,
-  -bugprone-easily-swappable-parameters,
-  -bugprone-forward-declararion-namespace,
-  -bugprone-macro-parentheses,
-  -bugprone-narrowing-conversions,
-  -bugprone-branch-clone,
-  -bugprone-assignment-in-if-condition,
-  concurrency-*,
-  -concurrency-mt-unsafe,
-  cppcoreguidelines-*,
-  -cppcoreguidelines-pro-type-const-cast,
-  -cppcoreguidelines-owning-memory,
-  -cppcoreguidelines-avoid-magic-numbers,
-  -cppcoreguidelines-pro-bounds-constant-array-index,
-  -cppcoreguidelines-avoid-const-or-ref-data-members,
-  -cppcoreguidelines-non-private-member-variables-in-classes,
-  -cppcoreguidelines-avoid-goto,
-  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
-  -cppcoreguidelines-avoid-do-while,
-  -cppcoreguidelines-avoid-non-const-global-variables,
-  -cppcoreguidelines-special-member-functions,
-  -cppcoreguidelines-explicit-virtual-functions,
-  -cppcoreguidelines-avoid-c-arrays,
-  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
-  -cppcoreguidelines-narrowing-conversions,
-  -cppcoreguidelines-pro-type-union-access,
-  -cppcoreguidelines-pro-type-member-init,
-  -cppcoreguidelines-macro-usage,
-  -cppcoreguidelines-macro-to-enum,
-  -cppcoreguidelines-init-variables,
-  -cppcoreguidelines-pro-type-cstyle-cast,
-  -cppcoreguidelines-pro-type-vararg,
-  -cppcoreguidelines-pro-type-reinterpret-cast,
-  -google-global-names-in-headers,
-  -google-readability-casting,
-  google-runtime-operator,
-  misc-*,
-  -misc-use-internal-linkage,
-  -misc-unused-parameters,
-  -misc-no-recursion,
-  -misc-non-private-member-variables-in-classes,
-  -misc-include-cleaner,
-  -misc-use-anonymous-namespace,
-  -misc-const-correctness,
-  modernize-*,
-  -modernize-use-emplace,
-  -modernize-redundant-void-arg,
-  -modernize-use-starts-ends-with,
-  -modernize-use-designated-initializers,
-  -modernize-use-std-numbers,
-  -modernize-return-braced-init-list,
-  -modernize-use-trailing-return-type,
-  -modernize-use-using,
-  -modernize-use-override,
-  -modernize-avoid-c-arrays,
-  -modernize-macro-to-enum,
-  -modernize-loop-convert,
-  -modernize-use-nodiscard,
-  -modernize-pass-by-value,
-  -modernize-use-auto,
-  performance-*,
-  -performance-inefficient-vector-operation,
-  -performance-inefficient-string-concatenation,
-  -performance-enum-size,
-  -performance-move-const-arg,
-  -performance-avoid-endl,
-  -performance-unnecessary-value-param,
-  portability-std-allocator-const,
-  readability-*,
-  -readability-identifier-naming,
-  -readability-use-std-min-max,
-  -readability-math-missing-parentheses,
-  -readability-simplify-boolean-expr,
-  -readability-static-accessed-through-instance,
-  -readability-use-anyofallof,
-  -readability-enum-initial-value,
-  -readability-redundant-inline-specifier,
-  -readability-function-cognitive-complexity,
-  -readability-function-size,
-  -readability-identifier-length,
-  -readability-magic-numbers,
-  -readability-uppercase-literal-suffix,
-  -readability-braces-around-statements,
-  -readability-redundant-access-specifiers,
-  -readability-else-after-return,
-  -readability-container-data-pointer,
-  -readability-implicit-bool-conversion,
-  -readability-avoid-nested-conditional-operator,
-  -readability-redundant-member-init,
-  -readability-redundant-string-init,
-  -readability-avoid-const-params-in-decls,
-  -readability-named-parameter,
-  -readability-convert-member-functions-to-static,
-  -readability-qualified-auto,
-  -readability-make-member-function-const,
-  -readability-isolate-declaration,
-  -readability-inconsistent-declaration-parameter-name,
-  -clang-diagnostic-error,
+---
+Checks:
+  - "-*"
+  - "clang-diagnostic-*"
+  - "clang-analyzer-*"
+  - "bugprone-*"
+  - "concurrency-*"
+  - "cppcoreguidelines-*"
+  - "misc-*"
+  - "modernize-*"
+  - "performance-*"
+  - "readability-*"
+  - "google-runtime-int"
+  - "portability-restrict-system-includes"
 
-HeaderFilterRegex: '.*\.hpp'
+  - "-bugprone-easily-swappable-parameters"
+  - "-cppcoreguidelines-avoid-do-while"
+  - "-cppcoreguidelines-avoid-magic-numbers"
+  - "-cppcoreguidelines-init-variables"
+  - "-cppcoreguidelines-owning-memory"
+  - "-modernize-return-braced-init-list"
+  - "-modernize-use-auto"
+  - "-modernize-use-trailing-return-type"
+  - "-readability-function-size"
+  - "-readability-identifier-length"
+  - "-readability-magic-numbers"
+  - "-readability-named-parameter"
+  - "-readability-uppercase-literal-suffix"
+
+  - "-cppcoreguidelines-pro-bounds-avoid-unchecked-container-access"
+  - "-cppcoreguidelines-pro-bounds-constant-array-index"
+  - "-cppcoreguidelines-pro-bounds-pointer-arithmetic"
+
+  - "-modernize-use-std-format"
+  - "-modernize-use-std-print"
+
+  # open(2), fcntl(2) and luaL_error() are variadic C APIs with no typed
+  # alternative, and -Wformat already checks the printf-style calls.
+  - "-cppcoreguidelines-pro-type-vararg"
+  # Every aggregate member carries a default member initializer, also where
+  # the type would default-construct to the same value. This check asks to
+  # remove exactly those.
+  - "-readability-redundant-member-init"
+
+WarningsAsErrors: ""
+HeaderFilterRegex: ".*"
 FormatStyle: file
-Checks: >
-  -*,
-  bugprone-*,
-  -bugprone-easily-swappable-parameters,
-  -bugprone-forward-declararion-namespace,
-  -bugprone-macro-parentheses,
-  -bugprone-narrowing-conversions,
-  -bugprone-branch-clone,
-  -bugprone-assignment-in-if-condition,
-  concurrency-*,
-  -concurrency-mt-unsafe,
-  cppcoreguidelines-*,
-  -cppcoreguidelines-owning-memory,
-  -cppcoreguidelines-avoid-magic-numbers,
-  -cppcoreguidelines-pro-bounds-constant-array-index,
-  -cppcoreguidelines-avoid-const-or-ref-data-members,
-  -cppcoreguidelines-non-private-member-variables-in-classes,
-  -cppcoreguidelines-avoid-goto,
-  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
-  -cppcoreguidelines-avoid-do-while,
-  -cppcoreguidelines-avoid-non-const-global-variables,
-  -cppcoreguidelines-special-member-functions,
-  -cppcoreguidelines-explicit-virtual-functions,
-  -cppcoreguidelines-avoid-c-arrays,
-  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
-  -cppcoreguidelines-narrowing-conversions,
-  -cppcoreguidelines-pro-type-union-access,
-  -cppcoreguidelines-pro-type-member-init,
-  -cppcoreguidelines-macro-usage,
-  -cppcoreguidelines-macro-to-enum,
-  -cppcoreguidelines-init-variables,
-  -cppcoreguidelines-pro-type-cstyle-cast,
-  -cppcoreguidelines-pro-type-vararg,
-  -cppcoreguidelines-pro-type-reinterpret-cast,
-  google-global-names-in-headers,
-  -google-readability-casting,
-  google-runtime-operator,
-  misc-*,
-  -misc-unused-parameters,
-  -misc-no-recursion,
-  -misc-non-private-member-variables-in-classes,
-  -misc-include-cleaner,
-  -misc-use-anonymous-namespace,
-  -misc-const-correctness,
-  modernize-*,
-  -modernize-return-braced-init-list,
-  -modernize-use-trailing-return-type,
-  -modernize-use-using,
-  -modernize-use-override,
-  -modernize-avoid-c-arrays,
-  -modernize-macro-to-enum,
-  -modernize-loop-convert,
-  -modernize-use-nodiscard,
-  -modernize-pass-by-value,
-  -modernize-use-auto,
-  performance-*,
-  -performance-avoid-endl,
-  -performance-unnecessary-value-param,
-  portability-std-allocator-const,
-  readability-*,
-  -readability-function-cognitive-complexity,
-  -readability-function-size,
-  -readability-identifier-length,
-  -readability-magic-numbers,
-  -readability-uppercase-literal-suffix,
-  -readability-braces-around-statements,
-  -readability-redundant-access-specifiers,
-  -readability-else-after-return,
-  -readability-container-data-pointer,
-  -readability-implicit-bool-conversion,
-  -readability-avoid-nested-conditional-operator,
-  -readability-redundant-member-init,
-  -readability-redundant-string-init,
-  -readability-avoid-const-params-in-decls,
-  -readability-named-parameter,
-  -readability-convert-member-functions-to-static,
-  -readability-qualified-auto,
-  -readability-make-member-function-const,
-  -readability-isolate-declaration,
-  -readability-inconsistent-declaration-parameter-name,
-  -clang-diagnostic-error,
+
+# -Wglobal-constructors: the plugin is a dlopen()ed module and the overlay
+# starts before QCoreApplication exists, so nothing may run before main or at
+# load time. The template's -Wthread-safety, -Wfunction-effects and
+# -Wperf-constraint-implies-noexcept are left out: they only report on
+# capability and [[clang::nonblocking]] annotations, and single-threaded code
+# has neither.
+ExtraArgs:
+  - "-Wglobal-constructors"
 
 CheckOptions:
+  # One entry per line: regex,replacement,reason. A reason must not contain a
+  # semicolon (it separates entries). Constructors cannot be matched here, so
+  # std::thread and std::jthread are banned through their header below and
+  # through the members a std::thread cannot be used without.
+  #
+  # Threads: both components are single-threaded by design, which is why the
+  # gate has no tsan preset. If a thread is really needed, lift the ban
+  # deliberately and add a tsan preset to the gate.
+  #
+  # Sleeps: the plugin runs on the compositor thread and must never block. In
+  # the overlay wait on the event loop; a NOLINT needs a reason.
+  bugprone-unsafe-functions.CustomFunctions: >-
+    ^::std::j?thread::(join|detach|joinable|request_stop)$,,starts or manages a
+    thread but both components are single-threaded by design. If a thread is
+    really needed lift this ban deliberately and add a tsan preset to the gate;
+    ^::(std::async|pthread_create|thrd_create)$,,starts a thread but both
+    components are single-threaded by design. If a thread is really needed lift
+    this ban deliberately and add a tsan preset to the gate;
+    ^::QThread::(start|create)$,,starts a thread but both components are
+    single-threaded by design. If a thread is really needed lift this ban
+    deliberately and add a tsan preset to the gate;
+    ^::(QThreadPool|QtConcurrent)::,,runs work on another thread but both
+    components are single-threaded by design. If a thread is really needed lift
+    this ban deliberately and add a tsan preset to the gate;
+    ^::std::this_thread::sleep_(for|until)$,,blocks the only thread. Wait on the
+    event source instead;
+    ^::(sleep|usleep|nanosleep|clock_nanosleep|thrd_sleep)$,,blocks the only
+    thread. Wait on the event source instead;
+    ^::QThread::(sleep|msleep|usleep)$,,blocks the only thread. Wait on the
+    event loop instead;
+    ^::std::chrono::system_clock::now$,std::chrono::steady_clock::now,is a wall
+    clock that can jump. Measure intervals on a monotonic clock;
+    ^::std::sto(i|l|ll|ul|ull|f|d|ld)$,std::from_chars,throws on bad input and
+    accepts leading whitespace and trailing garbage;
+    ^::(ato(i|l|ll|f)|strto(l|ll|ul|ull|f|d|ld))$,std::from_chars,is
+    locale-aware and reports errors through errno or not at all
+  # The headers that only make sense with a second thread.
+  portability-restrict-system-includes.Includes: "*,-thread,-future,-mutex,-shared_mutex,-condition_variable,-stop_token,-semaphore,-latch,-barrier"
+  # Providers that cannot or should not be included by name. One regex per
+  # line, matched against the end of the header path.
+  #  - Qt's global plumbing (integer types, logging, environment, Q_UNUSED,
+  #    the Qt namespace, emit, container aliases) reaches every Qt translation
+  #    unit through any class header. Qt code includes class headers.
+  #  - bits/ and asm-generic/ are libc and libstdc++ internals. They are only
+  #    reported for operators, literals and macros that clang cannot map to a
+  #    public header.
+  #  - <lua.hpp> is the only C++ entry point to Lua's C headers.
+  #  - <toml++/toml.hpp> is the only public header of toml++.
+  misc-include-cleaner.IgnoreHeaders: >-
+    QtCore/q(types|logging|numeric|tenvironmentvariables|tpreprocessorsupport|tclasshelpermacros)\.h;
+    QtCore/q(namespace|tmetamacros|containerfwd)\.h;
+    /bits/.*;
+    /asm-generic/.*;
+    (lua|lauxlib|lualib)\.h;
+    toml\+\+/impl/.*
+  google-runtime-int.SignedTypePrefix: "std::int"
+  google-runtime-int.UnsignedTypePrefix: "std::uint"
+  google-runtime-int.TypeSuffix: "_t"
   performance-for-range-copy.WarnOnAllAutoCopies: true
   performance-inefficient-string-concatenation.StrictMode: true
+  bugprone-unused-return-value.AllowCastToVoid: true
+  cppcoreguidelines-pro-type-member-init.IgnoreArrays: true
+  cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor: true
+  concurrency-mt-unsafe.FunctionSet: glibc
+
+  modernize-use-nullptr.NullMacros: "NULL"
+  modernize-use-designated-initializers.IgnoreSingleElementAggregates: false
   readability-braces-around-statements.ShortStatementLines: 0
+  readability-function-cognitive-complexity.Threshold: 25
+  readability-implicit-bool-conversion.AllowIntegerConditions: true
+  readability-implicit-bool-conversion.AllowPointerConditions: true
+  cppcoreguidelines-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic: true
+  misc-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic: true
+  misc-const-correctness.AnalyzePointers: false
+  misc-const-correctness.AnalyzeReferences: false
+  misc-const-correctness.AnalyzeValues: true
+
+  readability-identifier-naming.ConceptCase: lower_case
+  readability-identifier-naming.ClassCase: lower_case
+  readability-identifier-naming.StructCase: lower_case
+  readability-identifier-naming.EnumCase: lower_case
+  readability-identifier-naming.EnumConstantCase: lower_case
+  readability-identifier-naming.NamespaceCase: lower_case
+  readability-identifier-naming.FunctionCase: lower_case
+  readability-identifier-naming.VariableCase: lower_case
+  readability-identifier-naming.ParameterCase: lower_case
+  readability-identifier-naming.ConstantCase: lower_case
+  readability-identifier-naming.PrivateMemberCase: lower_case
+  readability-identifier-naming.PrivateMemberSuffix: "_"
+  readability-identifier-naming.ProtectedMemberCase: lower_case
+  readability-identifier-naming.ProtectedMemberSuffix: "_"
+  readability-identifier-naming.PublicMemberCase: lower_case
+  readability-identifier-naming.MacroDefinitionCase: UPPER_CASE
+  readability-identifier-naming.TypeAliasCase: lower_case
+  readability-identifier-naming.TypeAliasIgnoredRegexp: "^T$"
+  readability-identifier-naming.TemplateParameterCase: CamelCase

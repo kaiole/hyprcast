@@ -1,3 +1,9 @@
 /build/
 .cache/
 /CMakeUserPresets.json
+# makepkg run in the repository root
+/src/
+/pkg/
+/hyprcast/
+/*.pkg.tar.*
+/libjson-*.tar.gz

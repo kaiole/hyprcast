@@ -4,7 +4,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 include(FetchContent)
 
 # libjson has no releases and no package to find; the pin is a commit archive.
-# Update URL and hash together.
+# Update URL and hash together, and the same pin in PKGBUILD.
 FetchContent_Declare(
   libjson
   URL https://github.com/kaiole/libjson/archive/013397b90735d630d89eab79c2d097bf2ec9876d.tar.gz

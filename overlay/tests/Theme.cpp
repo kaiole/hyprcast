@@ -651,7 +651,9 @@ TEST_F(DefaultThemeTest, DynamicPanelFollowsItsContent) {
     InterpretedAction backspace;
     backspace.kind = InterpretedActionKind::Key;
     backspace.key = QStringLiteral("Backspace");
-    for (int i = 0; i < 60; ++i) {
+    // Down to two characters, which fit whatever the font is: a machine with
+    // no fonts installed draws every character as a box about one em wide.
+    for (int i = 0; i < 78; ++i) {
         presenter.historyModel().apply(backspace);
     }
     QCoreApplication::processEvents();

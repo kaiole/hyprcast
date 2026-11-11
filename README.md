@@ -8,6 +8,19 @@ Shows your keystrokes on screen in Hyprland.
 
 ## Install
 
+### Arch Linux
+
+```sh
+curl -O https://raw.githubusercontent.com/kaiole/hyprcast/main/PKGBUILD
+makepkg -si
+```
+
+This builds the `main` branch and installs the package `hyprcast-git`: `hyprcast-overlay` in `/usr/bin`, `libhyprcast.so` in `/usr/lib` and the example themes in `/usr/share/hyprcast/themes`. In Setup below, load `/usr/lib/libhyprcast.so`.
+
+Run the same two commands again after every Hyprland update, and to update Hyprcast.
+
+### From source
+
 Requirements:
 
 - Hyprland with Lua config

@@ -21,7 +21,8 @@ developed on. These rules have no exceptions.
 3. Never edit anything outside this repository, in particular not `~/dotfiles`
    (Hyprland hot-reloads its config). Scratch files go in a temporary
    directory, not in the repository.
-4. Never push, open pull requests or tag. Local commits only.
+4. Never push, open or merge a pull request, or tag, unless the owner asks for
+   exactly that. Otherwise local commits only, on a branch other than `main`.
 5. A sanitizer-built plugin (`build/dev`) must never be loaded into a
    compositor. Do not add anything that would do so.
 
@@ -75,6 +76,7 @@ process and keeps capture as it is.
 | `overlay/tests/` | GoogleTest tests of the overlay, one executable per area; `Support.hpp` holds their shared `main`, which keeps them away from the live session |
 | `docs/` | User documentation for configuration and themes |
 | `cmake/`, `CMakePresets.json`, `check` | Build helpers, the `dev`, `lint`, `gcc` and `release` presets, and the gate |
+| `.github/workflows/check.yml` | CI: the gate in an Arch container |
 
 Every plugin library has the same layout: `CMakeLists.txt`,
 `include/hyprcast/<library>/` and, where it has any, `src/` and `tests/`, with
@@ -181,6 +183,18 @@ env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET -u DISPLAY \
 ```
 
 One test, under the same `env` prefix: `ctest --preset dev -R 'SessionTest\.'`.
+
+CI (`.github/workflows/check.yml`, job `check`) runs the same `./check` in an
+Arch container with that day's packages: on every pull request, on every push
+to `main`, and once a week, because a new Hyprland, Qt or compiler can break
+the build with no change here. `main` takes only pull requests on which that
+job passed.
+
+- A failure that the latest run on `main` shows too comes from a package
+  update, not from the branch. Fix it in a pull request of its own first.
+- A new build dependency goes into the workflow's install step and into the
+  requirements in `README.md`.
+- Actions are pinned by commit, with the release in a comment.
 
 Every behaviour change comes with a test that fails without it. Do not weaken
 a check, warning or test to get green.

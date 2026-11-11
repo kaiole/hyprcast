@@ -41,7 +41,7 @@ plugin_config::plugin_config(log_sink& log, callbacks cbs)
                                      "configure",
                                      &configure)) {
         throw std::runtime_error(
-            "Cannot register Lua function hyprcast.configure");
+            "Cannot register Lua function hl.plugin.hyprcast.configure");
     }
 
     live_config = &config_;

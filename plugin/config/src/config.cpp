@@ -126,7 +126,9 @@ int config_state::configure(lua_State* lua) noexcept {
     // strings.
     if (!lua_checkstack(lua, 8)) {
         failed_ = true;
-        return luaL_error(lua, "hyprcast.configure: insufficient Lua stack");
+        return luaL_error(
+            lua,
+            "hl.plugin.hyprcast.configure: insufficient Lua stack");
     }
     try {
         require(evaluating_,
@@ -139,13 +141,13 @@ int config_state::configure(lua_State* lua) noexcept {
         failed_ = true;
         std::snprintf(error.data(),
                       error.size(),
-                      "hyprcast.configure: %s",
+                      "hl.plugin.hyprcast.configure: %s",
                       e.what());
     } catch (...) {
         failed_ = true;
         std::snprintf(error.data(),
                       error.size(),
-                      "hyprcast.configure: unexpected C++ exception");
+                      "hl.plugin.hyprcast.configure: unexpected C++ exception");
     }
     lua_settop(lua, top);
     // No owning C++ locals or active catch scopes survive this Lua longjmp.
@@ -157,7 +159,9 @@ int config_state::configure(lua_State* lua) noexcept {
 
 int call_configure(lua_State* lua, config_state* state) noexcept {
     if (state == nullptr) {
-        return luaL_error(lua, "hyprcast.configure: hyprcast is not loaded");
+        return luaL_error(
+            lua,
+            "hl.plugin.hyprcast.configure: hyprcast is not loaded");
     }
     return state->configure(lua);
 }

@@ -18,10 +18,11 @@ namespace hyprcast::overlay {
 class OverlayInstance final : public QObject {
     Q_OBJECT
 public:
-    enum class Command : std::uint8_t { Start, Toggle, Restart };
+    enum class Command : std::uint8_t { Start, Toggle, Restart, Quit };
     enum class Ownership : std::uint8_t {
-        Owner,     // This process is now the resident overlay.
-        Forwarded, // The command was delivered to the existing resident.
+        Owner,      // This process is now the resident overlay.
+        Forwarded,  // The command was delivered to the existing resident.
+        NotRunning, // `quit` found no resident, so there is nothing to do.
     };
 
     explicit OverlayInstance(const QString& eventSocket,
@@ -37,6 +38,7 @@ public:
 signals:
     void toggleRequested(QLocalSocket* client);
     void restartRequested(QLocalSocket* client);
+    void quitRequested(QLocalSocket* client);
 
 private:
     [[nodiscard]] std::expected<Ownership, QString>

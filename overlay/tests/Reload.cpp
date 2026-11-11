@@ -212,6 +212,53 @@ struct Fixture {
     }
 };
 
+TEST(OverlayQuit, EndsTheResidentAndItsPluginConnection) {
+    Fixture f;
+    f.start(true);
+
+    QProcess caller;
+    f.command(caller, {}, "quit");
+    ASSERT_EQ(result(caller).code, 0) << "quit is confirmed";
+    ASSERT_TRUE(waitFor([&] {
+        return f.resident.state() == QProcess::NotRunning;
+    })) << "the resident ends";
+    EXPECT_EQ(f.resident.exitStatus(), QProcess::NormalExit);
+    EXPECT_EQ(f.resident.exitCode(), 0) << "an asked-for end is a success";
+    ASSERT_TRUE(waitFor([&] {
+        return f.peer->state() == QLocalSocket::UnconnectedState;
+    })) << "the plugin connection closes, which pauses capture";
+
+    QProcess next;
+    next.setProcessEnvironment(f.environment);
+    next.start(
+        executable(),
+        {"--socket", f.socket, "--config", f.config, "--quit-after-ms", "1"});
+    ASSERT_TRUE(next.waitForStarted()) << "start a new resident";
+    ASSERT_TRUE(waitFor([&] { return f.plugin.hasPendingConnections(); }))
+        << "a new overlay can take the session";
+    next.kill();
+    next.waitForFinished();
+}
+
+TEST(OverlayQuit, SucceedsWithNoResident) {
+    Fixture f;
+    QProcess caller;
+    f.command(caller, {}, "quit");
+    const Outcome outcome = result(caller);
+    EXPECT_EQ(outcome.code, 0) << "nothing to end is not a failure";
+    EXPECT_TRUE(outcome.error.isEmpty()) << outcome.error.constData();
+}
+
+TEST(OverlayQuit, RefusesStartupOverrides) {
+    Fixture f;
+    f.start(true);
+    const auto pid = f.resident.processId();
+    QProcess caller;
+    f.command(caller, {"--width", "10"}, "quit");
+    EXPECT_EQ(result(caller).code, 2) << "an override is a usage error";
+    ASSERT_TRUE(f.undisturbed(pid)) << "the resident keeps running";
+}
+
 TEST(OverlayReload, KeepsCaptureAndTheConnection) {
     Fixture f;
     f.install("reporter", WindowReporter);

@@ -162,8 +162,9 @@ QString reloadPluginAdvice() {
 // the restart command rebuilds its window and does not replace the program.
 QString replaceOverlayAdvice() {
     return QStringLiteral("Restart the overlay after updating Hyprcast: end "
-                          "the running hyprcast-overlay process and start it "
-                          "again. 'hyprcast-overlay restart' keeps the running "
+                          "the running hyprcast-overlay process with "
+                          "'hyprcast-overlay quit' and start it again. "
+                          "'hyprcast-overlay restart' keeps the running "
                           "program.");
 }
 

@@ -188,9 +188,10 @@ public:
             QStringLiteral(
                 "toggle: launch/enable or toggle capture; restart: rebuild "
                 "this session's overlay window from the saved configuration "
-                "and installed themes, keeping capture as it is (selectors "
-                "only)."),
-            QStringLiteral("[toggle|restart]"));
+                "and installed themes, keeping capture as it is; quit: end "
+                "this session's overlay, which pauses capture (restart and "
+                "quit take selectors only)."),
+            QStringLiteral("[toggle|restart|quit]"));
         m_parser.addOptions({
             m_config,
             m_monitor,
@@ -230,17 +231,19 @@ public:
             command = Command::Toggle;
         } else if (commands == QStringList {QStringLiteral("restart")}) {
             command = Command::Restart;
+        } else if (commands == QStringList {QStringLiteral("quit")}) {
+            command = Command::Quit;
         } else if (!commands.isEmpty()) {
-            return std::unexpected(
-                QStringLiteral("Expected no command, 'toggle', or 'restart'"));
+            return std::unexpected(QStringLiteral(
+                "Expected no command, 'toggle', 'restart', or 'quit'"));
         }
-        if (command == Command::Restart) {
+        if (command == Command::Restart || command == Command::Quit) {
             for (const auto& name : m_parser.optionNames()) {
                 if (name != m_socket.names().front()
                     && name != m_instance.names().front()) {
                     return std::unexpected(
-                        QStringLiteral("restart accepts only --socket and "
-                                       "--instance-signature; the running "
+                        QStringLiteral("restart and quit accept only --socket "
+                                       "and --instance-signature; the running "
                                        "overlay keeps its startup overrides"));
                 }
             }
@@ -710,6 +713,16 @@ private:
                                  client,
                                  restarted ? QString {} : restarted.error());
                          });
+        // The reply is written before the event loop stops, so the caller
+        // learns the overlay is ending; the plugin pauses capture when the
+        // connection closes.
+        QObject::connect(&instance,
+                         &OverlayInstance::quitRequested,
+                         &m_receiver,
+                         [](QLocalSocket* client) {
+                             OverlayInstance::reply(client);
+                             QCoreApplication::quit();
+                         });
         QObject::connect(&m_capture,
                          &CaptureController::activeChanged,
                          &m_receiver,
@@ -944,7 +957,7 @@ int main(int argc, char* argv[]) {
         writeError(ownership.error());
         return ExitFailure;
     }
-    if (*ownership == OverlayInstance::Ownership::Forwarded) {
+    if (*ownership != OverlayInstance::Ownership::Owner) {
         return EXIT_SUCCESS;
     }
 

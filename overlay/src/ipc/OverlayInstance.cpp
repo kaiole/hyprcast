@@ -66,6 +66,8 @@ OverlayInstance::OverlayInstance(const QString& eventSocket, QObject* parent)
                     emit toggleRequested(client);
                 } else if (request == "restart\n") {
                     emit restartRequested(client);
+                } else if (request == "quit\n") {
+                    emit quitRequested(client);
                 } else {
                     reply(client, QStringLiteral("Invalid overlay command"));
                 }
@@ -94,11 +96,14 @@ OverlayInstance::acquire(Command command) {
     // A resident holds this lock for its whole life, so winning it means there
     // is none.
     const bool noResident = ::flock(lock.get(), LOCK_EX | LOCK_NB) == 0;
-    if (noResident && command != Command::Restart) {
+    if (noResident && command != Command::Restart && command != Command::Quit) {
         m_lockFd = std::move(lock);
         return listen();
     }
     lock.reset();
+    if (noResident && command == Command::Quit) {
+        return Ownership::NotRunning;
+    }
     if (noResident) {
         return std::unexpected(QStringLiteral(
             "No overlay is running for this session; use toggle to start it."));
@@ -131,7 +136,12 @@ OverlayInstance::forward(Command command) const {
             QStringLiteral("Overlay is starting or unresponsive; try again"));
     }
 
-    client.write(command == Command::Restart ? "restart\n" : "toggle\n");
+    switch (command) {
+    case Command::Restart: client.write("restart\n"); break;
+    case Command::Quit: client.write("quit\n"); break;
+    case Command::Start:
+    case Command::Toggle: client.write("toggle\n"); break;
+    }
     client.flush();
     QByteArray response;
     const QDeadlineTimer replyDeadline(
@@ -195,6 +205,8 @@ void OverlayInstance::reply(QLocalSocket* client, const QString& error) {
         return;
     }
     client->write(replyLine(error));
+    // Written now, so the reply survives a resident that quits right after.
+    client->flush();
     client->disconnectFromServer();
 }
 

@@ -143,7 +143,9 @@ The `if` is needed: Hyprland first reads the config before it has loaded any plu
 
 ## Command line
 
-Flags override the config file. They apply only when starting the overlay; `restart` takes none of them.
+Flags override the config file. They apply only when starting the overlay; `restart` and `quit` take none of them.
+
+`hyprcast-overlay quit` ends the running overlay, which pauses capture. It succeeds when no overlay is running, so it can be used before an update.
 
 ```sh
 hyprcast-overlay --help

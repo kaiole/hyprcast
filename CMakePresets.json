@@ -8,14 +8,18 @@
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
         "CMAKE_EXPORT_COMPILE_COMMANDS": true,
-        "CMAKE_COMPILE_WARNING_AS_ERROR": true,
         "CMAKE_VERIFY_INTERFACE_HEADER_SETS": true
       }
     },
     {
+      "name": "strict",
+      "hidden": true,
+      "cacheVariables": { "CMAKE_COMPILE_WARNING_AS_ERROR": true }
+    },
+    {
       "name": "clang-debug",
       "hidden": true,
-      "inherits": "base",
+      "inherits": ["strict", "base"],
       "cacheVariables": {
         "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_BUILD_TYPE": "Debug"
@@ -39,12 +43,17 @@
     },
     {
       "name": "release",
-      "displayName": "GCC RelWithDebInfo",
+      "displayName": "GCC RelWithDebInfo, for users: warnings stay warnings",
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_CXX_COMPILER": "g++",
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
       }
+    },
+    {
+      "name": "gcc",
+      "displayName": "The release build with warnings as errors, for the gate",
+      "inherits": ["strict", "release"]
     }
   ],
   "buildPresets": [
@@ -59,7 +68,8 @@
       "name": "release",
       "configurePreset": "release",
       "inherits": "build-base"
-    }
+    },
+    { "name": "gcc", "configurePreset": "gcc", "inherits": "build-base" }
   ],
   "testPresets": [
     {
@@ -78,7 +88,8 @@
       "name": "release",
       "configurePreset": "release",
       "inherits": "test-base"
-    }
+    },
+    { "name": "gcc", "configurePreset": "gcc", "inherits": "test-base" }
   ],
   "workflowPresets": [
     {
@@ -102,6 +113,14 @@
         { "type": "configure", "name": "release" },
         { "type": "build", "name": "release" },
         { "type": "test", "name": "release" }
+      ]
+    },
+    {
+      "name": "gcc",
+      "steps": [
+        { "type": "configure", "name": "gcc" },
+        { "type": "build", "name": "gcc" },
+        { "type": "test", "name": "gcc" }
       ]
     }
   ]

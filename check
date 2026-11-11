@@ -17,6 +17,6 @@ if grep -rnE '#include [<"](hyprland|hyprutils)/' \
   exit 1
 fi
 
-for preset in lint dev release; do
+for preset in lint dev gcc; do
   cmake --workflow --preset "$preset"
 done

@@ -21,8 +21,7 @@ developed on. These rules have no exceptions.
 3. Never edit anything outside this repository, in particular not `~/dotfiles`
    (Hyprland hot-reloads its config). Scratch files go in a temporary
    directory, not in the repository.
-4. Never push, open or merge a pull request, or tag, unless the owner asks for
-   exactly that. Otherwise local commits only, on a branch other than `main`.
+4. Never push, open pull requests or tag. Local commits only.
 5. A sanitizer-built plugin (`build/dev`) must never be loaded into a
    compositor. Do not add anything that would do so.
 

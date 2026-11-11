@@ -88,6 +88,8 @@ private:
     };
 
     static sock_paths init_sock_paths(const std::filesystem::path& sock_dir);
+    // Requires `sock_dir` to be a real directory of this user, mode 0700.
+    static void restrict_to_owner(const std::filesystem::path& sock_dir);
     static unique_fd create_socket();
 
     static int on_socket_readable(int sock_fd, std::uint32_t mask, void* data);

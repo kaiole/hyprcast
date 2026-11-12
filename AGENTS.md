@@ -191,8 +191,9 @@ job passed.
 
 - A failure that the latest run on `main` shows too comes from a package
   update, not from the branch. Fix it in a pull request of its own first.
-- A new build dependency goes into the workflow's install step and into the
-  requirements in `README.md`.
+- A new build dependency goes into the workflow's install step, into the
+  requirements in `README.md` and, when the release build needs it, into
+  `depends` or `makedepends` in `PKGBUILD`.
 - Actions are pinned by commit, with the release in a comment.
 
 Every behaviour change comes with a test that fails without it. Do not weaken
@@ -234,6 +235,8 @@ a check, warning or test to get green.
   bumping the version.
 - Dependencies fetched at configure time are pinned by URL and hash
   (`plugin/CMakeLists.txt`, `overlay/CMakeLists.txt`, `cmake/gtest.cmake`).
+  `PKGBUILD` repeats the libjson pin and refuses to build when the two
+  differ: change both together.
 - A user-visible change updates `README.md` or `docs/` in the same commit
   series.
 

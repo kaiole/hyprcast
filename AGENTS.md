@@ -1,7 +1,7 @@
 # hyprcast
 
-Shows keystrokes on screen in Hyprland. This file is for the LLM agents that
-maintain the repository; `README.md` and `docs/` are for users.
+Shows keystrokes on screen in Hyprland. This file guides coding agents working
+in the repository; `README.md` and `docs/` are for users.
 
 ## Hard safety rules
 

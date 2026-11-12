@@ -190,7 +190,9 @@ the build with no change here. `main` takes only pull requests on which that
 job passed.
 
 - A failure that the latest run on `main` shows too comes from a package
-  update, not from the branch. Fix it in a pull request of its own first.
+  update, not from the branch. Fix it first, in commits of its own, and tell
+  the owner they need a pull request of their own (safety rule 4: the owner
+  opens it).
 - A new build dependency goes into the workflow's install step, into the
   requirements in `README.md` and, when the release build needs it, into
   `depends` or `makedepends` in `PKGBUILD`.
